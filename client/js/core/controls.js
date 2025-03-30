@@ -169,10 +169,12 @@ window.initControls = function(camera, domElement) {
                         'YXZ'  // Important for proper FPS controls
                     ));
                     
-                    // Also update player mesh rotation immediately for seamless transition to third-person
+                    // Update player mesh rotation immediately for seamless transition to third-person
                     if (window.playerEntity && window.playerEntity.mesh) {
-                        // Update both entity property and mesh rotation for consistency
+                        // Update both entity property and mesh rotation - BUT NOT POSITION
                         window.playerEntity.rotationY = window.playerRotationY;
+                        
+                        // IMPORTANT: Only update the Y rotation, don't affect position
                         window.playerEntity.mesh.rotation.y = window.playerRotationY;
                         
                         // Force immediate rotation update to server
@@ -301,9 +303,12 @@ function onKeyDown(event) {
                 // Rotate player left (counter-clockwise) - 0.1 radians is about 5.7 degrees
                 window.playerRotationY = (window.playerRotationY || 0) + 0.1;
                 
-                // Update mesh directly for immediate visual feedback
+                // Update mesh rotation, but not position (IMPORTANT)
                 if (window.playerEntity.mesh) {
+                    // Only update the rotation.y, don't affect position
                     window.playerEntity.mesh.rotation.y = window.playerRotationY;
+                    // Ensure entity property is updated
+                    window.playerEntity.rotationY = window.playerRotationY;
                 }
                 
                 // Also update camera to match new rotation
@@ -327,9 +332,12 @@ function onKeyDown(event) {
                 // Rotate player right (clockwise) - 0.1 radians is about 5.7 degrees
                 window.playerRotationY = (window.playerRotationY || 0) - 0.1;
                 
-                // Update mesh directly for immediate visual feedback
+                // Update mesh rotation, but not position (IMPORTANT)
                 if (window.playerEntity.mesh) {
+                    // Only update the rotation.y, don't affect position
                     window.playerEntity.mesh.rotation.y = window.playerRotationY;
+                    // Ensure entity property is updated
+                    window.playerEntity.rotationY = window.playerRotationY;
                 }
                 
                 // Also update camera to match new rotation

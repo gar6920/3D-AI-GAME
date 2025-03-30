@@ -81,10 +81,12 @@ class DefaultPlayer extends Player {
 
             // The main mesh/model is in gltf.scene
             const newMesh = gltf.scene;
-            newMesh.userData.entity = this; // Link entity back
-
+            
+            // IMPORTANT: Reset the model's position within the GLB to zero
+            // This ensures it rotates around its own center
+            newMesh.position.set(0, 0, 0);
+            
             // Configure the loaded model (scale, shadows, etc.)
-            // ** Adjust scale as needed ** - GLB might need different scaling
             newMesh.scale.set(1.0, 1.0, 1.0); // Adjust scale if needed for GLB
             newMesh.traverse((child) => {
                 if (child.isMesh) {
@@ -94,20 +96,25 @@ class DefaultPlayer extends Player {
                 }
             });
 
-            // Set initial position based on entity state
-            newMesh.position.copy(this.position);
-            
             // Create a parent container to handle rotation properly
-            // This allows us to adjust for the model's inherent forward direction
             const modelContainer = new THREE.Group();
+            
+            // First add the model to the container
             modelContainer.add(newMesh);
             
             // Apply rotation to align the model's forward direction with the camera
-            // Rotate the entire model 180 degrees so it faces in the same direction as the camera
-            newMesh.rotation.set(0, Math.PI, 0); // Rotate model 180 degrees so its front faces the correct way
+            // Rotate the model 180 degrees so it faces in the same direction as the camera
+            newMesh.rotation.set(0, Math.PI, 0);
             
-            // Apply player rotation to the container
+            // VERY IMPORTANT: After adding the model to the container,
+            // position the container at the entity's position
+            modelContainer.position.copy(this.position);
+            
+            // Then apply player rotation to the container
             modelContainer.rotation.set(0, this.rotationY, 0);
+            
+            // Add userData to link entity
+            modelContainer.userData.entity = this;
             
             // --- Animation Setup ---
             console.log(`[DefaultPlayer ${this.id}] --- Entering Animation Setup ---`); 
@@ -273,8 +280,8 @@ class DefaultPlayer extends Player {
         if (this.mesh) {
             if (this.isLocalPlayer) {
                 // For LOCAL player:
-                // Update rotation directly from player entity property
-                // We only need to apply rotation to the container, not the model itself
+                // Rotation is already handled by controls.js and mousemove event
+                // We just ensure the entity's rotation property stays in sync
                 this.rotationY = this.mesh.rotation.y;
             } else {
                 // For REMOTE players:
@@ -323,6 +330,45 @@ class DefaultPlayer extends Player {
         } else {
             // Otherwise, ensure it's visible (for remote players or non-first-person views)
             this.mesh.visible = true;
+        }
+    }
+
+    // Override updatePosition to properly handle rotation without affecting position
+    updatePosition(pos) {
+        if (!pos) {
+            console.warn("updatePosition called with undefined position!");
+            return;
+        }
+    
+        const { x, y, z, rotationY } = pos;
+    
+        // First update position properties on the entity
+        if (x !== undefined) {
+            this.x = x;
+            this.position.x = x;
+        }
+        if (y !== undefined) {
+            this.y = y;
+            this.position.y = y;
+        }
+        if (z !== undefined) {
+            this.z = z;
+            this.position.z = z;
+        }
+        
+        // Then update the mesh position
+        if (this.mesh) {
+            // Important: Apply position directly without using Vector3.copy 
+            // to avoid issues with container/model relationships
+            if (x !== undefined) this.mesh.position.x = x;
+            if (y !== undefined) this.mesh.position.y = y;
+            if (z !== undefined) this.mesh.position.z = z;
+        }
+        
+        // Update rotation separately
+        if (rotationY !== undefined) {
+            this.rotationY = rotationY;
+            if (this.mesh) this.mesh.rotation.y = rotationY;
         }
     }
 }

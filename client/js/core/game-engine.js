@@ -1188,13 +1188,16 @@ function sendInputUpdate() {
             let rotationY = 0;
             let pitch = 0;
             
-            if (window.playerEntity && window.playerEntity.mesh) {
-                // Use mesh rotation as source of truth if available
-                rotationY = window.playerEntity.mesh.rotation.y;
-            } else {
-                // Fallback to window globals
-                rotationY = window.playerRotationY || 0;
+            // IMPORTANT: Use the most accurate source of rotation data
+            // For local players, direct mesh rotation is most reliable
+            if (window.playerRotationY !== undefined) {
+                // Use global value as established by mouse/keyboard controls
+                rotationY = window.playerRotationY;
                 pitch = window.firstPersonCameraPitch || 0;
+            } 
+            // If we have a playerEntity, use its rotation
+            else if (window.playerEntity && window.playerEntity.mesh) {
+                rotationY = window.playerEntity.mesh.rotation.y;
             }
             
             // Send the updated input state to server
@@ -1309,12 +1312,15 @@ window.updateFirstPersonCamera = function() {
             controls.getObject().position.copy(window.camera.position);
         }
         
-        // Make sure the player mesh is invisible in first-person
+        // Make sure the player mesh is invisible in first-person, but update its position
         if (window.playerEntity && window.playerEntity.mesh) {
             window.playerEntity.mesh.visible = false;
             
-            // Even though mesh is invisible, keep its rotation updated
-            // to ensure correct rotation when switching to third-person view
+            // IMPORTANT: Update position from server state to match movement
+            // This avoids rotation affecting position
+            window.playerEntity.mesh.position.set(playerState.x, playerState.y, playerState.z);
+            
+            // Keep rotation updated for seamless transition to third-person
             window.playerEntity.rotationY = rotationY;
             window.playerEntity.mesh.rotation.y = rotationY;
         }
@@ -1363,16 +1369,20 @@ function updateThirdPersonCamera() {
     // Fix camera orientation
     setThirdPersonCameraOrientation(camera, lookAtPosition, playerState);
     
-    // Show player mesh in third-person and ensure position is updated
+    // Show player mesh in third-person and ensure position is updated from server
     if (window.playerEntity && window.playerEntity.mesh) {
         window.playerEntity.mesh.visible = true;
         
-        // Update position directly from server state
+        // CRUCIAL: Update position from server state WITHOUT changing rotation
+        // This avoids having rotation affect position
+        const currentRotation = window.playerEntity.mesh.rotation.y;
+        
+        // Update position from server state
         window.playerEntity.mesh.position.set(playerState.x, playerState.y, playerState.z);
         
-        // For local player, don't directly modify rotation here
-        // This was causing the mesh to not respect the user's rotation input
-        // Rotation is now handled in controls.js and DefaultPlayer.js
+        // Restore rotation or apply server rotation as needed
+        // If local player, we want to keep our current rotation
+        // For remote players, DefaultPlayer.update() will handle rotation interpolation
     }
 }
 
