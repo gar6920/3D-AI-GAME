@@ -268,9 +268,10 @@ window.switchToFirstPersonView = function() {
         );
         
         // Set camera rotation using quaternions to prevent gimbal lock
+        // We no longer need to add Math.PI to match the model since the model is already rotated
         window.camera.quaternion.setFromEuler(new THREE.Euler(
             pitch,
-            rotationY + Math.PI,
+            rotationY,
             0,
             'YXZ'  // Important for proper FPS controls
         ));
@@ -1183,6 +1184,19 @@ function sendInputUpdate() {
             // Update the global input state to ensure everything is in sync
             window.inputState.keys = keyStates;
             
+            // Get player rotation from mesh if available (most accurate source)
+            let rotationY = 0;
+            let pitch = 0;
+            
+            if (window.playerEntity && window.playerEntity.mesh) {
+                // Use mesh rotation as source of truth if available
+                rotationY = window.playerEntity.mesh.rotation.y;
+            } else {
+                // Fallback to window globals
+                rotationY = window.playerRotationY || 0;
+                pitch = window.firstPersonCameraPitch || 0;
+            }
+            
             // Send the updated input state to server
             window.room.send("updateInput", {
                 keys: keyStates,
@@ -1194,19 +1208,21 @@ function sendInputUpdate() {
                 thirdPersonCameraAngle: window.thirdPersonCameraOrbitX,
                 // Send direct rotation values for immediate application on server
                 clientRotation: {
-                    rotationY: window.playerRotationY || 0,
-                    pitch: window.firstPersonCameraPitch || 0
+                    rotationY: rotationY,
+                    pitch: pitch
                 }
             });
+            
+            // Debug logging for rotation
+            if (keyStates.q || keyStates.e || window.inputState.mouseDelta.x !== 0) {
+                console.log("Rotation sent to server:", rotationY, 
+                    "Mesh rotation:", window.playerEntity?.mesh?.rotation.y,
+                    "playerRotationY:", window.playerRotationY);
+            }
             
             // Reset mouse delta after sending
             window.inputState.mouseDelta.x = 0;
             window.inputState.mouseDelta.y = 0;
-            
-            // Debug output to confirm inputs are sent
-            if (keyStates.w || keyStates.a || keyStates.s || keyStates.d || keyStates.q || keyStates.e) {
-                console.log("Sending input to server:", keyStates);
-            }
         }
     }
 }
@@ -1280,6 +1296,7 @@ window.updateFirstPersonCamera = function() {
             ? window.playerRotationY
             : (playerState.rotationY || 0);
             
+        // We no longer need to add Math.PI to rotation because the model is rotated already
         window.camera.quaternion.setFromEuler(new THREE.Euler(
             pitch,
             rotationY,
@@ -1295,6 +1312,11 @@ window.updateFirstPersonCamera = function() {
         // Make sure the player mesh is invisible in first-person
         if (window.playerEntity && window.playerEntity.mesh) {
             window.playerEntity.mesh.visible = false;
+            
+            // Even though mesh is invisible, keep its rotation updated
+            // to ensure correct rotation when switching to third-person view
+            window.playerEntity.rotationY = rotationY;
+            window.playerEntity.mesh.rotation.y = rotationY;
         }
     }
 };
@@ -1341,24 +1363,16 @@ function updateThirdPersonCamera() {
     // Fix camera orientation
     setThirdPersonCameraOrientation(camera, lookAtPosition, playerState);
     
-    // Show player mesh in third-person and make sure it's updated
+    // Show player mesh in third-person and ensure position is updated
     if (window.playerEntity && window.playerEntity.mesh) {
         window.playerEntity.mesh.visible = true;
         
-        // Update position
+        // Update position directly from server state
         window.playerEntity.mesh.position.set(playerState.x, playerState.y, playerState.z);
         
-        // Smooth rotation
-        const currentRot = window.playerEntity.mesh.rotation.y;
-        const targetRot = playerState.rotationY;
-        
-        // Find the shortest rotation path
-        let rotDiff = targetRot - currentRot;
-        if (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
-        if (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
-        
-        // Apply smooth rotation
-        window.playerEntity.mesh.rotation.y += rotDiff * 0.1;
+        // For local player, don't directly modify rotation here
+        // This was causing the mesh to not respect the user's rotation input
+        // Rotation is now handled in controls.js and DefaultPlayer.js
     }
 }
 
@@ -2039,4 +2053,17 @@ function highlightSelectedUnit(unit) {
 
     // Create a selection ring for this unit
     createSelectionRingForUnit(unit);
+}
+
+// Fix the setThirdPersonCameraOrientation function to only control the camera, not player rotation
+function setThirdPersonCameraOrientation(camera, lookAtPosition, playerState) {
+    // Point camera at player - this only affects the camera, not the player model
+    const direction = new THREE.Vector3().subVectors(lookAtPosition, camera.position).normalize();
+    const quaternion = new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, 0, -1),
+        direction
+    );
+    
+    // Apply rotation to camera immediately for responsive look
+    camera.quaternion.copy(quaternion);
 }

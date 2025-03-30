@@ -171,7 +171,14 @@ window.initControls = function(camera, domElement) {
                     
                     // Also update player mesh rotation immediately for seamless transition to third-person
                     if (window.playerEntity && window.playerEntity.mesh) {
+                        // Update both entity property and mesh rotation for consistency
+                        window.playerEntity.rotationY = window.playerRotationY;
                         window.playerEntity.mesh.rotation.y = window.playerRotationY;
+                        
+                        // Force immediate rotation update to server
+                        if (window.sendInputUpdate) {
+                            window.sendInputUpdate();
+                        }
                     }
                 }
             } else if (!window.isFirstPerson && !window.isFreeCameraMode) {
@@ -252,7 +259,7 @@ window.getThirdPersonForwardDirection = function() {
     return new THREE.Vector3(-Math.sin(angle), 0, -Math.cos(angle));
 }
 
-// Key down event handler
+// Key down event handler - fix Q/E rotation to match new model orientation
 function onKeyDown(event) {
     // Skip if we're in an input field or textarea
     if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
@@ -288,11 +295,53 @@ function onKeyDown(event) {
         case 'KeyQ':
             window.turnLeft = true;
             window.inputState.keys.q = true;
+            
+            // Apply direct rotation when in first-person mode for immediate feedback
+            if (window.isFirstPerson && window.playerEntity) {
+                // Rotate player left (counter-clockwise) - 0.1 radians is about 5.7 degrees
+                window.playerRotationY = (window.playerRotationY || 0) + 0.1;
+                
+                // Update mesh directly for immediate visual feedback
+                if (window.playerEntity.mesh) {
+                    window.playerEntity.mesh.rotation.y = window.playerRotationY;
+                }
+                
+                // Also update camera to match new rotation
+                if (window.camera) {
+                    window.camera.quaternion.setFromEuler(new THREE.Euler(
+                        window.firstPersonCameraPitch || 0,
+                        window.playerRotationY,
+                        0,
+                        'YXZ'
+                    ));
+                }
+            }
             break;
             
         case 'KeyE':
             window.turnRight = true;
             window.inputState.keys.e = true;
+            
+            // Apply direct rotation when in first-person mode for immediate feedback
+            if (window.isFirstPerson && window.playerEntity) {
+                // Rotate player right (clockwise) - 0.1 radians is about 5.7 degrees
+                window.playerRotationY = (window.playerRotationY || 0) - 0.1;
+                
+                // Update mesh directly for immediate visual feedback
+                if (window.playerEntity.mesh) {
+                    window.playerEntity.mesh.rotation.y = window.playerRotationY;
+                }
+                
+                // Also update camera to match new rotation
+                if (window.camera) {
+                    window.camera.quaternion.setFromEuler(new THREE.Euler(
+                        window.firstPersonCameraPitch || 0,
+                        window.playerRotationY,
+                        0,
+                        'YXZ'
+                    ));
+                }
+            }
             break;
             
         case 'Space':

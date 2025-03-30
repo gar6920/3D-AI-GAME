@@ -94,10 +94,21 @@ class DefaultPlayer extends Player {
                 }
             });
 
-            // Set initial position and rotation based on entity state
+            // Set initial position based on entity state
             newMesh.position.copy(this.position);
-            newMesh.rotation.set(0, this.rotationY, 0); // Assuming Y is the vertical axis
-
+            
+            // Create a parent container to handle rotation properly
+            // This allows us to adjust for the model's inherent forward direction
+            const modelContainer = new THREE.Group();
+            modelContainer.add(newMesh);
+            
+            // Apply rotation to align the model's forward direction with the camera
+            // Rotate the entire model 180 degrees so it faces in the same direction as the camera
+            newMesh.rotation.set(0, Math.PI, 0); // Rotate model 180 degrees so its front faces the correct way
+            
+            // Apply player rotation to the container
+            modelContainer.rotation.set(0, this.rotationY, 0);
+            
             // --- Animation Setup ---
             console.log(`[DefaultPlayer ${this.id}] --- Entering Animation Setup ---`); 
             // Animations are directly available in gltf.animations
@@ -142,17 +153,18 @@ class DefaultPlayer extends Player {
                 console.log(`[DefaultPlayer ${this.id}] Removed placeholder mesh for player: ${this.id}`);
             }
 
-            // Add the loaded model to the scene
+            // Add the container to the scene (not the newMesh directly)
             if (this.scene) {
-                this.scene.add(newMesh);
-                console.log(`[DefaultPlayer ${this.id}] Loaded model added to scene.`);
+                this.scene.add(modelContainer);
+                console.log(`[DefaultPlayer ${this.id}] Loaded model container added to scene.`);
             } else {
                 console.error(`[DefaultPlayer ${this.id}] Scene object not available when adding model for player: ${this.id}`);
             }
             // --- End Swap Mesh --- 
 
-            // Update the entity's mesh reference *after* adding new mesh
-            this.mesh = newMesh;
+            // Update the entity's mesh reference to the container (not the newMesh)
+            this.mesh = modelContainer;
+            this.modelMesh = newMesh; // Store reference to actual model for animation
             this.modelLoaded = true;
 
             // Set visibility based on player type and view mode
@@ -248,26 +260,56 @@ class DefaultPlayer extends Player {
         }
     }
 
-    // Override update to include mixer update
+    // Override update to include mixer update and handle rotation
     update(deltaTime) {
         super.update(deltaTime); // Call base update if needed
 
         // Update the animation mixer
         if (this.mixer) {
             this.mixer.update(deltaTime);
-            // console.log(`[DefaultPlayer ${this.id}] Mixer updated with deltaTime: ${deltaTime}`); // DEBUG - uncomment if needed
+        }
+        
+        // Apply rotation based on whether this is the local player or remote player
+        if (this.mesh) {
+            if (this.isLocalPlayer) {
+                // For LOCAL player:
+                // Update rotation directly from player entity property
+                // We only need to apply rotation to the container, not the model itself
+                this.rotationY = this.mesh.rotation.y;
+            } else {
+                // For REMOTE players:
+                // Get rotation directly from server state
+                let targetRotation = 0;
+                
+                // Find this player in the room state by ID
+                if (window.room && window.room.state && window.room.state.players) {
+                    // Find the player state that matches this entity's ID
+                    const players = Array.from(window.room.state.players.entries());
+                    for (const [sessionId, playerState] of players) {
+                        // Match player to entity either by ID or name if available
+                        if ((playerState.id && playerState.id === this.id) || 
+                            (playerState.name && playerState.name === this.name)) {
+                            targetRotation = playerState.rotationY || 0;
+                            break;
+                        }
+                    }
+                }
+                
+                // Apply rotation with smooth interpolation for remote players
+                if (typeof targetRotation === 'number') {
+                    // Find shortest rotation path
+                    let rotDiff = targetRotation - this.mesh.rotation.y;
+                    if (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+                    if (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+                    
+                    // Apply smooth rotation for remote players
+                    this.mesh.rotation.y += rotDiff * 0.2;
+                    // Also update entity property
+                    this.rotationY = this.mesh.rotation.y;
+                }
+            }
         }
     }
-
-    // Override update function for any player-specific logic
-    // update(deltaTime) {
-    //     // Any default player-specific update logic goes here
-    //     // (Animations would be updated here later)
-        
-    //     // Always call the parent update function
-    //     // This handles position updates based on this.position, this.rotationY etc.
-    //     super.update(deltaTime);
-    // }
 
     updateVisibility() {
         // Make sure mesh exists before trying to set visibility

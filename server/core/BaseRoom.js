@@ -294,8 +294,8 @@ class BaseRoom extends Room {
     }
     
     /**
-     * Update player position based on input state
-     * @param {string} playerSessionId Player session ID
+     * Update player from input state
+     * @param {string} playerSessionId Session ID of the player
      * @param {Player} player Player object
      * @param {InputState} input Input state
      * @param {number} delta Time since last update
@@ -390,23 +390,26 @@ class BaseRoom extends Room {
                 dz += Math.cos(moveAngle + Math.PI/2) * speed;
             }
             
-            // Handle Q and E for rotating the player in third-person mode
-            const rotationSpeed = 0.1;  // Increased rotation speed
-            
-            if (input.keys.q) {
-                // Rotate player left (counter-clockwise)
-                player.rotationY += rotationSpeed;
-                // Normalize rotation
-                player.rotationY = player.rotationY % (Math.PI * 2);
-                if (player.rotationY < 0) player.rotationY += Math.PI * 2;
-            }
-            
-            if (input.keys.e) {
-                // Rotate player right (clockwise)
-                player.rotationY -= rotationSpeed;
-                // Normalize rotation
-                player.rotationY = player.rotationY % (Math.PI * 2);
-                if (player.rotationY < 0) player.rotationY += Math.PI * 2;
+            // Handle Q and E for rotating the player ONLY if no direct rotation is provided
+            // This prevents Q/E from fighting with mouse rotation or clientRotation
+            if (!input.clientRotation) {
+                const rotationSpeed = 0.1;  // Increased rotation speed
+                
+                if (input.keys.q) {
+                    // Rotate player left (counter-clockwise)
+                    player.rotationY += rotationSpeed;
+                    // Normalize rotation
+                    player.rotationY = player.rotationY % (Math.PI * 2);
+                    if (player.rotationY < 0) player.rotationY += Math.PI * 2;
+                }
+                
+                if (input.keys.e) {
+                    // Rotate player right (clockwise)
+                    player.rotationY -= rotationSpeed;
+                    // Normalize rotation
+                    player.rotationY = player.rotationY % (Math.PI * 2);
+                    if (player.rotationY < 0) player.rotationY += Math.PI * 2;
+                }
             }
             
             // Apply diagonal movement speed correction for all movement
@@ -468,8 +471,21 @@ class BaseRoom extends Room {
         player.currentAnimation = desiredAnimation;
         // <<< END NEW >>>
         
+        // CLIENT ROTATION TAKES PRIORITY - Apply direct rotation values if provided
+        if (input.clientRotation && typeof input.clientRotation.rotationY === 'number') {
+            // Use client's reported rotation directly
+            player.rotationY = input.clientRotation.rotationY;
+            if (typeof input.clientRotation.pitch === 'number') {
+                player.pitch = input.clientRotation.pitch;
+            }
+            
+            // Don't apply mouse delta after applying client rotation
+            // as that would be double-counting the rotation
+            return;
+        }
+        
         // Handle mouse movement (rotation) for players not sending direct rotation
-        if (input.mouseDelta && input.mouseDelta.x !== 0 && input.mouseDelta.y !== 0) {
+        if (input.mouseDelta && (input.mouseDelta.x !== 0 || input.mouseDelta.y !== 0)) {
             // Apply mouse X movement to player rotation (horizontal looking)
             player.rotationY += input.mouseDelta.x * 0.002;
             
@@ -482,10 +498,6 @@ class BaseRoom extends Room {
             
             // Clamp pitch to prevent over-rotation
             player.pitch = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, player.pitch));
-            
-            // Reset mouseDelta after applying
-            input.mouseDelta.x = 0;
-            input.mouseDelta.y = 0;
         }
     }
     
