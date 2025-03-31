@@ -2,10 +2,14 @@
   "name": "3d-ai-game-platform",
   "version": "1.0.0",
   "description": "A modular 3D multiplayer browser-based game platform with support for various game implementations.",
-  "main": "server/core/server.js",
+  "main": "server/core/index.js",
+  "engines": {
+    "node": ">=16.0.0"
+  },
   "scripts": {
-    "start": "node server/core/server.js",
-    "dev": "nodemon server/core/server.js",
+    "start": "node server/core/index.js",
+    "dev": "nodemon server/core/index.js",
+    "prod": "cross-env NODE_ENV=production node server/core/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -21,6 +25,8 @@
   "license": "ISC",
   "dependencies": {
     "colyseus": "^0.14.13",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.4.7",
     "express": "^4.21.2"
   },
   "devDependencies": {
