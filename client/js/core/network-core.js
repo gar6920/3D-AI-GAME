@@ -262,9 +262,9 @@ function addReconnectButton() {
 // Function to initialize networking for multiplayer
 async function initNetworking() {
     // Get endpoint from gameConfig if available, or use default
-    const endpoint = window.CONFIG?.SERVER_URL || "ws://localhost:2567";
+    const endpoint = window.gameConfig?.networkSettings?.serverUrl || "ws://localhost:3000";
     // Get room name from gameConfig if available, or use default
-    const roomName = window.CONFIG?.ROOM_NAME || "game";
+    const roomName = window.gameConfig?.networkSettings?.roomName || "default";
     
     console.log("Initializing networking system...");
     

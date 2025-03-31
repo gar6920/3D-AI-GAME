@@ -1,0 +1,16 @@
+name: 3d-ai-game-platform
+services:
+  - name: game-server
+    git:
+      branch: main
+      repo_clone_url: ${_REPO_URL}
+    build_command: npm install
+    run_command: npm run prod
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "8080"
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    http_port: 8080 

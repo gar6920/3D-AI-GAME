@@ -1,0 +1,26 @@
+Starting 3D AI Game Server
+Server starting - press Ctrl+C to stop
+
+> 3d-ai-game-platform@1.0.0 start
+> node server/core/index.js
+
+DEPRECATION WARNING: 'pingInterval', 'pingMaxRetries', 'server', and 'verifyClient' Server options will be permanently moved to WebSocketTransport on v0.15
+new Server({
+  transport: new WebSocketTransport({
+    pingInterval: ...,
+    pingMaxRetries: ...,
+    server: ...,
+    verifyClient: ...
+  })
+})
+👉 Documentation: https://docs.colyseus.io/server/transport/
+Environment: development
+3D Game Platform server running on http://localhost:3000
+Active implementation: default
+BaseRoom created! { name: 'Player_798', color: '#A7A11A' }
+Default room implementation initialized
+Client joined: OIIakgmwp
+RTS move command: Player OIIakgmwp moving to (16.78193367648095, 6.905200722981908)
+RTS move command: Player OIIakgmwp moving to (16.029925376102252, 14.508840204588287)
+RTS move command: Player OIIakgmwp moving to (-2.937395089003817, 8.618108518288826)
+Client left: OIIakgmwp

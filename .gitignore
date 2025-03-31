@@ -11,9 +11,6 @@ yarn-debug.log
 .env.development.local
 .env.test.local
 .env.production.local
-.env.*.local
-.vercel
-*.log
 
 # Editor directories and files
 .idea/
