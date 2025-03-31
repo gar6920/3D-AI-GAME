@@ -8,13 +8,20 @@ const express = require('express');
 const { Server } = require('colyseus');
 const path = require('path');
 
+// Load environment variables
+if (process.env.NODE_ENV !== 'production') {
+    require('dotenv').config();
+}
+
 // Import default implementation
 const DefaultImpl = require('../implementations/default');
 
 // Server-side configuration
 const serverConfig = {
-    activeImplementation: "default",
-    port: process.env.PORT || 3000
+    activeImplementation: process.env.ACTIVE_IMPLEMENTATION || "default",
+    port: parseInt(process.env.PORT || "3000", 10),
+    environment: process.env.NODE_ENV || 'development',
+    logLevel: process.env.LOG_LEVEL || 'info'
 };
 
 /**
@@ -31,7 +38,8 @@ class GameServer {
         
         // Create Colyseus server with correct configuration
         this.gameServer = new Server({
-            server: this.server
+            server: this.server,
+            presence: process.env.REDIS_URL ? "redis" : "local"
         });
         
         // Register rooms
@@ -43,25 +51,40 @@ class GameServer {
      */
     configureApp() {
         // Set up CORS headers for all requests
+        const allowedOrigins = process.env.ALLOWED_ORIGINS ? 
+            process.env.ALLOWED_ORIGINS.split(',') : 
+            ['http://localhost:3000', 'http://localhost:8080'];
+
         this.app.use((req, res, next) => {
-            res.header("Access-Control-Allow-Origin", "*");
-            res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+            const origin = req.headers.origin;
+            if (serverConfig.environment === 'production' || allowedOrigins.includes(origin)) {
+                res.header("Access-Control-Allow-Origin", origin || "*");
+                res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+                res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+            }
             next();
         });
         
         // Set up static file serving
         this.app.use(express.static(path.join(__dirname, '../..', 'client')));
+        this.app.use(express.static(path.join(__dirname, '../..', 'public')));
         
         // Serve the main index.html
         this.app.get('/', (req, res) => {
             res.sendFile(path.join(__dirname, '../..', 'client', 'index.html'));
         });
         
+        // Health check endpoint for DigitalOcean
+        this.app.get('/health', (req, res) => {
+            res.status(200).json({ status: 'ok' });
+        });
+        
         // API endpoint to get current active implementation
         this.app.get('/api/config', (req, res) => {
             res.json({ 
                 activeImplementation: serverConfig.activeImplementation,
-                availableImplementations: ["default"]
+                availableImplementations: ["default"],
+                environment: serverConfig.environment
             });
         });
     }
@@ -104,8 +127,10 @@ class GameServer {
      * @param {number} port Port to listen on
      */
     start(port = 3000) {
-        this.server.listen(port, () => {
-            console.log(`3D Game Platform server running on http://localhost:${port}`);
+        const host = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
+        this.server.listen(port, host, () => {
+            console.log(`Environment: ${serverConfig.environment}`);
+            console.log(`3D Game Platform server running on http://${host}:${port}`);
             console.log(`Active implementation: ${serverConfig.activeImplementation}`);
         });
     }
