@@ -38,8 +38,7 @@ class GameServer {
         
         // Create Colyseus server with correct configuration
         this.gameServer = new Server({
-            server: this.server,
-            presence: process.env.REDIS_URL ? "redis" : "local"
+            server: this.server
         });
         
         // Register rooms
