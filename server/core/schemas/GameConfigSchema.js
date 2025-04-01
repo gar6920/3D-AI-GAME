@@ -9,7 +9,7 @@ class GameConfigSchema extends Schema {
         super();
         this.implementation = "default"; 
         this.mode = "standard";               // Game mode
-        this.maxPlayers = 10;                 // Maximum number of players
+        this.maxPlayers = 100;                // Maximum number of players
         this.mapSize = 40;                    // Size of the map
     }
 }

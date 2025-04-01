@@ -132,6 +132,9 @@ class PlayerUI {
             if (event.key === 'Tab') {
                 event.preventDefault(); // Prevent default tab behavior
                 this.togglePlayerList();
+                
+                // Debug log to confirm function was called
+                console.log("Tab key pressed - toggling player list");
             }
         });
         
@@ -147,7 +150,10 @@ class PlayerUI {
         const playerList = document.getElementById('player-list');
         const collapseIcon = document.getElementById('collapse-icon');
         
-        if (!playerList || !collapseIcon) return;
+        if (!playerList || !collapseIcon) {
+            console.warn("Player list toggle: Could not find required elements");
+            return;
+        }
         
         // Check current state
         const isCollapsed = playerList.style.display === 'none';
@@ -160,6 +166,9 @@ class PlayerUI {
         
         // Save state in localStorage
         localStorage.setItem('playerListCollapsed', !isCollapsed);
+        
+        // Log the toggle event
+        console.log("Player list toggled. Now " + (isCollapsed ? "visible" : "hidden"));
     }
 
     // Initialize player list state from saved preference
@@ -227,8 +236,15 @@ if (typeof window !== 'undefined') {
     
     // Initialize when DOM is ready
     document.addEventListener('DOMContentLoaded', () => {
+        console.log("DOM loaded - initializing player UI");
         playerUI.init();
     });
+    
+    // Also try to initialize immediately in case DOMContentLoaded already fired
+    if (document.readyState === 'interactive' || document.readyState === 'complete') {
+        console.log("Document already loaded - initializing player UI now");
+        playerUI.init();
+    }
 }
 
 if (typeof module !== 'undefined') {

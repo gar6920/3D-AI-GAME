@@ -20,7 +20,7 @@ class BaseRoom extends Room {
         this.setState(new GameState());
         
         // Set maximum number of clients
-        this.maxClients = 10;
+        this.maxClients = 100;
         
         // Set frequency of patches to send
         this.setPatchRate(1000 / 30); // 30 fps
