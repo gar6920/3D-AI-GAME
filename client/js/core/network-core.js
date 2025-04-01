@@ -263,8 +263,13 @@ function addReconnectButton() {
 async function initNetworking() {
     // Get endpoint from gameConfig if available, or use default
     const endpoint = window.gameConfig?.networkSettings?.serverUrl || "ws://localhost:3000";
-    // Get room name from gameConfig if available, or use default
-    const roomName = window.gameConfig?.networkSettings?.roomName || "default";
+    
+    // Get implementation from URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const implementation = urlParams.get('implementation');
+    
+    // Get room name based on implementation or use 'active' as fallback
+    const roomName = implementation || 'active';
     
     console.log("Initializing networking system...");
     
@@ -851,6 +856,10 @@ function setupRoomListeners(room) {
                 if (typeof window.createStaticEntityVisual === 'function') {
                     window.createStaticEntityVisual(entity, entityId);
                 }
+            } else if (entity.type === 'tree') {
+                if (window.entityHandlers?.tree?.create) {
+                    window.entityHandlers.tree.create(entity, entityId);
+                }
             }
         });
         
@@ -867,6 +876,10 @@ function setupRoomListeners(room) {
                 } else if (entity.type === 'staticValueEntity') {
                     if (typeof window.createStaticEntityVisual === 'function') {
                         window.createStaticEntityVisual(entity, entityId);
+                    }
+                } else if (entity.type === 'tree') {
+                    if (window.entityHandlers?.tree?.create) {
+                        window.entityHandlers.tree.create(entity, entityId);
                     }
                 }
             };
@@ -885,6 +898,10 @@ function setupRoomListeners(room) {
                 } else if (entity.type === 'staticValueEntity') {
                     if (typeof window.removeStaticEntityVisual === 'function') {
                         window.removeStaticEntityVisual(entityId);
+                    }
+                } else if (entity.type === 'tree') {
+                    if (window.entityHandlers?.tree?.remove) {
+                        window.entityHandlers.tree.remove(entityId);
                     }
                 }
             };

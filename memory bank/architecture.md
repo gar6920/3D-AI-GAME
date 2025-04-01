@@ -135,6 +135,14 @@ Each game implementation extends the core platform with specific gameplay mechan
 ### 5. Networking Architecture
 **Technology:** Colyseus for WebSocket-based real-time multiplayer.
 
+**Implementation Selection:**
+- Implementation selection is handled via URL parameters (`?implementation=test1`)
+- Each implementation has its own dedicated game room on the server
+- Room names match implementation names (e.g., 'test1', 'default')
+- Clients automatically connect to the appropriate room based on the selected implementation
+- UI dropdown allows users to switch between available implementations
+- Implementation-specific code and assets are loaded dynamically based on selection
+
 **Implementation:**
 - Server maintains authoritative game state using Colyseus Schema
 - Player state includes position, velocity, pitch, rotationY, input state, currentAnimation.

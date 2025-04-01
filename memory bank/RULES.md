@@ -279,7 +279,6 @@ The production server runs on Digital Ocean's App Platform.
 
 - Always update documentation when making significant changes
 - Keep commit messages descriptive and related to implementation changes
-- Use feature branches for new game implementations or major features
 
 ## Adding New Game Implementations
 - Create both client-side and server-side implementation directories

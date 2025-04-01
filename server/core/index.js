@@ -7,18 +7,39 @@ const http = require('http');
 const express = require('express');
 const { Server } = require('colyseus');
 const path = require('path');
+const fs = require('fs');
 
 // Load environment variables
 if (process.env.NODE_ENV !== 'production') {
     require('dotenv').config();
 }
 
-// Import default implementation
-const DefaultImpl = require('../implementations/default');
+// Function to load all available implementations
+function loadImplementations() {
+    const implementationsDir = path.join(__dirname, '../implementations');
+    const implementations = {};
+    
+    if (fs.existsSync(implementationsDir)) {
+        fs.readdirSync(implementationsDir, { withFileTypes: true })
+            .filter(dirent => dirent.isDirectory())
+            .forEach(dirent => {
+                const implName = dirent.name;
+                try {
+                    implementations[implName] = require(`../implementations/${implName}`);
+                } catch (error) {
+                    console.error(`Failed to load implementation ${implName}:`, error);
+                }
+            });
+    }
+    
+    return implementations;
+}
+
+// Load all implementations
+const implementations = loadImplementations();
 
 // Server-side configuration
 const serverConfig = {
-    activeImplementation: process.env.ACTIVE_IMPLEMENTATION || "default",
     port: parseInt(process.env.PORT || "3000", 10),
     environment: process.env.NODE_ENV || 'development',
     logLevel: process.env.LOG_LEVEL || 'info'
@@ -88,9 +109,9 @@ class GameServer {
 
         // API config endpoint
         this.app.get('/api/config', (req, res) => {
+            const availableImplementations = Object.keys(implementations);
             res.json({ 
-                activeImplementation: serverConfig.activeImplementation,
-                availableImplementations: ["default"],
+                availableImplementations,
                 environment: serverConfig.environment
             });
         });
@@ -117,15 +138,22 @@ class GameServer {
      * Register room handlers
      */
     registerRooms() {
-        // Get the room from default implementation
-        const roomType = DefaultImpl.implementation.roomType;
-        const RoomClass = this.getRoomClass(DefaultImpl);
-        
-        if (RoomClass) {
-            this.gameServer.define(roomType, RoomClass);
-            this.gameServer.define('active', RoomClass);
-        } else {
-            console.warn('No room class found for default implementation');
+        // Register each implementation's room
+        for (const [implName, implementation] of Object.entries(implementations)) {
+            const RoomClass = this.getRoomClass(implementation);
+            if (RoomClass) {
+                const roomType = implementation.implementation?.roomType || implName;
+                this.gameServer.define(roomType, RoomClass);
+                
+                // Also define this room as the active room if it's the first one
+                // This maintains compatibility with existing clients
+                if (Object.keys(implementations).indexOf(implName) === 0) {
+                    console.log(`Defining ${roomType} as the active room type`);
+                    this.gameServer.define('active', RoomClass);
+                }
+            } else {
+                console.warn(`No room class found for implementation: ${implName}`);
+            }
         }
     }
     
@@ -135,14 +163,14 @@ class GameServer {
      * @returns {Class} The room class, or null if not found
      */
     getRoomClass(implementation) {
-        if (implementation.DefaultRoom) {
-            return implementation.DefaultRoom;
-        } else if (implementation.ImplementationRoom) {
+        // First try to get the implementation-specific room
+        if (implementation.ImplementationRoom) {
             return implementation.ImplementationRoom;
         }
-        
-        // Log what's available in the implementation for debugging
-        console.log(`Available properties in implementation: ${Object.keys(implementation).join(', ')}`);
+        // Fallback to DefaultRoom if provided
+        if (implementation.DefaultRoom) {
+            return implementation.DefaultRoom;
+        }
         return null;
     }
     
@@ -155,7 +183,6 @@ class GameServer {
         this.server.listen(port, host, () => {
             console.log(`Environment: ${serverConfig.environment}`);
             console.log(`3D Game Platform server running on http://${host}:${port}`);
-            console.log(`Active implementation: ${serverConfig.activeImplementation}`);
         });
     }
 }

@@ -64,14 +64,13 @@
                         option.textContent = impl.charAt(0).toUpperCase() + impl.slice(1); // Capitalize
                         selectElement.appendChild(option);
                     });
-                    // Select the active implementation by default
-                    selectElement.value = config.activeImplementation || config.availableImplementations[0];
                 } else {
-                     const option = document.createElement('option');
-                     option.value = "default"; // Fallback if API fails or returns empty
-                     option.textContent = "Default";
-                     selectElement.appendChild(option);
-                     console.warn("No available implementations found via API, using fallback 'default'.");
+                    const option = document.createElement('option');
+                    option.value = "";
+                    option.textContent = "No implementations available";
+                    selectElement.appendChild(option);
+                    selectElement.disabled = true;
+                    console.warn("No available implementations found via API.");
                 }
 
             } catch (error) {
@@ -84,7 +83,13 @@
         }
 
         function selectPlayers(count) {
-            const selectedImplementation = document.getElementById('implementation-select').value || 'default';
+            const selectedImplementation = document.getElementById('implementation-select').value;
+            
+            if (!selectedImplementation) {
+                alert('Please select a game implementation first.');
+                return;
+            }
+            
             const baseUrl = `/game?implementation=${selectedImplementation}`; // Pass implementation to game
             const setupUrl = `/setup?players=${count}&implementation=${selectedImplementation}`; // Pass to setup
 

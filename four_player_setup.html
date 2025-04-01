@@ -47,7 +47,13 @@
             // Get URL parameters
             const urlParams = new URLSearchParams(window.location.search);
             const playerCount = parseInt(urlParams.get('players')) || 4;
-            const implementation = urlParams.get('implementation') || 'default'; // Get implementation
+            const implementation = urlParams.get('implementation');
+            
+            // Validate required parameters
+            if (!implementation) {
+                document.body.innerHTML = '<div style="text-align: center; padding: 20px;"><h1>Error</h1><p>No implementation selected. Please return to the player selection page.</p><a href="/select">Go Back</a></div>';
+                return;
+            }
             
             // Set container class based on player count
             const container = document.querySelector('.container');
