@@ -41,51 +41,42 @@
             height: 100%;
             border: none;
         }
-        #implementation-display {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background-color: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-family: Arial, sans-serif;
-            z-index: 1000;
-        }
     </style>
     <script>
         window.addEventListener('DOMContentLoaded', async () => {
-            // Get number of players from URL parameter
+            // Get URL parameters
             const urlParams = new URLSearchParams(window.location.search);
             const playerCount = parseInt(urlParams.get('players')) || 4;
+            const implementation = urlParams.get('implementation') || 'default'; // Get implementation
             
             // Set container class based on player count
             const container = document.querySelector('.container');
             container.className = `container players-${playerCount}`;
             
-            // Create iframes based on player count
+            // Create iframes based on player count, passing implementation
             container.innerHTML = '';
             for (let i = 0; i < playerCount; i++) {
                 const iframe = document.createElement('iframe');
-                // Use relative path for the game page
-                iframe.src = '/game'; 
+                // Pass implementation to each game iframe
+                iframe.src = `/game?implementation=${implementation}&playerName=Player${i + 1}`;
                 container.appendChild(iframe);
             }
 
-            // Fetch implementation info (using relative path)
+            // Fetch implementation info (using relative path) to set the title
             try {
-                const response = await fetch('/api/config');
-                if (response.ok) {
-                    const config = await response.json();
-                    document.title = `3D AI Game - ${playerCount} Players - ${config.activeImplementation}`;
-                    
-                    const implDisplay = document.createElement('div');
-                    implDisplay.id = 'implementation-display';
-                    implDisplay.textContent = `Implementation: ${config.activeImplementation}`;
-                    document.body.appendChild(implDisplay);
-                }
+                // Use the passed implementation for the title, or fetch if needed
+                document.title = `3D AI Game - ${playerCount} Players - ${implementation.charAt(0).toUpperCase() + implementation.slice(1)}`;
+
+                // Optional: Fetch config if you need other details, but not needed for the indicator now
+                // const response = await fetch('/api/config');
+                // if (response.ok) {
+                //     const config = await response.json();
+                     // document.title = `3D AI Game - ${playerCount} Players - ${config.activeImplementation}`; // Old way
+                     
+                     // REMOVED CODE TO CREATE AND APPEND #implementation-display element
+                // }
             } catch (error) {
-                console.error('Failed to fetch implementation info:', error);
+                console.error('Failed to set title based on implementation info:', error);
             }
         });
     </script>

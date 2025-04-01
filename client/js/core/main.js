@@ -18,6 +18,13 @@ function getUrlParams() {
         params.playerColor = parseInt(colorStr, 16);
     }
     
+    // Get implementation if provided
+    if (urlParams.has('implementation')) {
+        params.implementation = urlParams.get('implementation');
+    } else {
+        params.implementation = 'default'; // Default if not specified
+    }
+    
     return params;
 }
 
@@ -27,6 +34,7 @@ const urlParams = getUrlParams();
 // Game configuration
 const gameConfig = {
     debug: false,                 // Debug mode
+    implementation: urlParams.implementation, // Store selected implementation
     sceneSettings: {
         groundSize: 100,          // Size of the ground plane
         skyColor: 0x87CEEB,       // Sky color
@@ -42,13 +50,15 @@ const gameConfig = {
         // Use custom player name if provided in URL, otherwise generate random name
         playerName: urlParams.playerName || `Player_${Math.floor(Math.random() * 1000)}`,
         playerColor: urlParams.playerColor || 0xCCCCCC, // Default to grey
-        playerModelPath: 'assets/models/human_man.glb', // Path to the player model
+        // Model path might depend on implementation, default set here
+        playerModelPath: 'assets/models/human_man.glb', 
     },
     networkSettings: {
         serverUrl: window.location.hostname.includes('localhost') 
             ? `ws://${window.location.hostname}:3000` // Local development
             : `wss://${window.location.hostname}`,    // Production
-        roomName: 'active'       // Default active room
+        // Room name could potentially depend on implementation in the future
+        roomName: 'active'       
     }
 };
 
@@ -57,7 +67,7 @@ window.gameConfig = gameConfig;
 
 // Main game initialization
 function initGame() {
-    console.log('Initializing 3D Game Platform...');
+    console.log(`Initializing 3D Game Platform (Implementation: ${gameConfig.implementation})...`);
     
     // Display player name in loading screen if custom name provided
     if (urlParams.playerName) {
@@ -65,68 +75,82 @@ function initGame() {
         loadingStatus.textContent = `Loading game engine for ${urlParams.playerName}...`;
     }
     
-    // Load core modules
+    // Load core modules, then implementation modules
     loadCoreModules()
+        .then(() => loadImplementationModules(gameConfig.implementation)) 
         .then(() => {
             // Initialize the game engine
             initGameEngine();
         })
         .catch(error => {
             console.error('Error initializing game:', error);
+            // Potentially display an error message to the user here
         });
 }
 
 // Load core platform modules
 function loadCoreModules() {
-    return new Promise((resolve, reject) => {
-        try {
-            console.log('Loading core modules...');
-            
-            // Create core module paths
-            const corePath = 'js/core/';
-            const coreModules = [
-                'Entity.js',
-                'Player.js',
-                'NPC.js',
-                'EntityFactory.js',
-                'collision.js',
-                'player-ui.js',
-                'network-core.js',
-                'controls.js'
-            ];
-            
-            // Add implementation-specific modules (currently just DefaultPlayer)
-            const implementationPath = 'js/implementations/default/';
-            const implementationModules = [
-                'DefaultPlayer.js'
-            ];
-            
-            // Load each module in sequence
-            let loadPromise = Promise.resolve();
-            
-            coreModules.forEach(module => {
-                loadPromise = loadPromise.then(() => {
-                    return loadScript(corePath + module);
-                });
-            });
-            
-            // Load each implementation module after core modules
-            implementationModules.forEach(module => {
-                loadPromise = loadPromise.then(() => {
-                    return loadScript(implementationPath + module);
-                });
-            });
-            
-            // Resolve when all core modules are loaded
-            loadPromise.then(() => {
-                console.log('Core modules loaded successfully');
-                resolve();
-            }).catch(error => {
-                reject(error);
-            });
-        } catch (error) {
-            reject(error);
-        }
+    console.log('Loading core modules...');
+    const corePath = 'js/core/';
+    const coreModules = [
+        'Entity.js',
+        'Player.js',
+        'NPC.js',
+        'EntityFactory.js',
+        'collision.js',
+        'player-ui.js',
+        'network-core.js',
+        'controls.js'
+    ];
+    
+    let loadPromise = Promise.resolve();
+    coreModules.forEach(module => {
+        loadPromise = loadPromise.then(() => loadScript(corePath + module));
+    });
+    
+    return loadPromise.then(() => {
+        console.log('Core modules loaded successfully');
+    }).catch(error => {
+        console.error('Failed to load core modules:', error);
+        throw error; // Re-throw to be caught by initGame
+    });
+}
+
+// Load implementation-specific modules
+function loadImplementationModules(implementationName) {
+    console.log(`Loading implementation modules for: ${implementationName}`);
+    const basePath = `js/implementations/${implementationName}/`;
+
+    // Define modules for the 'default' implementation
+    // In the future, you could have a map or switch statement here
+    let implementationModules = [];
+    if (implementationName === 'default') {
+        implementationModules = [
+            'DefaultPlayer.js' 
+            // Add other default implementation scripts here if needed
+        ];
+    } else {
+        console.warn(`No specific modules defined for implementation: ${implementationName}. Attempting default load.`);
+        // Potentially try loading a standard entry point like 'index.js' or similar
+        // implementationModules = ['index.js']; 
+    }
+
+    if (implementationModules.length === 0) {
+        console.log(`No modules to load for implementation: ${implementationName}`);
+        return Promise.resolve(); // Nothing to load
+    }
+
+    let loadPromise = Promise.resolve();
+    implementationModules.forEach(module => {
+        loadPromise = loadPromise.then(() => loadScript(basePath + module));
+    });
+
+    return loadPromise.then(() => {
+        console.log(`Implementation modules for '${implementationName}' loaded successfully`);
+    }).catch(error => {
+        console.error(`Failed to load implementation modules for '${implementationName}':`, error);
+        // Decide how to handle failure: fallback to default? Show error?
+        // For now, just log and continue - game might be broken
     });
 }
 
@@ -134,52 +158,66 @@ function loadCoreModules() {
 function initGameEngine() {
     console.log('Initializing game engine...');
     
-    // Initialize default player factory first
-    window.createPlayerEntity = function(scene, value = 1) {
-        // Dynamically select Player class based on availability
-        const PlayerClass = window.DefaultPlayer || window.Player; // Use DefaultPlayer if loaded
-        console.log(`[createPlayerEntity] Using Player class: ${PlayerClass.name}`);
-        
-        // Create a player with color from gameConfig
-        const player = new PlayerClass({
-            id: 'player',
-            isLocalPlayer: true,
-            color: gameConfig.playerSettings.playerColor,
-            scene: scene // Pass the scene object
-        });
-        
-        // Register the local player's update method to be called in the animation loop
-        if (typeof player.update === 'function' && typeof registerAnimationCallback === 'function') {
-            // Bind the update function to the player instance to ensure 'this' is correct
-            registerAnimationCallback(player.update.bind(player));
-            console.log(`[createPlayerEntity] Registered update callback for local player: ${player.id}`);
+    // Player factory - determines which Player class to use
+    window.createPlayerEntity = function(scene, isLocal = true, options = {}) {
+        let PlayerClass;
+        const impl = window.gameConfig.implementation;
+
+        // Select class based on implementation
+        if (impl === 'default' && window.DefaultPlayer) {
+            PlayerClass = window.DefaultPlayer;
         } else {
-            console.warn(`[createPlayerEntity] Could not register update callback for local player. Missing player.update or registerAnimationCallback.`);
+            // Fallback to base Player class if implementation specific class not found
+            console.warn(`Implementation player class for '${impl}' not found. Using base Player.`);
+            PlayerClass = window.Player; 
+        }
+        
+        console.log(`[createPlayerEntity] Using Player class: ${PlayerClass.name} for implementation: ${impl}`);
+        
+        const playerConfig = {
+            id: options.id || (isLocal ? 'player' : `remote_${Math.random().toString(36).substring(7)}`),
+            isLocalPlayer: isLocal,
+            color: options.color || (isLocal ? gameConfig.playerSettings.playerColor : 0xAAAAAA),
+            scene: scene, // Pass the scene object
+            name: options.name || (isLocal ? gameConfig.playerSettings.playerName : 'RemotePlayer'),
+            ...options // Pass any other options received (like position from server)
+        };
+
+        const player = new PlayerClass(playerConfig);
+        
+        // Register update callback ONLY for the local player
+        if (isLocal && typeof player.update === 'function' && typeof window.registerAnimationCallback === 'function') {
+            window.registerAnimationCallback(player.update.bind(player));
+            console.log(`[createPlayerEntity] Registered update callback for local player: ${player.id}`);
         }
         
         if (scene && player.mesh) {
             scene.add(player.mesh);
+        } else {
+            console.warn(`[createPlayerEntity] Player mesh not created or scene not available for player: ${player.id}`);
         }
         
         return player;
     };
     
-    // Load the game engine
+    // Load the game engine script itself
     loadScript('js/core/game-engine.js')
         .then(() => {
-            console.log('Game engine loaded');
-            // Remove the loading screen once everything is loaded
+            console.log('Game engine script loaded, starting engine...');
+            // The game engine's initialization logic (e.g., inside its own init function)
+            // should now be able to run, potentially calling createPlayerEntity itself.
+            
+            // Remove the loading screen once the engine script is loaded
             const loadingScreen = document.getElementById('loading-screen');
             if (loadingScreen) {
                 loadingScreen.style.display = 'none';
             }
             
-            // Set isFirstPerson based on viewMode
-            window.isFirstPerson = gameConfig.playerSettings.viewMode === 'firstPerson';
+            // Set initial view mode (might be overridden by engine/controls)
             window.viewMode = gameConfig.playerSettings.viewMode;
         })
         .catch(error => {
-            console.error('Error loading game engine:', error);
+            console.error('Error loading game engine script:', error);
         });
 }
 
@@ -195,8 +233,15 @@ function loadScript(src) {
         
         const script = document.createElement('script');
         script.src = src;
-        script.onload = () => resolve();
-        script.onerror = (error) => reject(new Error(`Failed to load script: ${src}`));
+        script.async = false; // Load scripts synchronously in order
+        script.onload = () => {
+            // console.log(`Script loaded successfully: ${src}`);
+            resolve();
+        };
+        script.onerror = (error) => {
+            console.error(`Failed to load script: ${src}`, error);
+            reject(new Error(`Failed to load script: ${src}`));
+        };
         document.head.appendChild(script);
     });
 }
