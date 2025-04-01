@@ -67,13 +67,14 @@
             container.innerHTML = '';
             for (let i = 0; i < playerCount; i++) {
                 const iframe = document.createElement('iframe');
-                iframe.src = 'http://localhost:3000';
+                // Use relative path for the game page
+                iframe.src = '/game'; 
                 container.appendChild(iframe);
             }
 
-            // Fetch implementation info
+            // Fetch implementation info (using relative path)
             try {
-                const response = await fetch('http://localhost:3000/api/config');
+                const response = await fetch('/api/config');
                 if (response.ok) {
                     const config = await response.json();
                     document.title = `3D AI Game - ${playerCount} Players - ${config.activeImplementation}`;

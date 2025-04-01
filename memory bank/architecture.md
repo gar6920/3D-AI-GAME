@@ -255,18 +255,28 @@ Each game implementation extends the core platform with specific gameplay mechan
 
 ## Data Flow
 
-1.  **Connection**: Client connects to Server via WebSocket (Colyseus `network-core.js`).
-2.  **Join Room**: Client joins the 'active' room (`DefaultRoom.js`).
-3.  **State Sync**: Server sends initial `GameState` to Client. Player entities are created client-side (`network-core.js` using `EntityFactory`).
-4.  **Input**: Client sends input state (keys pressed, mouse movement, rotation) to Server (`controls.js` -> `network-core.js` -> `BaseRoom.js`).
-5.  **Server Processing**: Server updates player state based on input, performs physics/collision checks (`BaseRoom.js` or `DefaultRoom.js`).
-6.  **State Broadcast**: Server broadcasts delta updates of the `GameState` to all clients.
-7.  **Client Update**: Client receives state updates, interpolates remote player positions, updates local visuals (`network-core.js`).
-8.  **Building**:
+1.  **Initial Connection**: Client browser navigates to the root URL (`/`).
+2.  **Redirect**: Server receives request for `/`, executes `res.redirect('/select')`.
+3.  **Selection Page**: Client browser requests `/select`. Server serves `public/player_select.html`.
+4.  **Player Choice**: User clicks a button on the selection page.
+    *   **1 Player**: Browser navigates to `/game`.
+    *   **2-4 Players**: Browser navigates to `/setup?players=N`.
+5.  **Game Page Load**: 
+    *   If `/game` was requested, server serves `client/index.html`.
+    *   If `/setup` was requested, server serves `four_player_setup.html`, which then loads `/game` in iframes.
+6.  **Client Initialization**: `client/index.html` loads necessary JS (`main.js`).
+7.  **Server Connection**: Client connects to Server via WebSocket (Colyseus `network-core.js`).
+8.  **Join Room**: Client joins the 'active' room (`DefaultRoom.js`).
+9.  **State Sync**: Server sends initial `GameState` to Client. Player entities are created client-side (`network-core.js` using `EntityFactory`).
+10. **Input**: Client sends input state (keys pressed, mouse movement, rotation) to Server (`controls.js` -> `network-core.js` -> `BaseRoom.js`).
+11. **Server Processing**: Server updates player state based on input, performs physics/collision checks (`BaseRoom.js` or `DefaultRoom.js`).
+12. **State Broadcast**: Server broadcasts delta updates of the `GameState` to all clients.
+13. **Client Update**: Client receives state updates, interpolates remote player positions, updates local visuals (`network-core.js`).
+14. **Building**:
     *   Client enters build mode, sends placement request (`game-engine.js` -> `network-core.js`).
     *   Server validates, updates `GameState.structures`, broadcasts change (`BaseRoom.js`).
     *   Clients render the new structure (`network-core.js`).
-9.  **RTS Commands**:
+15. **RTS Commands**:
     *   Client selects units, issues move command (`game-engine.js`/`rts-view.js` -> `network-core.js`).
     *   Server receives command, updates target position for player entities (`BaseRoom.js`).
     *   Server state updates cause units to move on all clients.

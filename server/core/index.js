@@ -56,35 +56,60 @@ class GameServer {
 
         this.app.use((req, res, next) => {
             const origin = req.headers.origin;
-            if (serverConfig.environment === 'production' || allowedOrigins.includes(origin)) {
+            if (serverConfig.environment === 'production' || !origin || allowedOrigins.includes(origin)) {
                 res.header("Access-Control-Allow-Origin", origin || "*");
                 res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
                 res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
             }
             next();
         });
-        
-        // Set up static file serving
-        this.app.use(express.static(path.join(__dirname, '../..', 'client')));
-        this.app.use(express.static(path.join(__dirname, '../..', 'public')));
-        
-        // Serve the main index.html
-        this.app.get('/', (req, res) => {
-            res.sendFile(path.join(__dirname, '../..', 'client', 'index.html'));
+
+        // --- Define Specific Routes FIRST ---
+
+        // Route for player selection page
+        this.app.get('/select', (req, res) => {
+            res.sendFile(path.join(__dirname, '../../', 'public', 'player_select.html'));
         });
-        
-        // Health check endpoint for DigitalOcean
+
+        // Route for split-screen setup page
+        this.app.get('/setup', (req, res) => {
+            res.sendFile(path.join(__dirname, '../../', 'four_player_setup.html'));
+        });
+
+        // Serve the main index.html (for the game itself)
+        this.app.get('/game', (req, res) => {
+            res.sendFile(path.join(__dirname, '../../', 'client', 'index.html'));
+        });
+
+        // Health check endpoint
         this.app.get('/health', (req, res) => {
             res.status(200).json({ status: 'ok' });
         });
-        
-        // API endpoint to get current active implementation
+
+        // API config endpoint
         this.app.get('/api/config', (req, res) => {
             res.json({ 
                 activeImplementation: serverConfig.activeImplementation,
                 availableImplementations: ["default"],
                 environment: serverConfig.environment
             });
+        });
+
+        // Root route redirects to player selection
+        // IMPORTANT: Define this AFTER other specific routes that might start with /
+        this.app.get('/', (req, res) => {
+            res.redirect('/select');
+        });
+
+        // --- Set up Static File Serving LAST ---
+        // Serve files from 'public' first (e.g., for player_select.html CSS/JS if added)
+        this.app.use(express.static(path.join(__dirname, '../../', 'public')));
+        // Serve files from 'client' (like the game's JS, CSS, assets)
+        this.app.use(express.static(path.join(__dirname, '../../', 'client')));
+
+        // Optional: Add a 404 handler for any request that didn't match a route or static file
+        this.app.use((req, res, next) => {
+            res.status(404).send("Sorry, that page doesn't exist!");
         });
     }
     
