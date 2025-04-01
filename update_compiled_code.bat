@@ -7,147 +7,239 @@ echo Creating updated compiled_code.txt file...
 if exist compiled_code.txt del compiled_code.txt
 
 :: Create the new file with a header
-echo ############################################################### > compiled_code.txt
-echo #                                                             # >> compiled_code.txt
-echo #        3D AI GAME PLATFORM - COMPLETE CODE COMPILATION      # >> compiled_code.txt
-echo #                                                             # >> compiled_code.txt
-echo ############################################################### >> compiled_code.txt
+echo ################################################################## > compiled_code.txt
+echo #                                                                  # >> compiled_code.txt
+echo #                    3D AI GAME PLATFORM CODEBASE                 # >> compiled_code.txt
+echo #                                                                  # >> compiled_code.txt
+echo ################################################################## >> compiled_code.txt
 echo. >> compiled_code.txt
 
-:: Add directory structure (excluding node_modules and .git)
-echo DIRECTORY STRUCTURE: >> compiled_code.txt
-echo ############################################################### >> compiled_code.txt
-echo Generating directory tree (excluding node_modules and .git)...
-:: Use a temporary tree file to filter out node_modules and .git
-tree /f /a > temp_tree.txt
-:: Filter out node_modules and .git from the tree output
-type temp_tree.txt | findstr /v "node_modules .git" >> compiled_code.txt
-:: Clean up
-del temp_tree.txt
+:: Project Structure Section
+echo ################################################################## >> compiled_code.txt
+echo #                      PROJECT STRUCTURE                          # >> compiled_code.txt
+echo ################################################################## >> compiled_code.txt
 echo. >> compiled_code.txt
-echo ############################################################### >> compiled_code.txt
+
+:: Root level files
+echo root\start_server.bat >> compiled_code.txt
+echo root\package.json >> compiled_code.txt
+echo root\four_player_setup.html >> compiled_code.txt
 echo. >> compiled_code.txt
+
+:: Client structure
+echo root\client\index.html >> compiled_code.txt
+echo root\client\js\core\Player.js >> compiled_code.txt
+echo root\client\js\core\Entity.js >> compiled_code.txt
+echo root\client\js\core\game-engine.js >> compiled_code.txt
+echo root\client\js\core\network-core.js >> compiled_code.txt
+echo root\client\js\core\controls.js >> compiled_code.txt
+echo root\client\js\core\EntityFactory.js >> compiled_code.txt
+echo root\client\js\core\NPC.js >> compiled_code.txt
+echo root\client\js\core\collision.js >> compiled_code.txt
+echo root\client\js\implementations\default\index.js >> compiled_code.txt
+echo root\client\js\implementations\default\DefaultPlayer.js >> compiled_code.txt
+echo root\client\js\implementations\default\DefaultEnvironment.js >> compiled_code.txt
+echo. >> compiled_code.txt
+
+:: Public structure
+echo root\public\player_select.html >> compiled_code.txt
+echo. >> compiled_code.txt
+
+:: Server structure
+echo root\server\core\index.js >> compiled_code.txt
+echo root\server\core\BaseRoom.js >> compiled_code.txt
+echo root\server\core\schemas\GameState.js >> compiled_code.txt
+echo root\server\core\schemas\Player.js >> compiled_code.txt
+echo root\server\implementations\default\DefaultRoom.js >> compiled_code.txt
+echo. >> compiled_code.txt
+
+echo. >> compiled_code.txt
+echo ################################################################## >> compiled_code.txt
+echo. >> compiled_code.txt
+
+:: Add table of contents
+echo TABLE OF CONTENTS >> compiled_code.txt
+echo ################################################################## >> compiled_code.txt
+echo. >> compiled_code.txt
+echo 1. Project Configuration >> compiled_code.txt
+echo    - Server Startup >> compiled_code.txt
+echo    - Package Configuration >> compiled_code.txt
+echo    - HTML Entry Points >> compiled_code.txt
+echo. >> compiled_code.txt
+echo 2. Core Platform >> compiled_code.txt
+echo    - Player System >> compiled_code.txt
+echo    - Game Engine >> compiled_code.txt
+echo    - Networking >> compiled_code.txt
+echo    - Entity System >> compiled_code.txt
+echo. >> compiled_code.txt
+echo 3. Default Implementation >> compiled_code.txt
+echo    - Player Implementation >> compiled_code.txt
+echo    - Environment Objects >> compiled_code.txt
+echo. >> compiled_code.txt
+echo 4. Server Components >> compiled_code.txt
+echo    - Room Management >> compiled_code.txt
+echo    - Game State >> compiled_code.txt
+echo. >> compiled_code.txt
+echo ################################################################## >> compiled_code.txt
 echo. >> compiled_code.txt
 
 set /a totalFiles=0
 set /a totalLines=0
 
-:: Function to count lines in a file
-set "cmd=findstr /R /N "^^" "%%F" | find /C ":""
+:: Project Configuration Files
+echo ################################################################## >> compiled_code.txt
+echo #                    PROJECT CONFIGURATION                         # >> compiled_code.txt
+echo ################################################################## >> compiled_code.txt
+echo. >> compiled_code.txt
 
-:: Process root directory files
-for %%F in (*.js, *.ts, *.jsx, *.tsx, *.html, *.css, *.scss, *.md, *.json, *.bat, *.txt, *.yaml, *.yml, *.xml, *.env*, *.config*) do (
-    if /i not "%%F"=="compiled_code.txt" (
-        if /i not "%%F"=="temp_tree.txt" (
-            if /i not "%%F"=="server_output.tmp" (
-                echo Processing %%F...
-                echo ############################################################### >> compiled_code.txt
-                echo #                                                             # >> compiled_code.txt
-                echo # FILE: %%F >> compiled_code.txt
-                for /f %%L in ('!cmd!') do (
-                    echo # LINES: %%L >> compiled_code.txt
-                    set /a totalLines=totalLines+%%L
-                )
-                echo #                                                             # >> compiled_code.txt
-                echo ############################################################### >> compiled_code.txt
-                echo. >> compiled_code.txt
-                type "%%F" >> compiled_code.txt
-                echo. >> compiled_code.txt
-                echo ############################################################### >> compiled_code.txt
-                echo #                     END OF FILE: %%F                        # >> compiled_code.txt
-                echo ############################################################### >> compiled_code.txt
-                echo. >> compiled_code.txt
-                echo. >> compiled_code.txt
-                set /a totalFiles=totalFiles+1
-            )
-        )
+:: Process config files
+set "config_files=start_server.bat package.json client\index.html public\player_select.html four_player_setup.html"
+for %%F in (%config_files%) do (
+    if exist "%%F" (
+        echo Processing %%F...
+        echo ################################################################## >> compiled_code.txt
+        echo #                                                                  # >> compiled_code.txt
+        echo # FILE: %%~nxF >> compiled_code.txt
+        
+        :: Count lines in the file
+        set /a lines=0
+        for /f %%L in ('type "%%F" ^| find /v /c ""') do set /a lines=%%L
+        set /a totalLines+=!lines!
+        echo # LINES: !lines! >> compiled_code.txt
+        
+        echo #                                                                  # >> compiled_code.txt
+        echo ################################################################## >> compiled_code.txt
+        echo. >> compiled_code.txt
+        type "%%F" >> compiled_code.txt
+        echo. >> compiled_code.txt
+        echo ################################################################## >> compiled_code.txt
+        echo #                       END OF %%~nxF                              # >> compiled_code.txt
+        echo ################################################################## >> compiled_code.txt
+        echo. >> compiled_code.txt
+        echo. >> compiled_code.txt
+        set /a totalFiles+=1
     )
 )
 
-:: Process client directory
-for /R "client" %%F in (*.js, *.ts, *.jsx, *.tsx, *.html, *.css, *.scss, *.md, *.json, *.bat, *.txt, *.yaml, *.yml, *.xml, *.env*, *.config*) do (
-    echo Processing %%F...
-    echo ############################################################### >> compiled_code.txt
-    echo #                                                             # >> compiled_code.txt
-    echo # FILE: %%F >> compiled_code.txt
-    for /f %%L in ('!cmd!') do (
-        echo # LINES: %%L >> compiled_code.txt
-        set /a totalLines=totalLines+%%L
+:: Core Platform Files
+echo ################################################################## >> compiled_code.txt
+echo #                         CORE PLATFORM                            # >> compiled_code.txt
+echo ################################################################## >> compiled_code.txt
+echo. >> compiled_code.txt
+
+:: Process core files in specific order
+set "core_files=client\js\core\Player.js client\js\core\Entity.js client\js\core\game-engine.js client\js\core\network-core.js client\js\core\controls.js client\js\core\EntityFactory.js client\js\core\NPC.js client\js\core\collision.js"
+for %%F in (%core_files%) do (
+    if exist "%%F" (
+        echo Processing %%F...
+        echo ################################################################## >> compiled_code.txt
+        echo #                                                                  # >> compiled_code.txt
+        echo # FILE: %%~nxF >> compiled_code.txt
+        
+        :: Count lines in the file
+        set /a lines=0
+        for /f %%L in ('type "%%F" ^| find /v /c ""') do set /a lines=%%L
+        set /a totalLines+=!lines!
+        echo # LINES: !lines! >> compiled_code.txt
+        
+        echo #                                                                  # >> compiled_code.txt
+        echo ################################################################## >> compiled_code.txt
+        echo. >> compiled_code.txt
+        type "%%F" >> compiled_code.txt
+        echo. >> compiled_code.txt
+        echo ################################################################## >> compiled_code.txt
+        echo #                       END OF %%~nxF                              # >> compiled_code.txt
+        echo ################################################################## >> compiled_code.txt
+        echo. >> compiled_code.txt
+        echo. >> compiled_code.txt
+        set /a totalFiles+=1
     )
-    echo #                                                             # >> compiled_code.txt
-    echo ############################################################### >> compiled_code.txt
-    echo. >> compiled_code.txt
-    type "%%F" >> compiled_code.txt
-    echo. >> compiled_code.txt
-    echo ############################################################### >> compiled_code.txt
-    echo #                     END OF FILE: %%F                        # >> compiled_code.txt
-    echo ############################################################### >> compiled_code.txt
-    echo. >> compiled_code.txt
-    echo. >> compiled_code.txt
-    set /a totalFiles=totalFiles+1
 )
 
-:: Process server directory
-for /R "server" %%F in (*.js, *.ts, *.jsx, *.tsx, *.html, *.css, *.scss, *.md, *.json, *.bat, *.txt, *.yaml, *.yml, *.xml, *.env*, *.config*) do (
-    echo Processing %%F...
-    echo ############################################################### >> compiled_code.txt
-    echo #                                                             # >> compiled_code.txt
-    echo # FILE: %%F >> compiled_code.txt
-    for /f %%L in ('!cmd!') do (
-        echo # LINES: %%L >> compiled_code.txt
-        set /a totalLines=totalLines+%%L
+:: Default Implementation Files
+echo ################################################################## >> compiled_code.txt
+echo #                    DEFAULT IMPLEMENTATION                        # >> compiled_code.txt
+echo ################################################################## >> compiled_code.txt
+echo. >> compiled_code.txt
+
+:: Process implementation files in specific order
+set "impl_files=client\js\implementations\default\index.js client\js\implementations\default\DefaultPlayer.js client\js\implementations\default\DefaultEnvironment.js"
+for %%F in (%impl_files%) do (
+    if exist "%%F" (
+        echo Processing %%F...
+        echo ################################################################## >> compiled_code.txt
+        echo #                                                                  # >> compiled_code.txt
+        echo # FILE: %%~nxF >> compiled_code.txt
+        
+        :: Count lines in the file
+        set /a lines=0
+        for /f %%L in ('type "%%F" ^| find /v /c ""') do set /a lines=%%L
+        set /a totalLines+=!lines!
+        echo # LINES: !lines! >> compiled_code.txt
+        
+        echo #                                                                  # >> compiled_code.txt
+        echo ################################################################## >> compiled_code.txt
+        echo. >> compiled_code.txt
+        type "%%F" >> compiled_code.txt
+        echo. >> compiled_code.txt
+        echo ################################################################## >> compiled_code.txt
+        echo #                       END OF %%~nxF                              # >> compiled_code.txt
+        echo ################################################################## >> compiled_code.txt
+        echo. >> compiled_code.txt
+        echo. >> compiled_code.txt
+        set /a totalFiles+=1
     )
-    echo #                                                             # >> compiled_code.txt
-    echo ############################################################### >> compiled_code.txt
-    echo. >> compiled_code.txt
-    type "%%F" >> compiled_code.txt
-    echo. >> compiled_code.txt
-    echo ############################################################### >> compiled_code.txt
-    echo #                     END OF FILE: %%F                        # >> compiled_code.txt
-    echo ############################################################### >> compiled_code.txt
-    echo. >> compiled_code.txt
-    echo. >> compiled_code.txt
-    set /a totalFiles=totalFiles+1
 )
 
-:: Process memory bank directory
-for /R "memory bank" %%F in (*.js, *.ts, *.jsx, *.tsx, *.html, *.css, *.scss, *.md, *.json, *.bat, *.txt, *.yaml, *.yml, *.xml, *.env*, *.config*) do (
-    echo Processing %%F...
-    echo ############################################################### >> compiled_code.txt
-    echo #                                                             # >> compiled_code.txt
-    echo # FILE: %%F >> compiled_code.txt
-    for /f %%L in ('!cmd!') do (
-        echo # LINES: %%L >> compiled_code.txt
-        set /a totalLines=totalLines+%%L
+:: Server Core Files
+echo ################################################################## >> compiled_code.txt
+echo #                      SERVER COMPONENTS                          # >> compiled_code.txt
+echo ################################################################## >> compiled_code.txt
+echo. >> compiled_code.txt
+
+:: Process server files in specific order
+set "server_files=server\core\index.js server\core\BaseRoom.js server\core\schemas\GameState.js server\core\schemas\Player.js server\implementations\default\DefaultRoom.js"
+for %%F in (%server_files%) do (
+    if exist "%%F" (
+        echo Processing %%F...
+        echo ################################################################## >> compiled_code.txt
+        echo #                                                                  # >> compiled_code.txt
+        echo # FILE: %%~nxF >> compiled_code.txt
+        
+        :: Count lines in the file
+        set /a lines=0
+        for /f %%L in ('type "%%F" ^| find /v /c ""') do set /a lines=%%L
+        set /a totalLines+=!lines!
+        echo # LINES: !lines! >> compiled_code.txt
+        
+        echo #                                                                  # >> compiled_code.txt
+        echo ################################################################## >> compiled_code.txt
+        echo. >> compiled_code.txt
+        type "%%F" >> compiled_code.txt
+        echo. >> compiled_code.txt
+        echo ################################################################## >> compiled_code.txt
+        echo #                       END OF %%~nxF                              # >> compiled_code.txt
+        echo ################################################################## >> compiled_code.txt
+        echo. >> compiled_code.txt
+        echo. >> compiled_code.txt
+        set /a totalFiles+=1
     )
-    echo #                                                             # >> compiled_code.txt
-    echo ############################################################### >> compiled_code.txt
-    echo. >> compiled_code.txt
-    type "%%F" >> compiled_code.txt
-    echo. >> compiled_code.txt
-    echo ############################################################### >> compiled_code.txt
-    echo #                     END OF FILE: %%F                        # >> compiled_code.txt
-    echo ############################################################### >> compiled_code.txt
-    echo. >> compiled_code.txt
-    echo. >> compiled_code.txt
-    set /a totalFiles=totalFiles+1
 )
 
 :: Add final statistics
-echo ############################################################### >> compiled_code.txt
-echo #                                                             # >> compiled_code.txt
-echo # COMPILATION STATISTICS                                      # >> compiled_code.txt
-echo # Total Files Processed: !totalFiles!                        # >> compiled_code.txt
-echo # Total Lines of Code: !totalLines!                          # >> compiled_code.txt
-echo #                                                             # >> compiled_code.txt
-echo ############################################################### >> compiled_code.txt
+echo ################################################################## >> compiled_code.txt
+echo #                                                                  # >> compiled_code.txt
+echo #                    CODEBASE STATISTICS                          # >> compiled_code.txt
+echo #        Total Files: !totalFiles!                                # >> compiled_code.txt
+echo #        Total Lines of Code: !totalLines!                        # >> compiled_code.txt
+echo #                                                                  # >> compiled_code.txt
+echo ################################################################## >> compiled_code.txt
 
 echo.
 echo Compilation complete!
-echo Total files processed: !totalFiles!
+echo Files processed: !totalFiles!
 echo Total lines of code: !totalLines!
-echo The updated compiled_code.txt file now contains all code from the project.
-echo Directory structure and file contents have been saved to compiled_code.txt
+echo The compiled_code.txt file now contains the essential codebase.
 echo.
 
 pause
