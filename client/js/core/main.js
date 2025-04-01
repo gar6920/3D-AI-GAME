@@ -121,37 +121,55 @@ function loadImplementationModules(implementationName) {
     console.log(`Loading implementation modules for: ${implementationName}`);
     const basePath = `js/implementations/${implementationName}/`;
 
-    // Define modules for the 'default' implementation
-    // In the future, you could have a map or switch statement here
-    let implementationModules = [];
-    if (implementationName === 'default') {
-        implementationModules = [
-            'DefaultPlayer.js' 
-            // Add other default implementation scripts here if needed
-        ];
-    } else {
-        console.warn(`No specific modules defined for implementation: ${implementationName}. Attempting default load.`);
-        // Potentially try loading a standard entry point like 'index.js' or similar
-        // implementationModules = ['index.js']; 
-    }
+    // First load the index.js which contains the implementation manifest
+    return loadScript(basePath + 'index.js')
+        .then(() => {
+            console.log(`Implementation '${implementationName}' manifest loaded`);
+            
+            // Check if the implementation provided a module list
+            if (window.implementationModules && Array.isArray(window.implementationModules)) {
+                console.log(`Loading ${window.implementationModules.length} modules for implementation '${implementationName}'`);
+                
+                // Load each module in the manifest
+                let loadPromise = Promise.resolve();
+                window.implementationModules.forEach(module => {
+                    loadPromise = loadPromise.then(() => loadScript(basePath + module));
+                });
+                
+                return loadPromise;
+            } else {
+                console.warn(`Implementation '${implementationName}' did not provide a valid module list`);
+                return Promise.resolve();
+            }
+        })
+        .catch(error => {
+            console.error(`Failed to load implementation manifest for '${implementationName}':`, error);
+            console.warn(`Attempting to load legacy modules for '${implementationName}'`);
+            
+            // Fallback for legacy implementations that don't have an index.js
+            let legacyModules = [];
+            if (implementationName === 'default') {
+                legacyModules = ['DefaultPlayer.js'];
+            }
 
-    if (implementationModules.length === 0) {
-        console.log(`No modules to load for implementation: ${implementationName}`);
-        return Promise.resolve(); // Nothing to load
-    }
+            if (legacyModules.length === 0) {
+                console.log(`No legacy modules defined for implementation: ${implementationName}`);
+                return Promise.resolve(); // Nothing to load
+            }
 
-    let loadPromise = Promise.resolve();
-    implementationModules.forEach(module => {
-        loadPromise = loadPromise.then(() => loadScript(basePath + module));
-    });
+            let loadPromise = Promise.resolve();
+            legacyModules.forEach(module => {
+                loadPromise = loadPromise.then(() => loadScript(basePath + module));
+            });
 
-    return loadPromise.then(() => {
-        console.log(`Implementation modules for '${implementationName}' loaded successfully`);
-    }).catch(error => {
-        console.error(`Failed to load implementation modules for '${implementationName}':`, error);
-        // Decide how to handle failure: fallback to default? Show error?
-        // For now, just log and continue - game might be broken
-    });
+            return loadPromise;
+        })
+        .finally(() => {
+            // Clean up the global implementationModules to avoid conflicts
+            if (window.implementationModules) {
+                delete window.implementationModules;
+            }
+        });
 }
 
 // Initialize the main game engine
@@ -247,4 +265,4 @@ function loadScript(src) {
 }
 
 // Start the game when the document is ready
-document.addEventListener('DOMContentLoaded', initGame); 
+document.addEventListener('DOMContentLoaded', initGame);

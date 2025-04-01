@@ -36,6 +36,7 @@ The core platform provides foundational functionality that all game implementati
   - Entry point for client-side code
   - Loads core modules and initializes the game engine
   - Sets up default player factory and statically loads the 'default' implementation.
+  - Dynamically loads implementation-specific modules using the implementation manifest
 
 - **controls.js:**
   - Handles player input (keyboard/mouse), manages different camera control schemes (PointerLock, Orbit, FreeCam, RTS panning/zoom).
@@ -85,8 +86,19 @@ The core platform provides foundational functionality that all game implementati
 
 - **Player.js:**
   - Extends Entity for player-specific functionality
-  - Manages player state and input handling (primarily for remote players, local player uses controls.js)
-  - Provides interface for implementation-specific player behaviors (e.g., DefaultPlayer loading GLB model)
+  - Contains the core animation system and model loading logic
+  - Provides generic animation state tracking and state-to-animation name mapping
+  - Handles mesh creation, visibility toggling based on camera mode
+  - Manages the model loading workflow:
+    - Creates placeholder mesh initially
+    - Asynchronously loads specified GLB model
+    - Sets up animation clips and mixer
+    - Handles rotation synchronization for local and remote players
+  - Provides an implementation-agnostic animation system with logical movement states:
+    - Maps input state to animation states (idle, walk, run, jump, strafeLeft, strafeRight)
+    - Includes smooth transition between animations
+    - Handles implementation-specific animation name mapping via getAnimationName()
+    - Updates animation state based on player input and movement
 
 - **NPC.js:**
   - Extends Entity for non-player characters
@@ -113,22 +125,39 @@ Each game implementation extends the core platform with specific gameplay mechan
 **Implementation Structure:**
 - Client-side implementation code in /client/js/implementations/default/ (currently only 'default' exists)
 - Server-side implementation code in /server/implementations/default/ (currently only 'default' exists)
-- The 'default' implementation uses a GLB model for the player character (`DefaultPlayer.js`) and includes functionality for RTS and Building modes.
+- Each implementation includes an index.js manifest that declares modules to be loaded
+- Implementation modules are loaded dynamically at runtime by the core platform
 
 **Key implementation components:**
 - **DefaultPlayer.js:**
-  - Uses a container/model relationship for proper rotation handling
-  - Creates a container Group that serves as the mesh for rotation
-  - Contains the actual model (human_man.glb) within this container
-  - Applies a 180° rotation to the model to align its forward direction with the camera
-  - Handles mesh visibility based on camera mode
-  - Implements animation state updates based on player inputs
-  - Distinguishes between local and remote player rotation handling
+  - Extends the core Player class with implementation-specific details
+  - Specifies the model path ('assets/models/human_man.glb')
+  - Defines model rotation (180° on Y-axis) to align with the camera
+  - Maps generic animation states to specific animation names in the model:
+    - 'idle' → 'Idle.002'
+    - 'walk' → 'Walking.006'
+    - 'run' → 'Running.006'
+    - etc.
+  - Keeps implementation clean by only containing model-specific details
+
+- **DefaultEnvironment.js:**
+  - Self-initializing module that detects when scene is available
+  - Creates implementation-specific environmental objects
+  - Loads and places 3D models like 'free_merc_hovercar.glb'
+  - Positions objects at specific coordinates (hovercar at 15, 0, 20)
+  - Applies appropriate rotation (45° for the hovercar)
+  - Sets up shadows and other visual properties
+
+- **index.js (Implementation Manifest):**
+  - Declares which modules should be loaded for this implementation
+  - Follows a convention-based approach for module loading
+  - Core system automatically loads these modules at runtime
 
 **Future Implementations:**
 - Would follow similar patterns, extending the core components
 - Each implementation will be contained in its own directory
 - Will register custom entity factories and behaviors
+- Maintain the same architecture with core/implementation separation
 
 ### 4. Main Engine (game-engine.js)
 - Initializes the Three.js scene, renderer, and camera
@@ -248,11 +277,14 @@ Each game implementation extends the core platform with specific gameplay mechan
 │   ├── js/
 │   │   ├── core/           # Core client platform components (game-engine, controls, network, etc.)
 │   │   ├── implementations/
-│   │   │   └── default/    # Default game implementation (e.g., DefaultPlayer.js)
+│   │   │   └── default/    # Default game implementation (e.g., DefaultPlayer.js, DefaultEnvironment.js)
+│   │   │       └── index.js # Implementation manifest declaring modules to load
 │   │   └── lib/            # Additional JavaScript utilities
 │   ├── assets/             # Game assets (textures, etc.)
 │   │   └── models/         # 3D model assets (GLB files)
-│   │       └── human_man.glb # Player character model
+│   │       ├── human_man.glb # Player character model
+│   │       ├── free_merc_hovercar.glb # Environment object model
+│   │       └── modern_city_block.glb # Environment object model
 │   ├── models/             # Additional model assets
 │   └── index.html          # Main game HTML
 ├── server/                 # Server-side code
@@ -300,17 +332,38 @@ Each game implementation extends the core platform with specific gameplay mechan
     *   Server receives command, updates target position for player entities (`BaseRoom.js`).
     *   Server state updates cause units to move on all clients.
 
-## Player Model & Rotation System
+## Player Architecture
 
 The player model system uses several key architecture components working together:
 
-1. **Model Structure:**
-   - `DefaultPlayer.js` creates a hierarchical structure:
-     - A THREE.Group container (`this.mesh`) handles overall rotation
-     - The actual model (`human_man.glb`) is a child of this container
-     - The model itself is rotated 180° to align its forward direction with the camera
+1. **Core/Implementation Separation:**
+   - **Core Player.js:** Contains generic functionality needed by all player implementations:
+     - Model loading workflow (placeholder → async GLB loading)
+     - Animation system with mixer setup and playback
+     - Generic animation state mapping (idle, walk, run, etc.)
+     - Camera mode-based visibility
+     - Position and rotation updates
+   - **Implementation DefaultPlayer.js:** Contains only model-specific details:
+     - Model path ('assets/models/human_man.glb')
+     - Model rotation (180° on Y-axis to align with camera)
+     - Specific animation name mappings ('idle' → 'Idle.002', etc.)
 
-2. **Rotation Handling:**
+2. **Model Loading Process:**
+   - Creates invisible placeholder mesh immediately
+   - Asynchronously loads specified GLB model
+   - Creates a container hierarchy for proper rotation
+   - Sets up animation mixer and clips
+   - Applies implementation-specific transformations (rotation, scale)
+   - Replaces placeholder with model once loaded
+
+3. **Animation System:**
+   - Input state → Animation state mapping in core
+   - Animation state → Specific animation clip name in implementation
+   - Smooth transitions between animations with crossfade
+   - Suppresses animations in camera-only modes (FreeCamera, RTS)
+   - Handles fallback animations if specific ones not found
+
+4. **Rotation Handling:**
    - For local player:
      - Mouse movement and Q/E keys directly update `playerRotationY` and mesh rotation
      - Camera views are properly aligned with mesh rotation
@@ -320,21 +373,46 @@ The player model system uses several key architecture components working togethe
      - Smooth interpolation is applied for natural movement
      - Distinct handling prevents rotation conflicts
 
-3. **Camera View Coordination:**
-   - First-person: Camera uses player rotation without additional Math.PI offset
-   - Third-person: Camera orbits player position based on player rotation
-   - Both camera systems respect the proper model orientation
+## Environment Objects
 
-4. **Dual Control Mechanisms:**
-   - Mouse movement directly updates rotation for precise control
-   - Q/E keyboard controls provide incremental rotation with visual feedback
+The environment system adds implementation-specific 3D objects to the scene:
 
-## Notes & Discrepancies from Code Review (Commit abdc192)
+1. **Self-Initializing Module:**
+   - DefaultEnvironment.js auto-detects when the scene is available
+   - Sets up a watcher that polls for scene availability
+   - Initializes environment objects when scene is ready
+   - Includes safety timeout to prevent infinite waiting
 
-- The actual default player implementation uses a GLB model (`human_man.glb`), not simple cubes as described in the Game Design Document.
-- The RTS view mode and Building system are implemented (`game-engine.js`, `BaseRoom.js`, schemas) but might not be fully documented outside this architecture file.
-- Dynamic server-side implementation loading (based on arguments/env vars) is mentioned in previous versions of this doc but is *not* currently implemented in `server/core/index.js`. It **statically loads** the 'default' implementation.
-- The specific "Numberblocks" game features described in project memories are *not* part of this codebase version; this version contains the core platform and a generic 'default' implementation.
+2. **Implementation-Specific Objects:**
+   - Adds the hovercar model at position (15, 0, 20) with 45° rotation
+   - Properly configures shadows for all objects
+   - Loads models using THREE.GLTFLoader with proper error handling
+   - Could be expanded to include additional environment objects
+
+3. **Convention-Based Loading:**
+   - Environment modules are declared in the implementation's index.js
+   - Core automatically loads all declared modules at runtime
+   - Maintains clean separation between core and implementation code
+
+## Terrain Generation
+
+The procedural terrain system creates a natural-looking ground:
+
+1. **Canvas-Based Texture Generation:**
+   - Uses HTML5 Canvas to dynamically generate textures
+   - Creates random variations in grass color and pattern
+   - Applies subtle noise patterns for a natural appearance
+   - Replaces the original grid-based floor with a seamless texture
+
+2. **Performance Optimization:**
+   - Uses appropriate texture resolution for performance
+   - Implements texture repetition for larger areas
+   - Balances visual quality with rendering performance
+
+3. **Appearance:**
+   - Natural grass coloration with subtle variations
+   - No visible grid lines or artificial patterns
+   - Realistic ground appearance fitting the game's style
 
 ## Notes & Current State
 
@@ -346,3 +424,5 @@ The player model system uses several key architecture components working togethe
 - Player rotation system now correctly handles both local and remote player rotations with proper model orientation.
 - Model directionality aligns with camera views through a container/model hierarchy system.
 - Terrain rendering uses procedural canvas-based texture generation for natural-looking grass without grid lines.
+- Environment objects (hovercar, city blocks) are dynamically loaded by implementation-specific modules.
+- Core/implementation separation is maintained throughout the codebase.
