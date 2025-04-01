@@ -34,7 +34,7 @@ This game platform allows players to navigate a 3D world with customizable chara
 ## Default Implementation
 
 ### Character Design
-- Players are represented as simple cubes with customizable colors
+- Players are represented as models of various types
 - Models can be extended by other implementations for more complex designs
 - Size and appearance can be modified based on game mechanics
 
@@ -58,7 +58,7 @@ This game platform allows players to navigate a 3D world with customizable chara
 ### Online Multiplayer
 - Connect to game servers via unique room codes or matchmaking
 - Session reconnection support if temporarily disconnected
-- Up to 10 players per online game room
+- Up to 100 players per online game room currently
 
 ### Player Interaction
 - Core interaction mechanics defined by the specific game implementation
@@ -83,22 +83,21 @@ This game platform allows players to navigate a 3D world with customizable chara
 - Entity spawning and lifecycle management
 
 ### Modular Implementation System
-- Base classes for core functionality
+- Can change models / map layout
 - Extension points for custom game logic
 - Theme-specific assets and behaviors
 - Pluggable game modes and rules
 
 ## User Interface (UI)
 - Heads-Up Display (HUD): Shows player information and game status
-- Menus: Main menu, lobby, settings
-- Controls: Configurable keyboard/mouse controls
+- Controls: Configurable keyboard/mouse controls / gamepad (future) / Mobile (future)
 - **RTS Controls (in RTS View):**
     - Camera Panning: WASD keys.
     - Camera Height: Q/E keys.
     - Unit Selection: Left-click (single unit) or Click-and-drag (box selection).
     - Movement Commands: Right-click on the terrain to issue move orders to selected units.
 
-## Audio
+## Audio (future)
 - Background Music: Theme-appropriate music
 - Sound Effects: Action-based audio feedback
 - Spatial Audio: Directional sound for immersion

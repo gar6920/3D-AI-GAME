@@ -24,3 +24,6 @@ yarn-debug.log
 # Operating System Files
 .DS_Store
 Thumbs.db
+
+# Build artifacts / Generated files
+compiled_code.txt

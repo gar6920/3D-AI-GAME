@@ -9,7 +9,7 @@
    - Register new entity types with EntityFactory
 
 2. **Camera System Rules**
-   - Support all three view modes (first-person, third-person, free roam)
+   - Support all four view modes (first-person, third-person, free roam, RTS view)
    - Maintain proper Euler angles to prevent camera roll
    - Implement smooth transitions between camera modes
    - Handle mouse wheel zoom for third-person view
@@ -39,7 +39,7 @@
    - Use proper collision detection
 
 6. **Multiplayer Setup**
-   - Support 1-4 player configurations
+   - Support 1-4 local players integrated with additional web players
    - Maintain proper viewport layouts
    - Handle screen space allocation
    - Implement clean separation between viewports
@@ -77,7 +77,6 @@
 
 1. **Adding New Implementations**
    - Register in server/core/index.js
-   - Update start_game.bat with new option
    - Provide proper documentation
    - Include test cases
    - Follow naming conventions
@@ -155,19 +154,40 @@
 
 ## Server Management
 
-### Restarting the Game Server
-When testing changes, you'll need to properly stop and restart the Node.js server:
+### Local Development Server
+When testing changes locally, you can start the server using one of the following methods:
 
-# STEP 1: Kill all Node.js processes (safer and more reliable method)
+1.  **Using the batch script (Windows):**
+    ```batch
+    .\start_server.bat 
+    ```
+    This script handles necessary setup steps.
+
+2.  **Using npm with Nodemon (Recommended for auto-restarts):**
+    ```bash
+    npm run dev
+    ```
+    This will automatically restart the server when code changes are detected.
+
+3.  **Using npm directly:**
+    ```bash
+    npm start
+    ```
+
+### Stopping the Local Server (Windows)
+To reliably stop all running Node.js server processes on Windows:
+```batch
 taskkill /F /IM node.exe
+```
+*Note: Avoid using `Get-Process | Stop-Process` in PowerShell as it can be unreliable.*
 
-# STEP 2: Start the server using npm
-npm start
+### Production Server (Digital Ocean)
+The production server runs on Digital Ocean's App Platform.
+- Deployment is typically triggered automatically on pushes to the `main` branch.
+- The platform uses the `Procfile` (`web: npm run prod`) and configuration in `.do/app.yaml` to build and run the application.
+- Direct server management is handled through the Digital Ocean dashboard.
 
-> NOTE: The previous method using `Get-Process -Name "node" -ErrorAction SilentlyContinue | Stop-Process -Force` 
-> has been found to be unreliable and may cause issues.
-
-### Directory Creation
+## Directory Creation (PowerShell)
 - When creating multiple directories at once with PowerShell's `mkdir` command, you must use quotes when specifying paths with spaces or multiple directories:
   ```
   # INCORRECT (will fail):
@@ -292,3 +312,12 @@ npm start
 - Changes to the main client should automatically reflect in all viewports
 
 ## Always follow the architecture.md - if there is any discrepancy then stop and bring it to my attention
+
+## AI Assistant Guidelines
+
+*(This section contains notes and guidelines for the AI pair programmer)*
+
+- **PowerShell:** Avoid running complex multi-command PowerShell scripts directly, especially those involving process management like `Get-Process | Stop-Process`. Prefer simpler, more robust commands like `taskkill /F /IM node.exe` on Windows or standard `npm` scripts when applicable.
+- **Git Workflow:** When committing changes, prefer the simple `git add .`, `git commit -m "..."`, `git push` sequence. Avoid more complex Git commands like `git status` or interactive staging unless specifically requested, as they may cause issues.
+- **Implementation Loading:** The core server (`server/core/index.js`) currently loads the 'default' implementation statically. Do not assume dynamic loading based on environment variables is functional yet.
+- **Error Handling:** If encountering persistent, unexplained errors during tasks (e.g., specific tool failures), pause and ask for clarification rather than repeatedly retrying the failing approach.

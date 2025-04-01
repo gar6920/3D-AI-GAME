@@ -48,6 +48,12 @@
 
 - **Static Asset Serving:** Client-side assets (HTML, CSS, JS) served by the Node.js server.
 
+- **Current Setup (Digital Ocean App Platform):**
+  - The application is hosted on Digital Ocean's App Platform.
+  - Deployment is configured via `.do/app.yaml`.
+  - The platform uses the `Procfile` (command: `npm run prod`) to start the production server.
+  - Continuous deployment is typically enabled from the `main` Git branch.
+
 ## Why This Stack?
 
 - **Three.js:** Provides powerful 3D rendering capabilities with a manageable learning curve, ideal for creating diverse game environments and character models.

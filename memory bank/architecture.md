@@ -14,7 +14,7 @@
 - Processes player inputs (e.g., movement keys, mouse look for rotation)
 - Broadcasts state updates to all connected clients
 - Handles entity spawning and lifecycle management
-- Statically loads the 'default' implementation.
+- Statically loads the 'default' implementation (Note: dynamic loading via env var is not yet implemented).
 - Validates and manages structure placement in the building system
 - Handles RTS movement commands by setting target positions
 - Determines appropriate animation state based on player input/status
@@ -25,7 +25,7 @@
 - Server-authoritative position and rotation tracking
 - Server-determined animation state synchronization
 - Dynamic entity spawning system
-- Statically loads the 'default' implementation.
+- Statically loads the 'default' implementation (Note: dynamic loading via env var is not yet implemented).
 - Server-validated building placement system
 
 ### 2. Client Core Platform (/client/js/core)
@@ -35,7 +35,7 @@ The core platform provides foundational functionality that all game implementati
 - **main.js:**
   - Entry point for client-side code
   - Loads core modules and initializes the game engine
-  - Sets up default player factory and loads the 'default' implementation.
+  - Sets up default player factory and statically loads the 'default' implementation.
 
 - **controls.js:**
   - Handles player input (keyboard/mouse), manages different camera control schemes (PointerLock, Orbit, FreeCam, RTS panning/zoom).
@@ -127,7 +127,7 @@ Each game implementation extends the core platform with specific gameplay mechan
 ### 4. Main Engine (game-engine.js)
 - Initializes the Three.js scene, renderer, and camera
 - Sets up player controls and world objects
-- Loads the 'default' game implementation.
+- Loads the 'default' game implementation statically.
 - Manages view modes (first-person, third-person, free roam, RTS view)
 - Updates visual components based on server state
 - Handles synchronization between player rotation and camera orientation
@@ -247,9 +247,8 @@ Each game implementation extends the core platform with specific gameplay mechan
 ├── node_modules/           # npm dependencies
 ├── package.json            # Project dependencies
 ├── package-lock.json       # Lock file for dependencies
-├── start_game.bat          # Windows startup script with dependency check
-├── start_server.bat        # Server startup script
-├── update_compiled_code.bat # Utility script
+├── start_server.bat        # Local server startup script (Windows)
+├── update_compiled_code.bat # Utility script to generate compiled_code.txt
 └── README.md               # Project readme
 ```
 
@@ -314,7 +313,7 @@ The player model system uses several key architecture components working togethe
 
 - The actual default player implementation uses a GLB model (`human_man.glb`), not simple cubes as described in the Game Design Document.
 - The RTS view mode and Building system are implemented (`game-engine.js`, `BaseRoom.js`, schemas) but might not be fully documented outside this architecture file.
-- Dynamic server-side implementation loading (based on arguments/env vars) is mentioned in previous versions of this doc but is *not* currently implemented in `server/core/index.js`. It statically loads the 'default' implementation.
+- Dynamic server-side implementation loading (based on arguments/env vars) is mentioned in previous versions of this doc but is *not* currently implemented in `server/core/index.js`. It **statically loads** the 'default' implementation.
 - The specific "Numberblocks" game features described in project memories are *not* part of this codebase version; this version contains the core platform and a generic 'default' implementation.
 
 ## Notes & Current State
@@ -323,6 +322,6 @@ The player model system uses several key architecture components working togethe
 - Animation state is synchronized between server and clients.
 - Run/Walk inversion (Run default, Shift=Walk) is implemented.
 - View modes (FPS, TPS, FreeCam, RTS) function, and player input/animations are correctly suppressed in non-player-control modes.
-- Startup script (`start_game.bat`) includes dependency checking (`npm ci`).
+- Local development can be started using `start_server.bat` or `npm run dev`.
 - Player rotation system now correctly handles both local and remote player rotations with proper model orientation.
 - Model directionality aligns with camera views through a container/model hierarchy system.
