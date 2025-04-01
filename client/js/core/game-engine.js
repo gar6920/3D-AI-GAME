@@ -110,26 +110,57 @@ function initFloor() {
     try {
         debug('Creating floor');
         
-        // Create a larger green floor with darker color
-        const floorGeometry = new THREE.PlaneGeometry(100, 100);
+        const floorSize = 100;
+        const floorGeometry = new THREE.PlaneGeometry(floorSize, floorSize);
+        
+        // Create a simple procedural texture using canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+        
+        // Base color
+        ctx.fillStyle = '#3a7a3a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Add some random noise for texture
+        for (let i = 0; i < 5000; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const size = Math.random() * 3 + 1;
+            
+            // Randomly select lighter or darker green for variation
+            if (Math.random() > 0.5) {
+                ctx.fillStyle = 'rgba(80, 130, 80, 0.2)'; // lighter
+            } else {
+                ctx.fillStyle = 'rgba(40, 70, 40, 0.2)'; // darker
+            }
+            
+            ctx.fillRect(x, y, size, size);
+        }
+        
+        // Create texture
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(8, 8);
+        
+        // Create material with the texture
         const floorMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x114411,
-            roughness: 0.8, 
-            metalness: 0.2 
+            map: texture,
+            roughness: 0.9,
+            metalness: 0.1
         });
+        
         const floor = new THREE.Mesh(floorGeometry, floorMaterial);
         
-        // Rotate and position the floor
         floor.rotation.x = -Math.PI / 2;
         floor.position.y = 0;
         floor.receiveShadow = true;
+        floor.name = 'ground';
         scene.add(floor);
         
-        // Add a grid helper for visual reference
-        const gridHelper = new THREE.GridHelper(100, 100, 0x000000, 0x444444);
-        scene.add(gridHelper);
-        
-        debug('Floor created successfully');
+        debug('Floor created successfully with simplified procedural texture');
     } catch (error) {
         debug(`Error creating floor: ${error.message}`, true);
     }
