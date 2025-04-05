@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D AI Game - Multiplayer</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        .container {
+            width: 100vw;
+            height: 100vh;
+            gap: 2px;
+            background-color: #000;
+            display: grid;
+        }
+        /* 2 players: top-bottom split */
+        .players-2 {
+            grid-template-columns: 1fr;
+            grid-template-rows: 1fr 1fr;
+        }
+        /* 3 players: top left, top right, bottom left */
+        .players-3 {
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+        }
+        .players-3 webview:last-of-type {
+            grid-column: 1;
+            grid-row: 2;
+        }
+        /* 4 players: 2x2 grid */
+        .players-4 {
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+        }
+        webview {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        /* Client box styling */
+        .client-box {
+            position: relative;
+            box-sizing: border-box;
+            border: 1px solid #333;
+            background-color: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .player-info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            z-index: 10;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+        }
+        .controller-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            z-index: 10;
+            font-family: Arial, sans-serif;
+        }
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            font-family: Arial, sans-serif;
+        }
+        /* Controller selection UI */
+        .controller-setup {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            z-index: 30;
+        }
+        .setup-container {
+            max-width: 600px;
+            width: 90%;
+        }
+        .player-slots {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .player-slot {
+            background-color: rgba(40, 40, 40, 0.8);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+        }
+        .player-slot:hover {
+            background-color: rgba(60, 60, 60, 0.8);
+        }
+        .player-slot.assigned {
+            border: 2px solid #4CAF50;
+        }
+        .player-slot h3 {
+            margin-top: 0;
+        }
+        .slot-instructions {
+            margin: 10px 0;
+        }
+        .start-button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 18px;
+            margin: 10px 0;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: background-color 0.3s;
+        }
+        .start-button:hover {
+            background-color: #45a049;
+        }
+        /* Controller colors */
+        .color-0 { border-color: #4CAF50; } /* Green */
+        .color-1 { border-color: #2196F3; } /* Blue */
+        .color-2 { border-color: #FF9800; } /* Orange */
+        .color-3 { border-color: #E91E63; } /* Pink */
+    </style>
+</head>
+<body>
+    <div class="controller-setup" id="setupScreen">
+        <div class="setup-container">
+            <h1>Controller Setup</h1>
+            <p>Assign controllers or keyboard/mouse to each player slot:</p>
+            
+            <div class="player-slots" id="playerSlots">
+                <!-- Player slots will be dynamically added here -->
+            </div>
+            
+            <button id="startGameButton" class="start-button" disabled>Start Game</button>
+        </div>
+    </div>
+
+    <div class="container" id="gameContainer">
+        <!-- Game windows will be dynamically added here -->
+    </div>
+
+    <script>
+        // This will be augmented by the preload script
+        const { ipcRenderer } = require('electron');
+        
+        // Track controllers and assignments
+        const controllerStates = {};
+        const playerAssignments = [];
+        let gameRunning = false;
+        let playerCount = 4;
+        let implementation = 'default';
+        let serverPort = 3000;
+        
+        // Controller colors
+        const CONTROLLER_COLORS = [
+            '#4CAF50', // Green
+            '#2196F3', // Blue
+            '#FF9800', // Orange
+            '#E91E63'  // Pink
+        ];
+        
+        // Initialize app when electron sends configuration
+        ipcRenderer.on('init-multiplayer', (event, config) => {
+            console.log('Initializing multiplayer with config:', config);
+            playerCount = config.playerCount || 4;
+            implementation = config.implementation || 'default';
+            serverPort = config.serverPort || 3000;
+            
+            // Set title
+            document.title = `3D AI Game - ${playerCount} Players - ${implementation}`;
+            
+            // Set container class based on player count
+            const container = document.getElementById('gameContainer');
+            container.className = `container players-${playerCount}`;
+            
+            // Create player slots for controller assignment
+            createPlayerSlots();
+            
+            // Setup gamepad detection
+            setupGamepadDetection();
+        });
+        
+        // Create player slots for controller assignment
+        function createPlayerSlots() {
+            const slotsContainer = document.getElementById('playerSlots');
+            slotsContainer.innerHTML = '';
+            
+            for (let i = 0; i < playerCount; i++) {
+                const position = getPositionName(i, playerCount);
+                const slotEl = document.createElement('div');
+                slotEl.className = 'player-slot';
+                slotEl.dataset.playerIndex = i;
+                
+                slotEl.innerHTML = `
+                    <h3>Player ${i + 1} (${position})</h3>
+                    <div class="slot-instructions">
+                        Click here for keyboard/mouse
+                        <br>OR<br>
+                        Press a button on your controller
+                    </div>
+                    <div class="assigned-input" style="display: none;"></div>
+                `;
+                
+                // Click handler for keyboard assignment
+                slotEl.addEventListener('click', () => {
+                    assignKeyboardToPlayer(i);
+                });
+                
+                slotsContainer.appendChild(slotEl);
+            }
+        }
+        
+        // Get position name based on index and player count
+        function getPositionName(index, playerCount) {
+            if (playerCount === 1) return "Full Screen";
+            if (playerCount === 2) return index === 0 ? "Top" : "Bottom";
+            
+            // For 3 or 4 players
+            switch(index) {
+                case 0: return "Top Left";
+                case 1: return "Top Right";
+                case 2: return "Bottom Left";
+                case 3: return "Bottom Right";
+                default: return `Player ${index + 1}`;
+            }
+        }
+        
+        // Setup gamepad detection
+        function setupGamepadDetection() {
+            // Initialize controller states
+            window.addEventListener('gamepadconnected', (e) => {
+                console.log(`Gamepad connected: ${e.gamepad.id}`);
+                controllerStates[e.gamepad.index] = {
+                    id: e.gamepad.id,
+                    timestamp: e.gamepad.timestamp,
+                    assigned: false
+                };
+            });
+            
+            window.addEventListener('gamepaddisconnected', (e) => {
+                console.log(`Gamepad disconnected: ${e.gamepad.id}`);
+                if (controllerStates[e.gamepad.index]) {
+                    // Handle controller disconnect - maybe reassign player
+                    const playerIndex = playerAssignments.findIndex(a => 
+                        a.type === 'gamepad' && a.controllerIndex === e.gamepad.index);
+                    
+                    if (playerIndex !== -1) {
+                        playerAssignments[playerIndex] = null;
+                        updateSlotUI(playerIndex, false);
+                    }
+                    
+                    delete controllerStates[e.gamepad.index];
+                }
+            });
+            
+            // Poll for button presses
+            const pollGamepads = () => {
+                if (!gameRunning) {
+                    const gamepads = navigator.getGamepads();
+                    for (let i = 0; i < gamepads.length; i++) {
+                        const gamepad = gamepads[i];
+                        if (!gamepad) continue;
+                        
+                        // If controller exists and has buttons pressed
+                        if (controllerStates[gamepad.index] && !controllerStates[gamepad.index].assigned) {
+                            const anyButtonPressed = gamepad.buttons.some(button => button.pressed);
+                            if (anyButtonPressed) {
+                                assignGamepadToNextSlot(gamepad.index);
+                            }
+                        }
+                    }
+                }
+                requestAnimationFrame(pollGamepads);
+            };
+            
+            // Start polling
+            pollGamepads();
+        }
+        
+        // Assign keyboard/mouse to a player
+        function assignKeyboardToPlayer(playerIndex) {
+            if (playerAssignments[playerIndex]) {
+                return; // Already assigned
+            }
+            
+            playerAssignments[playerIndex] = {
+                type: 'keyboard',
+                playerIndex
+            };
+            
+            updateSlotUI(playerIndex, true);
+            checkAllAssigned();
+        }
+        
+        // Assign gamepad to next available slot
+        function assignGamepadToNextSlot(controllerIndex) {
+            // Find the next empty slot
+            const nextSlot = playerAssignments.findIndex(a => !a);
+            if (nextSlot === -1) return; // All slots filled
+            
+            // Mark controller as assigned
+            controllerStates[controllerIndex].assigned = true;
+            
+            // Assign controller to slot
+            playerAssignments[nextSlot] = {
+                type: 'gamepad',
+                controllerIndex,
+                controllerId: controllerStates[controllerIndex].id,
+                playerIndex: nextSlot
+            };
+            
+            updateSlotUI(nextSlot, true);
+            checkAllAssigned();
+        }
+        
+        // Update slot UI to show assignment
+        function updateSlotUI(playerIndex, assigned) {
+            const slotEl = document.querySelector(`.player-slot[data-player-index="${playerIndex}"]`);
+            if (!slotEl) return;
+            
+            if (assigned) {
+                const assignment = playerAssignments[playerIndex];
+                const inputType = assignment.type === 'keyboard' ? 'Keyboard/Mouse' : 
+                    `Controller #${assignment.controllerIndex + 1}`;
+                
+                slotEl.classList.add('assigned');
+                slotEl.classList.add(`color-${playerIndex}`);
+                
+                const assignedEl = slotEl.querySelector('.assigned-input');
+                assignedEl.textContent = `Using: ${inputType}`;
+                assignedEl.style.display = 'block';
+                
+                slotEl.querySelector('.slot-instructions').style.display = 'none';
+            } else {
+                slotEl.classList.remove('assigned');
+                slotEl.querySelector('.assigned-input').style.display = 'none';
+                slotEl.querySelector('.slot-instructions').style.display = 'block';
+            }
+        }
+        
+        // Check if all slots are assigned
+        function checkAllAssigned() {
+            const allAssigned = playerAssignments.length === playerCount && 
+                                playerAssignments.every(a => a !== null && a !== undefined);
+            
+            const startButton = document.getElementById('startGameButton');
+            startButton.disabled = !allAssigned;
+            
+            return allAssigned;
+        }
+        
+        // Start the game with current assignments
+        document.getElementById('startGameButton').addEventListener('click', () => {
+            if (!checkAllAssigned()) return;
+            
+            // Hide setup screen
+            document.getElementById('setupScreen').style.display = 'none';
+            
+            // Create game windows
+            createGameWindows();
+            
+            gameRunning = true;
+        });
+        
+        // Create game windows for each player
+        function createGameWindows() {
+            const container = document.getElementById('gameContainer');
+            container.innerHTML = '';
+            
+            for (let i = 0; i < playerCount; i++) {
+                const assignment = playerAssignments[i];
+                const position = getPositionName(i, playerCount);
+                
+                // Create container for this player's view
+                const clientBox = document.createElement('div');
+                clientBox.className = 'client-box';
+                clientBox.dataset.playerIndex = i;
+                
+                // Add player info
+                const playerInfo = document.createElement('div');
+                playerInfo.className = 'player-info';
+                playerInfo.textContent = `Player ${i + 1} (${position})`;
+                clientBox.appendChild(playerInfo);
+                
+                // Add controller indicator
+                const controllerIndicator = document.createElement('div');
+                controllerIndicator.className = 'controller-indicator';
+                controllerIndicator.textContent = assignment.type === 'keyboard' ? 
+                    'Keyboard/Mouse' : `Controller #${assignment.controllerIndex + 1}`;
+                controllerIndicator.style.borderLeft = `4px solid ${CONTROLLER_COLORS[i]}`;
+                clientBox.appendChild(controllerIndicator);
+                
+                // Create webview for game content
+                const webview = document.createElement('webview');
+                webview.src = `http://localhost:${serverPort}/game?implementation=${implementation}&player=${i + 1}`;
+                webview.nodeintegration = true;
+                
+                // Add loading overlay
+                const loadingOverlay = document.createElement('div');
+                loadingOverlay.className = 'loading-overlay';
+                loadingOverlay.innerHTML = `
+                    <h3>Loading Player ${i + 1}...</h3>
+                    <p>Please wait</p>
+                `;
+                clientBox.appendChild(loadingOverlay);
+                
+                // Add webview after overlay
+                clientBox.appendChild(webview);
+                container.appendChild(clientBox);
+                
+                // Remove loading overlay when loaded
+                webview.addEventListener('did-finish-load', () => {
+                    loadingOverlay.style.display = 'none';
+                    
+                    // Send controller type info to the webview
+                    webview.send('controller-setup', assignment);
+                    
+                    // Set up controller input handling for this webview
+                    setupControllerInput(webview, assignment);
+                });
+            }
+        }
+        
+        // Setup controller input handling
+        function setupControllerInput(webview, assignment) {
+            if (assignment.type === 'gamepad') {
+                // For gamepad, we'll poll and send events
+                const pollGamepadInput = () => {
+                    if (!gameRunning) return;
+                    
+                    const gamepads = navigator.getGamepads();
+                    const gamepad = gamepads[assignment.controllerIndex];
+                    
+                    if (gamepad) {
+                        const inputData = {
+                            buttons: gamepad.buttons.map(b => b.pressed),
+                            axes: gamepad.axes.map(a => a)
+                        };
+                        
+                        // Send gamepad data to webview
+                        webview.send('gamepad-input', inputData);
+                    }
+                    
+                    requestAnimationFrame(pollGamepadInput);
+                };
+                
+                requestAnimationFrame(pollGamepadInput);
+            }
+            
+            // For keyboard, the input will be handled directly in the webview
+            // We just need to make sure it has focus when player interacts with it
+            webview.addEventListener('click', () => {
+                webview.focus();
+            });
+        }
+    </script>
+</body>
+</html>

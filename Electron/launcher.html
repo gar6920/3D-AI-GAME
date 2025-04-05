@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>3D AI Game - Launcher</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            color: white;
+            overflow: hidden;
+        }
+        
+        header {
+            text-align: center;
+            padding: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        
+        h1 {
+            margin: 0;
+            font-size: 32px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        
+        .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .options {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 100%;
+            max-width: 500px;
+            margin-bottom: 30px;
+        }
+        
+        .option-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        label {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        select {
+            background-color: rgba(255, 255, 255, 0.2);
+            border: 2px solid white;
+            padding: 8px 15px;
+            border-radius: 5px;
+            color: white;
+            font-size: 16px;
+            width: 250px;
+        }
+        
+        select option {
+            background-color: #2a3a7c;
+            color: white;
+        }
+        
+        .buttons {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        button {
+            background-color: rgba(255, 255, 255, 0.25);
+            border: 2px solid white;
+            padding: 12px 30px;
+            border-radius: 8px;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+        }
+        
+        button:hover {
+            background-color: rgba(255, 255, 255, 0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        button.start {
+            background-color: rgba(40, 167, 69, 0.6);
+        }
+        
+        button.start:hover:not(:disabled) {
+            background-color: rgba(40, 167, 69, 0.8);
+        }
+        
+        .status {
+            margin-top: 30px;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: rgba(0, 0, 0, 0.3);
+            text-align: center;
+            min-height: 20px;
+        }
+        
+        .status.error {
+            background-color: rgba(220, 53, 69, 0.3);
+            border: 1px solid rgba(220, 53, 69, 0.5);
+        }
+        
+        .status.success {
+            background-color: rgba(40, 167, 69, 0.3);
+            border: 1px solid rgba(40, 167, 69, 0.5);
+        }
+        
+        .status.warning {
+            background-color: rgba(255, 193, 7, 0.3);
+            border: 1px solid rgba(255, 193, 7, 0.5);
+        }
+        
+        .server-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 8px;
+            background-color: rgba(0, 0, 0, 0.3);
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #dc3545; /* Red by default */
+        }
+        
+        .status-indicator.online {
+            background-color: #28a745; /* Green when online */
+        }
+        
+        footer {
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            text-align: center;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>3D AI Game Platform</h1>
+    </header>
+    
+    <div class="container">
+        <div class="server-status">
+            <div id="statusIndicator" class="status-indicator"></div>
+            <div id="serverStatusText">Checking server...</div>
+        </div>
+        
+        <div class="options">
+            <div class="option-row">
+                <label for="playerCount">Number of Players:</label>
+                <select id="playerCount">
+                    <option value="1">1 Player</option>
+                    <option value="2">2 Players</option>
+                    <option value="3">3 Players</option>
+                    <option value="4">4 Players</option>
+                </select>
+            </div>
+            
+            <div class="option-row">
+                <label for="implementation">Game Implementation:</label>
+                <select id="implementation">
+                    <option value="default">Default</option>
+                    <!-- More implementations can be added here dynamically -->
+                </select>
+            </div>
+        </div>
+        
+        <div class="buttons">
+            <button id="startButton" class="start" disabled>Start Game</button>
+            <button id="quitButton">Quit</button>
+        </div>
+        
+        <div id="statusMessage" class="status">
+            Make sure to run start_server.bat before launching the game.
+        </div>
+    </div>
+    
+    <footer>
+        &copy; 2025 3D AI Game Platform
+    </footer>
+    
+    <script>
+        // This script will be replaced by the preload script functionality
+        const { ipcRenderer } = require('electron');
+        
+        // DOM elements
+        const playerCountSelect = document.getElementById('playerCount');
+        const implementationSelect = document.getElementById('implementation');
+        const startButton = document.getElementById('startButton');
+        const quitButton = document.getElementById('quitButton');
+        const statusMessage = document.getElementById('statusMessage');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const serverStatusText = document.getElementById('serverStatusText');
+        
+        // Check server status
+        function checkServerStatus() {
+            serverStatusText.textContent = 'Checking server...';
+            statusIndicator.classList.remove('online');
+            
+            // Simple HTTP request to check server
+            fetch('http://localhost:3000/health')
+                .then(response => {
+                    if (response.ok) {
+                        serverStatusText.textContent = 'Server is online';
+                        statusIndicator.classList.add('online');
+                        startButton.disabled = false;
+                        statusMessage.className = 'status success';
+                        statusMessage.textContent = 'Server is running. Ready to start game!';
+                    } else {
+                        throw new Error('Server returned an error');
+                    }
+                })
+                .catch(error => {
+                    serverStatusText.textContent = 'Server is offline';
+                    statusIndicator.classList.remove('online');
+                    startButton.disabled = true;
+                    statusMessage.className = 'status error';
+                    statusMessage.textContent = 'Server is not running. Please run start_server.bat first.';
+                });
+        }
+        
+        // Check server status on load and periodically
+        checkServerStatus();
+        setInterval(checkServerStatus, 5000);
+        
+        // Start game when button is clicked
+        startButton.addEventListener('click', () => {
+            startButton.disabled = true;
+            statusMessage.className = 'status';
+            statusMessage.textContent = 'Starting game...';
+            
+            const config = {
+                playerCount: parseInt(playerCountSelect.value),
+                implementation: implementationSelect.value
+            };
+            
+            ipcRenderer.send('start-game', config);
+        });
+        
+        // Handle response from main process
+        ipcRenderer.on('game-started', (event, response) => {
+            if (response.success) {
+                statusMessage.className = 'status success';
+                statusMessage.textContent = 'Game started successfully!';
+            } else {
+                statusMessage.className = 'status error';
+                statusMessage.textContent = `Error: ${response.error}`;
+                startButton.disabled = false;
+            }
+        });
+        
+        // Quit the application
+        quitButton.addEventListener('click', () => {
+            window.close();
+        });
+    </script>
+</body>
+</html>

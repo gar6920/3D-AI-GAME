@@ -652,3 +652,148 @@ function updateViewModeUI() {
         instructions.style.display = 'none';
     }
 }
+// Check if this controller should be processed by this client
+function shouldProcessController(gamepadIndex) {
+    // Get client ID from URL if in local multiplayer mode
+    const urlParams = new URLSearchParams(window.location.search);
+    const localMultiplayer = urlParams.get('localMultiplayer') === 'true';
+    const clientGamepadIndex = parseInt(urlParams.get('gamepadIndex'));
+    
+    // In local multiplayer mode, only process the assigned controller
+    if (localMultiplayer) {
+        if (urlParams.get('inputType') === 'gamepad') {
+            // This client should only process its assigned gamepad
+            return gamepadIndex === clientGamepadIndex;
+        } else if (urlParams.get('inputType') === 'keyboard') {
+            // This client uses keyboard, don't process any gamepads
+            return false;
+        }
+        // Client with no input assigned shouldn't process any controllers
+        return false;
+    }
+    
+    // In normal mode, check with localMultiplayer manager if available
+    if (window.localMultiplayer && typeof window.localMultiplayer.shouldProcessController === 'function') {
+        const clientId = window.clientId || 'default';
+        return window.localMultiplayer.shouldProcessController(gamepadIndex, clientId);
+    }
+    
+    // Default to allowing all controllers if no other checks apply
+    return true;
+}
+
+// Update gamepad state
+function updateGamepadState() {
+    if (navigator.getGamepads) {
+        const gamepads = navigator.getGamepads();
+        for (let i = 0; i < gamepads.length; i++) {
+            const gamepad = gamepads[i];
+            
+            // Skip if no gamepad or if this controller shouldn't be processed by this client
+            if (!gamepad || !shouldProcessController(i)) {
+                continue;
+            }
+            
+            // Check if we're on the start screen
+            const startScreen = document.querySelector('.play-button') || 
+                document.querySelector('.start-button') || 
+                document.querySelector('.click-to-play');
+                
+            if (startScreen) {
+                // Check for any button press to start the game from the start screen
+                const anyButtonPressed = gamepad.buttons.some(button => button.pressed);
+                if (anyButtonPressed) {
+                    console.log("Gamepad button pressed on start screen, starting game...");
+                    startScreen.click();
+                    return; // Don't process other inputs until the game starts
+                }
+            }
+            
+            // Process gamepad input for the selected controller
+            if (useGamepad && selectedGamepadIndex === i) {
+                processGamepadInput(gamepad);
+            }
+        }
+    }
+}
+
+// Process input from a gamepad
+function processGamepadInput(gamepad) {
+    // Left stick horizontal axis (positive is right)
+    leftStickX = applyDeadzone(gamepad.axes[0], stickDeadzone) * analoglookSensitivity;
+    
+    // Left stick vertical axis (positive is down)
+    leftStickY = applyDeadzone(gamepad.axes[1], stickDeadzone) * analoglookSensitivity;
+    
+    // Right stick horizontal axis (positive is right)
+    rightStickX = applyDeadzone(gamepad.axes[2], stickDeadzone) * analoglookSensitivity;
+    
+    // Right stick vertical axis (positive is down)
+    rightStickY = applyDeadzone(gamepad.axes[3], stickDeadzone) * analoglookSensitivity;
+    
+    // D-pad - map these to inputs
+    const dpadUp = gamepad.buttons[12] ? gamepad.buttons[12].pressed : false;
+    const dpadDown = gamepad.buttons[13] ? gamepad.buttons[13].pressed : false;
+    const dpadLeft = gamepad.buttons[14] ? gamepad.buttons[14].pressed : false;
+    const dpadRight = gamepad.buttons[15] ? gamepad.buttons[15].pressed : false;
+    
+    // A button (Xbox) / X button (PlayStation)
+    gamepadData.jump = gamepad.buttons[0] ? gamepad.buttons[0].pressed : false;
+    
+    // X button (Xbox) / Square button (PlayStation)
+    gamepadData.action1 = gamepad.buttons[2] ? gamepad.buttons[2].pressed : false;
+    
+    // Y button (Xbox) / Triangle button (PlayStation)
+    gamepadData.action2 = gamepad.buttons[3] ? gamepad.buttons[3].pressed : false;
+    
+    // B button (Xbox) / Circle button (PlayStation)
+    gamepadData.action3 = gamepad.buttons[1] ? gamepad.buttons[1].pressed : false;
+    
+    // Left trigger
+    gamepadData.leftTrigger = gamepad.buttons[6] ? gamepad.buttons[6].value : 0;
+    
+    // Right trigger
+    gamepadData.rightTrigger = gamepad.buttons[7] ? gamepad.buttons[7].value : 0;
+    
+    // Left bumper
+    gamepadData.leftBumper = gamepad.buttons[4] ? gamepad.buttons[4].pressed : false;
+    
+    // Right bumper
+    gamepadData.rightBumper = gamepad.buttons[5] ? gamepad.buttons[5].pressed : false;
+    
+    // Start button
+    gamepadData.start = gamepad.buttons[9] ? gamepad.buttons[9].pressed : false;
+    
+    // Select button
+    gamepadData.select = gamepad.buttons[8] ? gamepad.buttons[8].pressed : false;
+    
+    // Map d-pad to movement as alternative to left stick
+    if (dpadUp) leftStickY = -1;
+    if (dpadDown) leftStickY = 1;
+    if (dpadLeft) leftStickX = -1;
+    if (dpadRight) leftStickX = 1;
+    
+    // Check for view toggle (Y button / Triangle button)
+    if (gamepadData.action2 && !prevGamepadData.action2) {
+        toggleView();
+    }
+    
+    // Update movement input based on left stick
+    inputVector.x = leftStickX;
+    inputVector.z = leftStickY;
+    
+    // Normalize input vector if it's longer than 1
+    if (inputVector.length() > 1) {
+        inputVector.normalize();
+    }
+    
+    // Update camera rotation based on right stick
+    if (Math.abs(rightStickX) > 0.1 || Math.abs(rightStickY) > 0.1) {
+        // Apply the right stick for camera rotation
+        rotateCamera(rightStickX, rightStickY);
+    }
+    
+    // Store the previous state
+    prevGamepadData = { ...gamepadData };
+}
+

@@ -8,6 +8,7 @@ const express = require('express');
 const { Server } = require('colyseus');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 // Load environment variables
 if (process.env.NODE_ENV !== 'production') {
@@ -94,7 +95,7 @@ class GameServer {
 
         // Route for split-screen setup page
         this.app.get('/setup', (req, res) => {
-            res.sendFile(path.join(__dirname, '../../', 'four_player_setup.html'));
+            res.sendFile(path.join(__dirname, '../../', 'electron', 'multiplayer.html'));
         });
 
         // Serve the main index.html (for the game itself)
@@ -116,10 +117,121 @@ class GameServer {
             });
         });
 
-        // Root route redirects to player selection
-        // IMPORTANT: Define this AFTER other specific routes that might start with /
+        // API endpoint for fetching available implementations
+        this.app.get('/api/implementations', (req, res) => {
+            // Get available implementations
+            const implementationsPath = path.join(__dirname, '../implementations');
+            try {
+                const implementations = fs.readdirSync(implementationsPath)
+                    .filter(f => fs.statSync(path.join(implementationsPath, f)).isDirectory());
+                res.json(implementations);
+            } catch (error) {
+                console.error('Error reading implementations:', error);
+                res.json(['default']);
+            }
+        });
+
+        // API endpoint to check if launcher is installed
+        this.app.get('/api/check-launcher-installed', (req, res) => {
+            if (process.platform === 'win32') {
+                const { exec } = require('child_process');
+                
+                // Check both HKCU and HKCR for the protocol handler
+                // Windows might register it in either location
+                const checkHKCU = new Promise((resolve) => {
+                    exec('reg query "HKCU\\SOFTWARE\\Classes\\3dgame" /ve', (error, stdout) => {
+                        if (!error && stdout.includes('3D AI Game Protocol')) {
+                            resolve(true);
+                        } else {
+                            resolve(false);
+                        }
+                    });
+                });
+                
+                const checkHKCR = new Promise((resolve) => {
+                    exec('reg query "HKCR\\3dgame" /ve', (error, stdout) => {
+                        if (!error && stdout.includes('3D AI Game Protocol')) {
+                            resolve(true);
+                        } else {
+                            resolve(false);
+                        }
+                    });
+                });
+                
+                // Also check if launch_game.bat exists as a fallback
+                const checkInstallPath = new Promise((resolve) => {
+                    const launchBatPath = path.resolve(__dirname, '../../launch_game.bat');
+                    fs.access(launchBatPath, fs.constants.F_OK, (err) => {
+                        resolve(!err); // Resolves true if file exists
+                    });
+                });
+                
+                // Check all possible conditions
+                Promise.all([checkHKCU, checkHKCR, checkInstallPath]).then(results => {
+                    const [hkcuExists, hkcrExists, launchBatExists] = results;
+                    const isInstalled = hkcuExists || hkcrExists || launchBatExists;
+                    
+                    // Log detailed results for debugging
+                    console.log(`Launcher detection results:
+                    - HKCU Registry: ${hkcuExists ? 'Found' : 'Not found'}
+                    - HKCR Registry: ${hkcrExists ? 'Found' : 'Not found'}
+                    - launch_game.bat: ${launchBatExists ? 'Found' : 'Not found'}
+                    - Overall: ${isInstalled ? 'INSTALLED' : 'NOT INSTALLED'}`);
+                    
+                    res.json({ 
+                        installed: isInstalled,
+                        details: {
+                            hkcuRegistry: hkcuExists,
+                            hkcrRegistry: hkcrExists,
+                            launchBatExists: launchBatExists
+                        }
+                    });
+                }).catch(err => {
+                    console.error('Error checking installation:', err);
+                    res.json({ installed: false, error: err.message });
+                });
+            } else {
+                // For non-Windows platforms
+                res.json({ installed: false, error: 'Not supported on this platform' });
+            }
+        });
+
+        // Root route - serve our new landing page
         this.app.get('/', (req, res) => {
-            res.redirect('/select');
+            res.sendFile(path.join(__dirname, '../../', 'public', 'index.html'));
+        });
+
+        // Special route for downloading the launcher
+        this.app.get('/download/3d-ai-game-launcher.exe', (req, res) => {
+            // Check if we have a packaged launcher
+            const launcherPath = path.resolve(__dirname, '../../dist/3d-ai-game-launcher.exe');
+            
+            if (fs.existsSync(launcherPath)) {
+                // If packaged launcher exists, serve it
+                return res.download(launcherPath);
+            } else {
+                // Otherwise, create a batch file that launches the app directly
+                const tempDir = os.tmpdir();
+                const tempBatchFile = path.join(tempDir, '3d-ai-game-launcher.bat');
+                
+                // Get the absolute path to the game directory
+                const gamePath = path.resolve(__dirname, '../../');
+                
+                // Create batch file content that will launch the game
+                const batchContent = `@echo off
+echo Starting 3D AI Game Launcher...
+cd /d "${gamePath}"
+start "" "${gamePath}\\launch_game.bat"
+`;
+                
+                // Write the batch file to temp directory
+                fs.writeFileSync(tempBatchFile, batchContent);
+                
+                // Serve the batch file as a download with .exe extension for better user experience
+                res.setHeader('Content-Type', 'application/octet-stream');
+                res.setHeader('Content-Disposition', 'attachment; filename="3d-ai-game-launcher.exe"');
+                return res.download(tempBatchFile);
+            }
         });
 
         // --- Set up Static File Serving LAST ---
@@ -149,7 +261,7 @@ class GameServer {
                 // This maintains compatibility with existing clients
                 if (Object.keys(implementations).indexOf(implName) === 0) {
                     console.log(`Defining ${roomType} as the active room type`);
-                    this.gameServer.define('active', RoomClass);
+                    this.gameServer.define('default', RoomClass);
                 }
             } else {
                 console.warn(`No room class found for implementation: ${implName}`);
@@ -195,4 +307,4 @@ gameServer.start(serverConfig.port);
 module.exports = { 
     gameServer,
     serverConfig
-}; 
+};

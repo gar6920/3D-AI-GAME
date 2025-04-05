@@ -266,3 +266,16 @@ function loadScript(src) {
 
 // Start the game when the document is ready
 document.addEventListener('DOMContentLoaded', initGame);
+
+// After player count is selected, trigger the controller assignment UI
+function onPlayerCountSelected(playerCount) {
+    console.log(`Player count selected: ${playerCount}`);
+    
+    // Dispatch event to create the controller assignment UI
+    document.dispatchEvent(new CustomEvent('playerCountSelected', {
+        detail: { count: playerCount }
+    }));
+}
+
+// Export this function to be called from the existing player selection UI
+window.onPlayerCountSelected = onPlayerCountSelected;

@@ -268,6 +268,72 @@ Each game implementation extends the core platform with specific gameplay mechan
 - Interactive preview system with structural rotation
 - Grid-based placement with customizable sizing
 
+## Game Startup Process
+
+### Single-Player Mode
+1. User visits the landing page (`public/index.html`)
+2. Selects a game implementation from the dropdown
+3. Clicks "Play Now" in the single-player section
+4. Browser loads the game directly (`/game?implementation={selected}`)
+5. Game initializes with the selected implementation in single-player mode
+
+### Multiplayer Mode
+1. User visits the landing page (`public/index.html`)
+2. Selects a game implementation from the dropdown
+3. Clicks "Play Now" in the multiplayer section
+4. A modal dialog appears with two options:
+   - "Download Launcher" - Downloads the Electron-based launcher application
+   - "I already have the launcher" - Shows instructions to run the existing launcher
+5. If downloading, the user installs and runs the launcher application
+6. The launcher application:
+   - Starts the local game server
+   - Manages player count (1-4 players)
+   - Creates the game window(s) in split-screen mode if multiple players
+   - Handles controller assignment and input routing
+
+## Directory Structure
+```
+3D AI Game/
+├── assets/                 # Main game assets
+│   ├── icons/              # UI icons and graphics
+│   ├── models/             # 3D model files (.glb)
+│   ├── textures/           # Texture files
+│   └── sounds/             # Sound files
+├── client/                 # Client-side code
+│   ├── js/                 # JavaScript source files
+│   │   ├── core/           # Core platform components
+│   │   │   ├── main.js     # Entry point for client code
+│   │   │   ├── controls.js # Input handling
+│   │   │   ├── ...         # Other core modules
+│   │   ├── implementations/ # Game implementation-specific code
+│   │   │   ├── default/    # Default implementation
+│   │   │   │   ├── DefaultPlayer.js   # Player implementation
+│   │   │   │   ├── DefaultEnvironment.js # Environment setup
+│   │   │   │   └── index.js # Implementation manifest
+├── electron/               # Electron-based multiplayer launcher
+│   ├── main.js             # Main Electron process
+│   ├── launcher.html       # Launcher interface
+│   ├── multiplayer.html    # Multiplayer manager interface
+│   ├── preload.js          # Preload script for launcher window
+│   ├── multiplayer-preload.js # Preload script for multiplayer window
+│   └── game-preload.js     # Preload script for game windows
+├── public/                 # Public facing web files
+│   ├── index.html          # Landing page with game mode selection
+│   └── styles/             # CSS stylesheets
+├── server/                 # Server-side code
+│   ├── core/               # Core server platform components
+│   │   ├── index.js        # Server entry point and API routes
+│   │   ├── server.js       # Colyseus server setup
+│   │   └── ...             # Other server modules
+│   ├── implementations/    # Server-side game implementations
+│   │   └── default/        # Default server implementation
+├── launch_game.bat         # Batch file to launch the game directly
+├── register-protocol.bat   # Batch file to register the protocol handler
+├── start_server            # Script to start the server
+└── memory bank/            # Documentation and architecture files
+    └── architecture.md     # This architecture documentation
+```
+
 ## Project Structure (Simplified View)
 
 ```
@@ -295,13 +361,13 @@ Each game implementation extends the core platform with specific gameplay mechan
 │   └── implementations/
 │       └── default/        # Default server implementation (DefaultRoom.js)
 ├── public/                 # Public assets
-├── memory bank/            # Documentation (like this file)
 ├── node_modules/           # npm dependencies
 ├── package.json            # Project dependencies
 ├── package-lock.json       # Lock file for dependencies
 ├── start_server.bat        # Local server startup script (Windows)
 ├── update_compiled_code.bat # Utility script to generate compiled_code.txt
-└── README.md               # Project readme
+└── memory bank/            # Documentation (like this file)
+    └── architecture.md     # This architecture documentation
 ```
 
 ## Data Flow
