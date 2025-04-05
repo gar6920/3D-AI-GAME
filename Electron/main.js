@@ -7,9 +7,31 @@ const { autoUpdater } = require('electron-updater');
 let mainWindow;
 let gameWindows = [];
 
+// Parse command line arguments for environment configuration
+function parseCommandLineArgs() {
+  const args = process.argv.slice(1);
+  let environment = 'production';
+  let serverUrl = 'https://3d-ai-game.com';
+  
+  args.forEach(arg => {
+    if (arg.startsWith('--env=')) {
+      environment = arg.split('=')[1];
+    }
+    if (arg.startsWith('--server=')) {
+      serverUrl = arg.split('=')[1];
+    }
+  });
+  
+  console.log(`Starting in ${environment} environment, connecting to ${serverUrl}`);
+  return { environment, serverUrl };
+}
+
+// Get configuration from command line or defaults
+const config = parseCommandLineArgs();
+
 // Server config
 const SERVER_PORT = 3000;
-const SERVER_URL = `http://localhost:${SERVER_PORT}`;
+const SERVER_URL = config.serverUrl || `http://localhost:${SERVER_PORT}`;
 
 // Register custom protocol handler - now using 3dgame
 app.setAsDefaultProtocolClient('3dgame');
@@ -52,6 +74,9 @@ function createMainWindow() {
       preload: path.join(__dirname, 'preload.js')
     }
   });
+
+  // Maximize the window on startup
+  mainWindow.maximize();
 
   // Load the main menu interface
   mainWindow.loadFile(path.join(__dirname, 'launcher.html'));
@@ -97,50 +122,37 @@ function launchGame(playerCount, implementation = 'default') {
   // Close any existing game windows
   closeGameWindows();
   
-  if (playerCount === 1) {
-    // Single player: open one window to the game
-    const gameWindow = new BrowserWindow({
-      width: 1280,
-      height: 720,
-      title: `3D AI Game - ${implementation}`,
-      webPreferences: {
-        contextIsolation: false,
-        nodeIntegration: true,
-        preload: path.join(__dirname, 'game-preload.js')
-      }
-    });
-
-    gameWindow.loadURL(`${SERVER_URL}/game?implementation=${implementation}`);
-    gameWindow.setMenuBarVisibility(false);
-    gameWindows.push(gameWindow);
-  } else {
-    // Multiplayer: open electron window with our own multiplayer manager
-    const multiplayerWindow = new BrowserWindow({
-      width: 1280,
-      height: 720,
-      title: `3D AI Game - ${playerCount} Players - ${implementation}`,
-      webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false,
-        preload: path.join(__dirname, 'multiplayer-preload.js')
-      }
-    });
-
-    multiplayerWindow.loadFile(path.join(__dirname, 'multiplayer.html'), {
-      query: {
-        players: playerCount,
-        implementation: implementation
-      }
-    });
-
-    // Dev tools in dev mode
-    if (process.env.NODE_ENV === 'development') {
-      multiplayerWindow.webContents.openDevTools();
+  // Always use the multiplayer setup for controller selection
+  const multiplayerWindow = new BrowserWindow({
+    width: 1280,
+    height: 720,
+    title: `3D AI Game - ${playerCount} Players - ${implementation}`,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      preload: path.join(__dirname, 'multiplayer-preload.js')
     }
+  });
 
-    multiplayerWindow.setMenuBarVisibility(false);
-    gameWindows.push(multiplayerWindow);
+  // Maximize the window on startup
+  multiplayerWindow.maximize();
+
+  multiplayerWindow.loadFile(path.join(__dirname, 'multiplayer.html'), {
+    query: { 
+      playerCount: playerCount, 
+      implementation: implementation,
+      serverUrl: SERVER_URL,
+      environment: config.environment
+    }
+  });
+
+  // Dev tools in dev mode
+  if (process.env.NODE_ENV === 'development') {
+    multiplayerWindow.webContents.openDevTools();
   }
+
+  multiplayerWindow.setMenuBarVisibility(false);
+  gameWindows.push(multiplayerWindow);
 }
 
 // Close all game windows

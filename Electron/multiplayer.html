@@ -21,6 +21,24 @@
             grid-template-rows: repeat(2, 1fr);
         }
         
+        /* Single player layout - full screen */
+        .container.single-player {
+            grid-template-columns: 1fr;
+            grid-template-rows: 1fr;
+        }
+        
+        /* Two player layout - top/bottom */
+        .container.two-player {
+            grid-template-columns: 1fr;
+            grid-template-rows: repeat(2, 1fr);
+        }
+        
+        /* Three player layout - standard grid with empty bottom-right */
+        .container.three-player {
+            grid-template-columns: repeat(2, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+        }
+        
         .quadrant {
             position: relative;
             border: 1px solid #333;
@@ -137,20 +155,6 @@
             font-size: 14px;
             z-index: 5;
         }
-        
-        .loading-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 2;
-        }
     </style>
 </head>
 <body>
@@ -197,6 +201,18 @@
         
         // Set title and container class
         document.title = `3D AI Game - ${playerCount} Players - ${implementation}`;
+        
+        // Set container class based on player count
+        const gameContainer = document.getElementById('gameContainer');
+        if (playerCount === 1) {
+            gameContainer.className = 'container single-player';
+        } else if (playerCount === 2) {
+            gameContainer.className = 'container two-player';
+        } else if (playerCount === 3) {
+            gameContainer.className = 'container three-player';
+        } else {
+            gameContainer.className = 'container';
+        }
         
         // Initialize the quadrants
         function initializeQuadrants() {
@@ -428,16 +444,6 @@
             controllerIndicator.style.borderLeft = `4px solid ${CONTROLLER_COLORS[playerIndex]}`;
             quadrantEl.appendChild(controllerIndicator);
             
-            // Add loading overlay
-            const loadingOverlay = document.createElement('div');
-            loadingOverlay.className = 'loading-overlay';
-            loadingOverlay.id = `loading-overlay-${playerIndex}`;
-            loadingOverlay.innerHTML = `
-                <h3>Loading Player ${playerIndex + 1}...</h3>
-                <p>Please wait</p>
-            `;
-            quadrantEl.appendChild(loadingOverlay);
-            
             // Create iframe for game content instead of webview
             // This ensures compatibility with the browser-based game
             const iframe = document.createElement('iframe');
@@ -455,18 +461,10 @@
             // Add iframe to quadrant
             quadrantEl.appendChild(iframe);
             
-            // Remove loading overlay after a short delay
-            setTimeout(() => {
-                const loadingOverlay = document.getElementById(`loading-overlay-${playerIndex}`);
-                if (loadingOverlay) {
-                    loadingOverlay.style.display = 'none';
-                }
-                
-                // Set up controller input for this iframe if needed
-                if (assignment.type === 'gamepad') {
-                    setupGamepadForIframe(iframe, assignment);
-                }
-            }, 2000);
+            // Set up controller input for this iframe if needed
+            if (assignment.type === 'gamepad') {
+                setupGamepadForIframe(iframe, assignment);
+            }
         }
         
         // Setup gamepad input for an iframe

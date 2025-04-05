@@ -252,126 +252,6 @@ Each game implementation extends the core platform with specific gameplay mechan
 - Additional types can be added by extending the Structure schema
 
 **Networking Flow:**
-1. Client enters building mode and selects structure type
-2. Client shows preview mesh at mouse pointer location
-3. Client validates placement and shows green/red indicator
-4. Client sends placement request to server on valid click
-5. Server validates placement and checks for collisions
-6. Server creates structure and broadcasts to all clients
-7. All clients render the confirmed structure
-
-**Key Features:**
-- Complete cross-client synchronization of structures
-- Real-time placement validation with visual feedback
-- Seamless integration with all camera modes
-- Full server authority for all structure placement
-- Interactive preview system with structural rotation
-- Grid-based placement with customizable sizing
-
-## Game Startup Process
-
-### Single-Player Mode
-1. User visits the landing page (`public/index.html`)
-2. Selects a game implementation from the dropdown
-3. Clicks "Play Now" in the single-player section
-4. Browser loads the game directly (`/game?implementation={selected}`)
-5. Game initializes with the selected implementation in single-player mode
-
-### Multiplayer Mode
-1. User visits the landing page (`public/index.html`)
-2. Selects a game implementation from the dropdown
-3. Clicks "Play Now" in the multiplayer section
-4. A modal dialog appears with two options:
-   - "Download Launcher" - Downloads the Electron-based launcher application
-   - "I already have the launcher" - Shows instructions to run the existing launcher
-5. If downloading, the user installs and runs the launcher application
-6. The launcher application:
-   - Starts the local game server
-   - Manages player count (1-4 players)
-   - Creates the game window(s) in split-screen mode if multiple players
-   - Handles controller assignment and input routing
-
-## Directory Structure
-```
-3D AI Game/
-├── assets/                 # Main game assets
-│   ├── icons/              # UI icons and graphics
-│   ├── models/             # 3D model files (.glb)
-│   ├── textures/           # Texture files
-│   └── sounds/             # Sound files
-├── client/                 # Client-side code
-│   ├── js/                 # JavaScript source files
-│   │   ├── core/           # Core platform components
-│   │   │   ├── main.js     # Entry point for client code
-│   │   │   ├── controls.js # Input handling
-│   │   │   ├── ...         # Other core modules
-│   │   ├── implementations/ # Game implementation-specific code
-│   │   │   ├── default/    # Default implementation
-│   │   │   │   ├── DefaultPlayer.js   # Player implementation
-│   │   │   │   ├── DefaultEnvironment.js # Environment setup
-│   │   │   │   └── index.js # Implementation manifest
-├── electron/               # Electron-based multiplayer launcher
-│   ├── main.js             # Main Electron process
-│   ├── launcher.html       # Launcher interface
-│   ├── multiplayer.html    # Multiplayer manager interface
-│   ├── preload.js          # Preload script for launcher window
-│   ├── multiplayer-preload.js # Preload script for multiplayer window
-│   └── game-preload.js     # Preload script for game windows
-├── public/                 # Public facing web files
-│   ├── index.html          # Landing page with game mode selection
-│   └── styles/             # CSS stylesheets
-├── server/                 # Server-side code
-│   ├── core/               # Core server platform components
-│   │   ├── index.js        # Server entry point and API routes
-│   │   ├── server.js       # Colyseus server setup
-│   │   └── ...             # Other server modules
-│   ├── implementations/    # Server-side game implementations
-│   │   └── default/        # Default server implementation
-├── launch_game.bat         # Batch file to launch the game directly
-├── register-protocol.bat   # Batch file to register the protocol handler
-├── start_server            # Script to start the server
-└── memory bank/            # Documentation and architecture files
-    └── architecture.md     # This architecture documentation
-```
-
-## Project Structure (Simplified View)
-
-```
-/
-├── client/                 # Client-side code
-│   ├── css/
-│   ├── js/
-│   │   ├── core/           # Core client platform components (game-engine, controls, network, etc.)
-│   │   ├── implementations/
-│   │   │   └── default/    # Default game implementation (e.g., DefaultPlayer.js, DefaultEnvironment.js)
-│   │   │       └── index.js # Implementation manifest declaring modules to load
-│   │   └── lib/            # Additional JavaScript utilities
-│   ├── assets/             # Game assets (textures, etc.)
-│   │   └── models/         # 3D model assets (GLB files)
-│   │       ├── human_man.glb # Player character model
-│   │       ├── free_merc_hovercar.glb # Environment object model
-│   │       └── modern_city_block.glb # Environment object model
-│   ├── models/             # Additional model assets
-│   └── index.html          # Main game HTML
-├── server/                 # Server-side code
-│   ├── core/               # Core server platform components (BaseRoom, schemas, etc.)
-│   │   ├── index.js        # Server setup and Colyseus integration
-│   │   ├── BaseRoom.js     # Base room implementation with player movement logic
-│   │   └── schemas/        # Colyseus schemas (GameState, Player, etc.)
-│   └── implementations/
-│       └── default/        # Default server implementation (DefaultRoom.js)
-├── public/                 # Public assets
-├── node_modules/           # npm dependencies
-├── package.json            # Project dependencies
-├── package-lock.json       # Lock file for dependencies
-├── start_server.bat        # Local server startup script (Windows)
-├── update_compiled_code.bat # Utility script to generate compiled_code.txt
-└── memory bank/            # Documentation (like this file)
-    └── architecture.md     # This architecture documentation
-```
-
-## Data Flow
-
 1.  **Initial Connection**: Client browser navigates to the root URL (`/`).
 2.  **Redirect**: Server receives request for `/`, executes `res.redirect('/select')`.
 3.  **Selection Page**: Client browser requests `/select`. Server serves `public/player_select.html`.
@@ -492,3 +372,117 @@ The procedural terrain system creates a natural-looking ground:
 - Terrain rendering uses procedural canvas-based texture generation for natural-looking grass without grid lines.
 - Environment objects (hovercar, city blocks) are dynamically loaded by implementation-specific modules.
 - Core/implementation separation is maintained throughout the codebase.
+- Multiplayer controller selection has been redesigned for a seamless experience:
+  - Controller setup is integrated directly into each player's quadrant
+  - Each player's game loads immediately in their assigned quadrant after controller selection
+  - Layout adjusts dynamically based on player count (full screen for 1 player, top/bottom for 2 players, grid for 3-4 players)
+  - Players can use keyboard/mouse or gamepads, with automatic assignment
+  - Electron window maximizes automatically for optimal viewing experience
+
+## Data Flow
+
+1.  **Initial Connection**: Client browser navigates to the root URL (`/`).
+2.  **Redirect**: Server receives request for `/`, executes `res.redirect('/select')`.
+3.  **Selection Page**: Client browser requests `/select`. Server serves `public/player_select.html`.
+4.  **Player Choice**: User clicks a button on the selection page.
+    *   **1 Player**: Browser navigates to `/game`.
+    *   **2-4 Players**: Browser navigates to `/setup?players=N`.
+5.  **Game Page Load**: 
+    *   If `/game` was requested, server serves `client/index.html`.
+    *   If `/setup` was requested, server serves `four_player_setup.html`, which then loads `/game` in iframes.
+6.  **Client Initialization**: `client/index.html` loads necessary JS (`main.js`).
+7.  **Server Connection**: Client connects to Server via WebSocket (Colyseus `network-core.js`).
+8.  **Join Room**: Client joins the 'active' room (`DefaultRoom.js`).
+9.  **State Sync**: Server sends initial `GameState` to Client. Player entities are created client-side (`network-core.js` using `EntityFactory`).
+10. **Input**: Client sends input state (keys pressed, mouse movement, rotation) to Server (`controls.js` -> `network-core.js` -> `BaseRoom.js`).
+11. **Server Processing**: Server updates player state based on input, performs physics/collision checks (`BaseRoom.js` or `DefaultRoom.js`).
+12. **State Broadcast**: Server broadcasts delta updates of the `GameState` to all clients.
+13. **Client Update**: Client receives state updates, interpolates remote player positions, updates local visuals (`network-core.js`).
+14. **Building**:
+    *   Client enters build mode, sends placement request (`game-engine.js` -> `network-core.js`).
+    *   Server validates, updates `GameState.structures`, broadcasts change (`BaseRoom.js`).
+    *   Clients render the new structure (`network-core.js`).
+15. **RTS Commands**:
+    *   Client selects units, issues move command (`game-engine.js`/`rts-view.js` -> `network-core.js`).
+    *   Server receives command, updates target position for player entities (`BaseRoom.js`).
+    *   Server state updates cause units to move on all clients.
+
+## Project Structure
+```
+3D AI Game/
+├── assets/                 # Main game assets
+│   ├── icons/              # UI icons and graphics
+│   ├── models/             # 3D model files (.glb)
+│   ├── textures/           # Texture files
+│   └── sounds/             # Sound files
+├── client/                 # Client-side code
+│   ├── js/                 # JavaScript source files
+│   │   ├── core/           # Core platform components
+│   │   │   ├── main.js     # Entry point for client code
+│   │   │   ├── controls.js # Input handling
+│   │   │   ...             # Other core modules
+│   │   ├── implementations/ # Game implementation-specific code
+│   │   │   ├── default/    # Default implementation
+│   │   │   │   ├── DefaultPlayer.js   # Player implementation
+│   │   │   │   ├── DefaultEnvironment.js # Environment setup
+│   │   │   │   └── index.js # Implementation manifest
+├── electron/               # Electron-based multiplayer launcher
+│   ├── main.js             # Main Electron process
+│   ├── launcher.html       # Launcher interface
+│   ├── multiplayer.html    # Multiplayer manager interface
+│   ├── preload.js          # Preload script for launcher window
+│   ├── multiplayer-preload.js # Preload script for multiplayer window
+│   └── game-preload.js     # Preload script for game windows
+├── public/                 # Public facing web files
+│   ├── index.html          # Landing page with game mode selection
+│   └── styles/             # CSS stylesheets
+├── server/                 # Server-side code
+│   ├── core/               # Core server platform components
+│   │   ├── index.js        # Server entry point and API routes
+│   │   ├── server.js       # Colyseus server setup
+│   │   └── ...             # Other server modules
+│   ├── implementations/    # Server-side game implementations
+│   │   └── default/        # Default server implementation
+├── launch_game-d.bat       # Batch file to launch the game in development mode (localhost)
+├── launch_game-p.bat       # Batch file to launch the game in production mode (online server)
+├── register-protocol.bat   # Batch file to register the protocol handler
+├── start_server            # Script to start the server
+└── memory bank/            # Documentation and architecture files
+    └── architecture.md     # This architecture documentation
+```
+
+## Project Structure (Simplified View)
+
+```
+/
+├── client/                 # Client-side code
+│   ├── css/
+│   ├── js/
+│   │   ├── core/           # Core client platform components (game-engine, controls, network, etc.)
+│   │   ├── implementations/
+│   │   │   └── default/    # Default game implementation (e.g., DefaultPlayer.js, DefaultEnvironment.js)
+│   │   │       └── index.js # Implementation manifest declaring modules to load
+│   │   └── lib/            # Additional JavaScript utilities
+│   ├── assets/             # Game assets (textures, etc.)
+│   │   └── models/         # 3D model assets (GLB files)
+│   │       ├── human_man.glb # Player character model
+│   │       ├── free_merc_hovercar.glb # Environment object model
+│   │       └── modern_city_block.glb # Environment object model
+│   ├── models/             # Additional model assets
+│   └── index.html          # Main game HTML
+├── server/                 # Server-side code
+│   ├── core/               # Core server platform components (BaseRoom, schemas, etc.)
+│   │   ├── index.js        # Server setup and Colyseus integration
+│   │   ├── BaseRoom.js     # Base room implementation with player movement logic
+│   │   └── schemas/        # Colyseus schemas (GameState, Player, etc.)
+│   └── implementations/
+│       └── default/        # Default server implementation (DefaultRoom.js)
+├── public/                 # Public assets
+├── node_modules/           # npm dependencies
+├── package.json            # Project dependencies
+├── package-lock.json       # Lock file for dependencies
+├── launch_game-d.bat       # Batch file to launch the game in development mode (localhost)
+├── launch_game-p.bat       # Batch file to launch the game in production mode (online server)
+├── update_compiled_code.bat # Utility script to generate compiled_code.txt
+└── memory bank/            # Documentation (like this file)
+    └── architecture.md     # This architecture documentation

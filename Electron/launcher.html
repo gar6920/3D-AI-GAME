@@ -136,27 +136,6 @@
             border: 1px solid rgba(255, 193, 7, 0.5);
         }
         
-        .server-status {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-top: 15px;
-            padding: 10px;
-            border-radius: 8px;
-            background-color: rgba(0, 0, 0, 0.3);
-        }
-        
-        .status-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background-color: #dc3545; /* Red by default */
-        }
-        
-        .status-indicator.online {
-            background-color: #28a745; /* Green when online */
-        }
-        
         footer {
             padding: 10px;
             background-color: rgba(0, 0, 0, 0.5);
@@ -171,11 +150,6 @@
     </header>
     
     <div class="container">
-        <div class="server-status">
-            <div id="statusIndicator" class="status-indicator"></div>
-            <div id="serverStatusText">Checking server...</div>
-        </div>
-        
         <div class="options">
             <div class="option-row">
                 <label for="playerCount">Number of Players:</label>
@@ -220,20 +194,13 @@
         const startButton = document.getElementById('startButton');
         const quitButton = document.getElementById('quitButton');
         const statusMessage = document.getElementById('statusMessage');
-        const statusIndicator = document.getElementById('statusIndicator');
-        const serverStatusText = document.getElementById('serverStatusText');
         
         // Check server status
         function checkServerStatus() {
-            serverStatusText.textContent = 'Checking server...';
-            statusIndicator.classList.remove('online');
-            
             // Simple HTTP request to check server
             fetch('http://localhost:3000/health')
                 .then(response => {
                     if (response.ok) {
-                        serverStatusText.textContent = 'Server is online';
-                        statusIndicator.classList.add('online');
                         startButton.disabled = false;
                         statusMessage.className = 'status success';
                         statusMessage.textContent = 'Server is running. Ready to start game!';
@@ -242,8 +209,6 @@
                     }
                 })
                 .catch(error => {
-                    serverStatusText.textContent = 'Server is offline';
-                    statusIndicator.classList.remove('online');
                     startButton.disabled = true;
                     statusMessage.className = 'status error';
                     statusMessage.textContent = 'Server is not running. Please run start_server.bat first.';
