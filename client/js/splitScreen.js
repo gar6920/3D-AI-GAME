@@ -2,19 +2,28 @@
 // This file handles creating and arranging client windows for local multiplayer
 
 // Initialize when the document is ready
-document.addEventListener('DOMContentLoaded', function() {
-    console.log("Split-screen multiplayer setup initializing");
-    
+if (window.inputManager) {
+    window.inputManager.on('domcontentloaded', function() {
+        console.log("Split-screen multiplayer setup initializing");
+    });
+} else {
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log("Split-screen multiplayer setup initializing");
+    });
+}
+
+// Register custom event handlers through InputManager's on method
+if (window.inputManager) {
     // Listen for P key to start local multiplayer
-    document.addEventListener('startLocalMultiplayer', function() {
+    window.inputManager.on('startLocalMultiplayer', function() {
         console.log("Starting local multiplayer setup");
         // Create the player count selection UI
         createPlayerCountUI();
     });
     
     // Listen for player count selection
-    document.addEventListener('playerCountSelected', function(event) {
-        const playerCount = event.detail.count;
+    window.inputManager.on('playerCountSelected', function(event) {
+        const playerCount = event.detail ? event.detail.count : (event.count || 2);
         console.log(`Setting up split-screen for ${playerCount} players`);
         
         // Create client windows/frames for each player
@@ -25,14 +34,33 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Listen for controller assignment completion
-    document.addEventListener('localMultiplayerReady', function(event) {
-        const assignments = event.detail.controllerAssignments;
+    window.inputManager.on('localMultiplayerReady', function(event) {
+        const assignments = event.detail ? event.detail.controllerAssignments : event.controllerAssignments;
         console.log("Local multiplayer ready with assignments:", assignments);
         
         // Start the game on all client windows
         startGame(assignments);
     });
-});
+} else {
+    // Fallback to direct DOM event listeners
+    document.addEventListener('startLocalMultiplayer', function() {
+        console.log("Starting local multiplayer setup");
+        createPlayerCountUI();
+    });
+    
+    document.addEventListener('playerCountSelected', function(event) {
+        const playerCount = event.detail.count;
+        console.log(`Setting up split-screen for ${playerCount} players`);
+        createClientWindows(playerCount);
+        createKeyboardIndicator();
+    });
+    
+    document.addEventListener('localMultiplayerReady', function(event) {
+        const assignments = event.detail.controllerAssignments;
+        console.log("Local multiplayer ready with assignments:", assignments);
+        startGame(assignments);
+    });
+}
 
 // Create the player count selection UI
 function createPlayerCountUI() {
@@ -67,6 +95,7 @@ function createPlayerCountUI() {
     // Add buttons for 1-4 players
     for (let i = 1; i <= 4; i++) {
         const button = document.createElement('button');
+        button.id = `player-count-button-${i}`;
         button.textContent = i.toString();
         button.style.width = '100px';
         button.style.height = '100px';
@@ -79,27 +108,58 @@ function createPlayerCountUI() {
         button.style.cursor = 'pointer';
         button.style.transition = 'background-color 0.2s, transform 0.2s';
         
-        // Hover effect
-        button.addEventListener('mouseover', function() {
-            button.style.backgroundColor = '#555';
-            button.style.transform = 'scale(1.05)';
-        });
-        
-        button.addEventListener('mouseout', function() {
-            button.style.backgroundColor = '#333';
-            button.style.transform = 'scale(1)';
-        });
-        
-        // Click handler
-        button.addEventListener('click', function() {
-            // Dispatch event for player count selection
-            document.dispatchEvent(new CustomEvent('playerCountSelected', {
-                detail: { count: i }
-            }));
+        // Set up button event handlers through InputManager if available
+        if (window.inputManager) {
+            // Hover effects will need to be handled with CSS since InputManager doesn't handle mouseover/mouseout
+            // Add click handler through InputManager
+            window.inputManager.registerUIElement(`player-count-button-${i}`, 'click', (function(count) {
+                return function() {
+                    // Dispatch event for player count selection
+                    if (window.inputManager) {
+                        window.inputManager.dispatchEvent('playerCountSelected', { count: count });
+                    } else {
+                        document.dispatchEvent(new CustomEvent('playerCountSelected', {
+                            detail: { count: count }
+                        }));
+                    }
+                    
+                    // Hide selection UI
+                    container.style.display = 'none';
+                };
+            })(i));
             
-            // Hide selection UI
-            container.style.display = 'none';
-        });
+            // Add manual styles for hover effects since we can't use mouseover/mouseout with InputManager
+            button.onmouseover = function() {
+                button.style.backgroundColor = '#555';
+                button.style.transform = 'scale(1.05)';
+            };
+            
+            button.onmouseout = function() {
+                button.style.backgroundColor = '#333';
+                button.style.transform = 'scale(1)';
+            };
+        } else {
+            // Use direct event listeners as fallback
+            button.addEventListener('mouseover', function() {
+                button.style.backgroundColor = '#555';
+                button.style.transform = 'scale(1.05)';
+            });
+            
+            button.addEventListener('mouseout', function() {
+                button.style.backgroundColor = '#333';
+                button.style.transform = 'scale(1)';
+            });
+            
+            button.addEventListener('click', function() {
+                // Dispatch event for player count selection
+                document.dispatchEvent(new CustomEvent('playerCountSelected', {
+                    detail: { count: i }
+                }));
+                
+                // Hide selection UI
+                container.style.display = 'none';
+            });
+        }
         
         buttonContainer.appendChild(button);
     }
@@ -257,15 +317,27 @@ function createSelectionUI(playerCount) {
     
     document.body.appendChild(selectionUI);
     
-    // Handle keyboard selection for Player 1
-    document.addEventListener('keydown', function(event) {
-        if (event.key === 'Enter') {
-            const player1Box = document.querySelector('.client-box[data-client-id="client-0"]');
-            if (player1Box && !document.querySelector('.keyboard-assigned')) {
-                assignKeyboard(player1Box);
+    // Handle keyboard selection for Player 1 using InputManager
+    if (window.inputManager) {
+        window.inputManager.on('keydown', function(event) {
+            if (event.key === 'Enter') {
+                const player1Box = document.querySelector('.client-box[data-client-id="client-0"]');
+                if (player1Box && !document.querySelector('.keyboard-assigned')) {
+                    assignKeyboard(player1Box);
+                }
             }
-        }
-    });
+        });
+    } else {
+        // Fallback to direct event listener
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                const player1Box = document.querySelector('.client-box[data-client-id="client-0"]');
+                if (player1Box && !document.querySelector('.keyboard-assigned')) {
+                    assignKeyboard(player1Box);
+                }
+            }
+        });
+    }
     
     console.log("Controller selection UI created");
 }

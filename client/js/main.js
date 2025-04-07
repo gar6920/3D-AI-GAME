@@ -57,83 +57,8 @@ function initGame() {
 
             // --- Input Manager --- 
             // Basic object exposing relevant state/functions from controls.js
-            window.inputManager = {
-                _customKeyListeners: {}, // Store custom key listeners by event.code
-
-                getInputState: () => window.inputState, // Global input state
-                isPointerLocked: () => document.pointerLockElement !== null,
-                lockPointer: () => document.body.requestPointerLock(),
-                unlockPointer: () => document.exitPointerLock(),
-
-                // Function to add a listener for a specific key code
-                addKeyListener: function(keyCode, callback) {
-                    if (!this._customKeyListeners[keyCode]) {
-                        this._customKeyListeners[keyCode] = [];
-                    }
-                    this._customKeyListeners[keyCode].push(callback);
-                    console.log(`InputManager: Added listener for key ${keyCode}`);
-                },
-
-                // Function to remove a listener (optional but good practice)
-                removeKeyListener: function(keyCode, callback) {
-                    if (this._customKeyListeners[keyCode]) {
-                        this._customKeyListeners[keyCode] = this._customKeyListeners[keyCode].filter(cb => cb !== callback);
-                        if (this._customKeyListeners[keyCode].length === 0) {
-                            delete this._customKeyListeners[keyCode];
-                        }
-                    }
-                },
-
-                // Internal handler to process key events, checking custom listeners
-                _handleKeyDown: function(event) {
-                    let handledByCustom = false;
-                    // Check custom listeners first
-                    if (this._customKeyListeners[event.code]) {
-                        this._customKeyListeners[event.code].forEach(callback => callback(event));
-                        handledByCustom = true; // Mark as handled
-                        // Optionally, decide if default controls.js handler should also run
-                        // For now, custom listener handles it exclusively
-                    }
-                    
-                    // If no custom listener handled it, call the original onKeyDown from controls.js
-                    if (!handledByCustom) {
-                        // Ensure originalOnKeyDown is captured correctly
-                        if (typeof originalOnKeyDown === 'function') {
-                            originalOnKeyDown(event);
-                        } else {
-                            console.warn("Original onKeyDown handler not found for inputManager.");
-                        }
-                    }
-                },
-                
-                _handleKeyUp: function(event) {
-                    // Similar logic could be added for keyup if needed
-                    // If no custom keyup listener, call original
-                    if (typeof originalOnKeyUp === 'function') {
-                        originalOnKeyUp(event);
-                    } else {
-                        console.warn("Original onKeyUp handler not found for inputManager.");
-                    }
-                }
-
-                // We don't need setOnKeyDown/setOnKeyUp anymore, we manage internally
-                /*
-                setOnKeyDown: (handler) => { document.removeEventListener('keydown', onKeyDown); document.addEventListener('keydown', handler); }, // Example override
-                setOnKeyUp: (handler) => { document.removeEventListener('keyup', onKeyUp); document.addEventListener('keyup', handler); }     // Example override
-                */
-            };
+            window.inputManager = new InputManager();
             console.log("Input Manager assigned:", window.inputManager);
-
-            // Capture original handlers before overriding
-            const originalOnKeyDown = window.onKeyDown; // Assuming onKeyDown is global
-            const originalOnKeyUp = window.onKeyUp;     // Assuming onKeyUp is global
-
-            // Replace global listeners with inputManager's internal handlers
-            document.removeEventListener('keydown', originalOnKeyDown);
-            document.removeEventListener('keyup', originalOnKeyUp);
-            document.addEventListener('keydown', window.inputManager._handleKeyDown.bind(window.inputManager));
-            document.addEventListener('keyup', window.inputManager._handleKeyUp.bind(window.inputManager));
-            console.log("Replaced global key listeners with InputManager handlers.");
 
             // --- UI Manager --- 
             // Instantiate PlayerUI class from player-ui.js
@@ -312,3 +237,387 @@ function loadScript(src) {
 
 // Start the game when the document is ready
 document.addEventListener('DOMContentLoaded', initGame); 
+
+// InputManager class definition
+function InputManager() {
+    this.init();
+    
+    // Define and expose input management methods directly on the instance
+    this.keys = {
+        w: false, a: false, s: false, d: false,
+        space: false, q: false, e: false, shift: false,
+        v: false // Add V key tracking
+    };
+    this.mouseDelta = { x: 0, y: 0 };
+    this.mousePosition = { x: 0, y: 0 };
+    this.mouseButtons = { left: false, middle: false, right: false };
+    
+    // Server-compatible state
+    this.serverInputState = {
+        keys: { w: false, a: false, s: false, d: false, space: false, q: false, e: false, shift: false },
+        mouseDelta: { x: 0, y: 0 },
+        viewMode: window.viewMode || 'firstPerson',
+        thirdPersonCameraAngle: window.thirdPersonCameraOrbitX || 0,
+        clientRotation: { rotationY: 0, pitch: 0 }
+    };
+    
+    // Event callbacks
+    this.callbacks = {
+        keydown: [], keyup: [], mousedown: [], mouseup: [], mousemove: [], wheel: [],
+        domcontentloaded: [] // Add support for DOMContentLoaded
+    };
+    
+    // UI element handlers - store by element ID and event type
+    this.uiElementCallbacks = {};
+    
+    // Bind methods to ensure 'this' context is correct
+    this._handleKeyDown = this._handleKeyDown.bind(this);
+    this._handleKeyUp = this._handleKeyUp.bind(this);
+    this._handleMouseDown = this._handleMouseDown.bind(this);
+    this._handleMouseUp = this._handleMouseUp.bind(this);
+    this._handleMouseMove = this._handleMouseMove.bind(this);
+    this._handleWheel = this._handleWheel.bind(this);
+    this._handleUIEvent = this._handleUIEvent.bind(this);
+    this._handleDOMContentLoaded = this._handleDOMContentLoaded.bind(this);
+    
+    this.update = this.update.bind(this);
+}
+
+InputManager.prototype.init = function() {
+    // Add direct event listeners for core input events
+    document.addEventListener('keydown', this._handleKeyDown, false);
+    document.addEventListener('keyup', this._handleKeyUp, false);
+    document.addEventListener('mousedown', this._handleMouseDown, false);
+    document.addEventListener('mouseup', this._handleMouseUp, false);
+    document.addEventListener('mousemove', this._handleMouseMove, false);
+    document.addEventListener('wheel', this._handleWheel, false);
+    
+    // Add a global click handler to check for UI element interactions
+    document.addEventListener('click', this._handleUIEvent, false);
+    
+    // Listen for DOMContentLoaded
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', this._handleDOMContentLoaded);
+    } else {
+        // If already loaded, fire the event asynchronously
+        setTimeout(this._handleDOMContentLoaded, 0);
+    }
+    
+    // Register for animation loop updates
+    if (window.registerAnimationCallback) {
+        window.registerAnimationCallback(this.update);
+    }
+    
+    console.log("InputManager initialized with centralized event handling");
+}
+
+// Internal handler for DOMContentLoaded
+InputManager.prototype._handleDOMContentLoaded = function() {
+    console.log("[InputManager] DOMContentLoaded detected.");
+    this.callbacks.domcontentloaded.forEach(callback => {
+        try { callback(); } catch (e) { console.error("Error in domcontentloaded callback:", e); }
+    });
+}
+
+// Register a UI element for managed event handling
+InputManager.prototype.registerUIElement = function(elementId, eventType, callback) {
+    if (!this.uiElementCallbacks[elementId]) {
+        this.uiElementCallbacks[elementId] = {};
+    }
+    
+    this.uiElementCallbacks[elementId][eventType] = callback;
+    console.log(`Registered UI element handler: ${elementId} for ${eventType} event`);
+    return true;
+}
+
+// Remove a UI element handler
+InputManager.prototype.unregisterUIElement = function(elementId, eventType) {
+    if (this.uiElementCallbacks[elementId] && this.uiElementCallbacks[elementId][eventType]) {
+        delete this.uiElementCallbacks[elementId][eventType];
+        console.log(`Unregistered UI element handler: ${elementId} for ${eventType} event`);
+        return true;
+    }
+    return false;
+}
+
+// Handle UI element events
+InputManager.prototype._handleUIEvent = function(event) {
+    // Find the element that was clicked (could be the target or a parent)
+    let element = event.target;
+    while (element) {
+        const elementId = element.id;
+        
+        // Check if we have handlers for this element
+        if (elementId && this.uiElementCallbacks[elementId] && this.uiElementCallbacks[elementId]['click']) {
+            // Call the registered handler
+            console.log(`UI element clicked: ${elementId}`);
+            this.uiElementCallbacks[elementId]['click'](event);
+            return; // Only handle one element per click
+        }
+        
+        // Move up the DOM tree
+        element = element.parentElement;
+    }
+}
+
+// Internal event handlers (prefixed with _)
+InputManager.prototype._handleKeyDown = function(event) {
+    // Skip if we're in an input field
+    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+        return;
+    }
+    
+    // Update internal state based on key
+    switch (event.code) {
+        case 'KeyW': case 'ArrowUp':
+            this.keys.w = true;
+            this.serverInputState.keys.w = true;
+            break;
+        case 'KeyA': case 'ArrowLeft':
+            this.keys.a = true;
+            this.serverInputState.keys.a = true;
+            break;
+        case 'KeyS': case 'ArrowDown':
+            this.keys.s = true;
+            this.serverInputState.keys.s = true;
+            break;
+        case 'KeyD': case 'ArrowRight':
+            this.keys.d = true;
+            this.serverInputState.keys.d = true;
+            break;
+        case 'Space':
+            this.keys.space = true;
+            this.serverInputState.keys.space = true;
+            break;
+        case 'KeyQ':
+            this.keys.q = true;
+            this.serverInputState.keys.q = true;
+            break;
+        case 'KeyE':
+            this.keys.e = true;
+            this.serverInputState.keys.e = true;
+            break;
+        case 'ShiftLeft': case 'ShiftRight':
+            this.keys.shift = true;
+            this.serverInputState.keys.shift = true;
+            break;
+        case 'KeyV': 
+            this.keys.v = true;
+            break;
+    }
+    
+    // Create standardized event with all necessary properties
+    const keyData = {
+        key: event.key,
+        code: event.code,
+        keyCode: event.keyCode,
+        event: event // Include original event for access to all properties
+    };
+    
+    // Trigger callbacks
+    this.callbacks.keydown.forEach(callback => callback(keyData));
+}
+
+InputManager.prototype._handleKeyUp = function(event) {
+    switch (event.code) {
+        case 'KeyW': case 'ArrowUp':
+            this.keys.w = false;
+            this.serverInputState.keys.w = false;
+            break;
+        case 'KeyA': case 'ArrowLeft':
+            this.keys.a = false;
+            this.serverInputState.keys.a = false;
+            break;
+        case 'KeyS': case 'ArrowDown':
+            this.keys.s = false;
+            this.serverInputState.keys.s = false;
+            break;
+        case 'KeyD': case 'ArrowRight':
+            this.keys.d = false;
+            this.serverInputState.keys.d = false;
+            break;
+        case 'Space':
+            this.keys.space = false;
+            this.serverInputState.keys.space = false;
+            break;
+        case 'KeyQ':
+            this.keys.q = false;
+            this.serverInputState.keys.q = false;
+            break;
+        case 'KeyE':
+            this.keys.e = false;
+            this.serverInputState.keys.e = false;
+            break;
+        case 'ShiftLeft': case 'ShiftRight':
+            this.keys.shift = false;
+            this.serverInputState.keys.shift = false;
+            break;
+        case 'KeyV':
+            this.keys.v = false;
+            break;
+    }
+    
+    // Create standardized event with all necessary properties
+    const keyData = {
+        key: event.key,
+        code: event.code,
+        keyCode: event.keyCode,
+        event: event // Include original event for access to all properties
+    };
+    
+    // Trigger callbacks
+    this.callbacks.keyup.forEach(callback => callback(keyData));
+}
+
+InputManager.prototype._handleMouseDown = function(event) {
+    // Update mouse button state
+    switch (event.button) {
+        case 0: // Left button
+            this.mouseButtons.left = true;
+            break;
+        case 1: // Middle button (wheel)
+            this.mouseButtons.middle = true;
+            break;
+        case 2: // Right button
+            this.mouseButtons.right = true;
+            break;
+    }
+    
+    // Trigger callbacks
+    this.callbacks.mousedown.forEach(callback => 
+        callback({ button: event.button, position: { x: event.clientX, y: event.clientY }, event })
+    );
+}
+
+InputManager.prototype._handleMouseUp = function(event) {
+    // Update mouse button state
+    switch (event.button) {
+        case 0: // Left button
+            this.mouseButtons.left = false;
+            break;
+        case 1: // Middle button (wheel)
+            this.mouseButtons.middle = false;
+            break;
+        case 2: // Right button
+            this.mouseButtons.right = false;
+            break;
+    }
+    
+    // Trigger callbacks
+    this.callbacks.mouseup.forEach(callback => 
+        callback({ button: event.button, position: { x: event.clientX, y: event.clientY }, event })
+    );
+}
+
+InputManager.prototype._handleMouseMove = function(event) {
+    // Store current position
+    this.mousePosition.x = event.clientX;
+    this.mousePosition.y = event.clientY;
+    
+    // Update mouse delta for server in pointerlock mode
+    if (document.pointerLockElement) {
+        this.mouseDelta.x += event.movementX;
+        this.mouseDelta.y += event.movementY;
+        this.serverInputState.mouseDelta.x += event.movementX;
+        this.serverInputState.mouseDelta.y += event.movementY;
+    }
+    
+    // Trigger callbacks with standardized event format
+    const mouseData = { 
+        position: { x: event.clientX, y: event.clientY },
+        movement: { x: event.movementX, y: event.movementY },
+        clientX: event.clientX, // Add direct properties for backward compatibility
+        clientY: event.clientY,
+        movementX: event.movementX,
+        movementY: event.movementY,
+        event: event // Include original event for full access
+    };
+    
+    this.callbacks.mousemove.forEach(callback => callback(mouseData));
+}
+
+InputManager.prototype._handleWheel = function(event) {
+    // Trigger callbacks with normalized wheel delta
+    this.callbacks.wheel.forEach(callback => 
+        callback({ delta: Math.sign(event.deltaY), event })
+    );
+}
+
+InputManager.prototype.update = function(delta) {
+    // Sync view mode and camera settings from global state
+    this.serverInputState.viewMode = 
+        window.viewMode === 'firstPerson' ? 'first-person' : 
+        window.viewMode === 'thirdPerson' ? 'third-person' : 
+        window.viewMode || 'first-person';
+        
+    this.serverInputState.thirdPersonCameraAngle = window.thirdPersonCameraOrbitX || 0;
+    
+    // Sync rotation state 
+    if (window.playerRotationY !== undefined) {
+        this.serverInputState.clientRotation.rotationY = window.playerRotationY;
+        this.serverInputState.clientRotation.pitch = window.firstPersonCameraPitch || 0;
+    } else if (window.playerEntity && window.playerEntity.mesh) {
+        this.serverInputState.clientRotation.rotationY = window.playerEntity.mesh.rotation.y || 0;
+    }
+}
+
+// Public registration methods for callbacks
+InputManager.prototype.on = function(eventType, callback) {
+    if (this.callbacks[eventType]) {
+        this.callbacks[eventType].push(callback);
+        return true;
+    }
+    console.warn(`[InputManager] Unsupported event type for 'on': ${eventType}`);
+    return false;
+}
+
+InputManager.prototype.off = function(eventType, callback) {
+    if (this.callbacks[eventType]) {
+        const index = this.callbacks[eventType].indexOf(callback);
+        if (index !== -1) {
+            this.callbacks[eventType].splice(index, 1);
+            return true;
+        }
+    }
+    return false;
+}
+
+// Dispatch a custom event through InputManager system
+InputManager.prototype.dispatchEvent = function(eventType, data = {}) {
+    // Standard input events go through the callback system
+    if (this.callbacks[eventType]) {
+        this.callbacks[eventType].forEach(callback => callback(data));
+        return true;
+    }
+    
+    // For non-standard events, fall back to DOM CustomEvent
+    // This ensures compatibility with code that listens for these events directly
+    const event = new CustomEvent(eventType, { detail: data });
+    document.dispatchEvent(event);
+    
+    console.log(`[InputManager] Dispatched event: ${eventType}`);
+    return true;
+}
+
+// Utility methods
+InputManager.prototype.isKeyPressed = function(key) {
+    return this.keys[key] === true;
+}
+
+InputManager.prototype.isMouseButtonPressed = function(button) {
+    return this.mouseButtons[button] === true;
+}
+
+InputManager.prototype.getMousePosition = function() {
+    return { ...this.mousePosition };
+}
+
+InputManager.prototype.getMouseDelta = function() {
+    return { ...this.mouseDelta };
+}
+
+// Method for gamepads and other input devices (future expansion)
+InputManager.prototype.addInputDevice = function(deviceType, deviceConfig) {
+    console.log(`[InputManager] Adding input device: ${deviceType}`);
+    // Future implementation
+} 

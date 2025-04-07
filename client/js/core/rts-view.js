@@ -14,9 +14,9 @@ window.rtsMapSize = 500; // Increased map size (10x larger)
 window.initRTSView = function() {
     console.log("Initializing RTS view");
     
-    // Set up event listeners for RTS controls
-    document.addEventListener('mousemove', handleRTSMouseMove);
-    document.addEventListener('mousedown', handleRTSMouseDown);
+    // Set up event listeners for RTS controls using InputManager
+    window.inputManager.on('mousemove', handleRTSMouseMove);
+    window.inputManager.on('mousedown', handleRTSMouseDown);
     
     // Create minimap
     createRTSMinimap();
@@ -24,8 +24,11 @@ window.initRTSView = function() {
     // Set initial camera settings
     window.rtsCameraHeight = 100;
     
-    // Add event listeners for RTS mode
-    document.addEventListener('mousedown', onRTSMouseDown);
+    // Add event listeners for RTS mode using InputManager
+    window.inputManager.on('mousedown', onRTSMouseDown);
+    
+    // Handle context menu prevention for RTS mode 
+    // Note: This still needs to be a direct DOM listener as InputManager doesn't handle contextmenu events
     document.addEventListener('contextmenu', function(event) {
         // Prevent context menu in RTS mode
         if (window.isRTSViewActive) {
@@ -882,3 +885,33 @@ function showClickIndicator(position) {
 if (typeof window.registerAnimationCallback === 'function') {
     window.registerAnimationCallback(window.updateRTSView);
 }
+// Add this at the top of the file - a wrapper function for establishing event handlers
+function setupRTSEventHandlers() {
+    // Use InputManager for mouse movement in RTS mode
+    window.inputManager.on('mousemove', handleRTSMouseMove);
+    window.inputManager.on('mousedown', handleRTSMouseDown);
+    
+    // We can't prevent default context menu through InputManager, so keep this one direct handler
+    document.addEventListener('contextmenu', function(event) {
+        // Prevent context menu in RTS mode
+        if (window.isRTSViewActive) {
+            event.preventDefault();
+        }
+    });
+    
+    console.log("[RTS] Event handlers registered with InputManager");
+}
+
+// Call the setup function when the file is loaded
+if (window.inputManager) {
+    setupRTSEventHandlers();
+} else {
+    // Wait for InputManager to be available
+    const checkInterval = setInterval(() => {
+        if (window.inputManager) {
+            clearInterval(checkInterval);
+            setupRTSEventHandlers();
+        }
+    }, 100);
+}
+

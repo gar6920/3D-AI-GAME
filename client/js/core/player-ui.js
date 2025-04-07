@@ -35,19 +35,26 @@ class PlayerUI {
         const parentElement = options.parent || document.body;
         parentElement.appendChild(element);
 
-        // Add event listeners
+        // Add event listeners through InputManager
         if (options.listeners) {
             Object.entries(options.listeners).forEach(([event, listener]) => {
-                element.addEventListener(event, listener);
+                // Register the element with InputManager
+                if (!element.id) {
+                    element.id = `auto-id-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+                }
+                window.inputManager.registerUIElement(element.id, event, listener);
             });
         }
         
         // Assign onclick if provided directly
         if (options.onclick) {
-            element.onclick = options.onclick;
+            if (!element.id) {
+                element.id = `auto-id-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+            }
+            window.inputManager.registerUIElement(element.id, 'click', options.onclick);
         }
 
-        console.log(`UIManager: Added element <${elementType}> with ID: ${options.id || 'N/A'}`);
+        console.log(`UIManager: Added element <${elementType}> with ID: ${options.id || element.id || 'N/A'}`);
         return element; // Return the created element
     }
     
@@ -204,7 +211,7 @@ class PlayerUI {
     // Set up key event listeners for player list toggle
     setupPlayerListKeyControls() {
         // Toggle player list on 'Tab' key
-        document.addEventListener('keydown', (event) => {
+        window.inputManager.on('keydown', (event) => {
             if (event.key === 'Tab') {
                 event.preventDefault(); // Prevent default tab behavior
                 this.togglePlayerList();
@@ -217,7 +224,7 @@ class PlayerUI {
         // Set up click listener for header
         const playerListHeader = document.getElementById('player-list-header');
         if (playerListHeader) {
-            playerListHeader.addEventListener('click', () => this.togglePlayerList());
+            window.inputManager.registerUIElement('player-list-header', 'click', () => this.togglePlayerList());
         }
     }
 
@@ -310,9 +317,9 @@ if (typeof window !== 'undefined') {
     window.PlayerUI = PlayerUI;
     window.playerUI = playerUI;
     
-    // Initialize when DOM is ready
-    document.addEventListener('DOMContentLoaded', () => {
-        console.log("DOM loaded - initializing player UI");
+    // Initialize when DOM is ready using InputManager
+    window.inputManager.on('domcontentloaded', () => {
+        console.log("DOM loaded via InputManager - initializing player UI");
         playerUI.init();
     });
     

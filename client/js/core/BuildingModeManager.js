@@ -45,7 +45,10 @@ class BuildingModeManager {
         console.log("Building mode manager initialized, waiting for DOM...");
         
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => this.init());
+            // Use InputManager for DOM loaded events
+            setTimeout(() => {
+                window.inputManager.on('domcontentloaded', () => this.init());
+            }, 0);
         } else {
             // If DOMContentLoaded already fired, wait a bit to make sure the game loaded
             setTimeout(() => this.init(), 2000);
@@ -58,10 +61,10 @@ class BuildingModeManager {
         // Global flag to track if user has interacted with the game
         window.hasInteracted = false;
         
-        // Add listener to set interacted flag
-        document.addEventListener('click', function() {
+        // Add listener to set interacted flag through InputManager
+        window.inputManager.on('mousedown', function() {
             window.hasInteracted = true;
-        }, { once: true });
+        });
         
         // Create UI elements
         this.createUIElements();
@@ -144,8 +147,12 @@ class BuildingModeManager {
             button.style.zIndex = '1002';
             button.style.pointerEvents = 'auto';
             
-            // Add button click handler with special handling
-            button.addEventListener('click', (event) => {
+            // Add button click handler through InputManager for each structure type button
+            button.id = `building-button-${type.id}`; // Assign unique ID for InputManager
+            this.buildingMenu.appendChild(button);
+            
+            // Register with InputManager
+            window.inputManager.registerUIElement(`building-button-${type.id}`, 'click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 this.selectStructureType(type.id);
@@ -155,12 +162,11 @@ class BuildingModeManager {
                     window.controls.unlock();
                 }
             });
-            
-            this.buildingMenu.appendChild(button);
         });
         
         // Add rotate button
         const rotateButton = document.createElement('button');
+        rotateButton.id = 'building-rotate-button';  // Assign ID for InputManager
         rotateButton.textContent = 'Rotate (Q/E)';
         rotateButton.title = 'Hold Q or E to rotate smoothly in 15° increments';
         rotateButton.style.margin = '0 5px';
@@ -173,8 +179,10 @@ class BuildingModeManager {
         rotateButton.style.position = 'relative';
         rotateButton.style.zIndex = '1002';
         rotateButton.style.pointerEvents = 'auto';
+        this.buildingMenu.appendChild(rotateButton);
         
-        rotateButton.addEventListener('click', (event) => {
+        // Register with InputManager
+        window.inputManager.registerUIElement('building-rotate-button', 'click', (event) => {
             event.preventDefault();
             event.stopPropagation();
             this.rotateStructure();
@@ -184,153 +192,116 @@ class BuildingModeManager {
                 window.controls.unlock();
             }
         });
-        
-        this.buildingMenu.appendChild(rotateButton);
     }
     
     setupEventListeners() {
-        // Setup keyboard event listeners
-        document.addEventListener('keydown', (event) => {
+        // Setup keyboard event listeners using InputManager
+        window.inputManager.on('keydown', (event) => {
+            // Normalize event to handle both direct DOM events and InputManager wrapper events
+            const key = event.key !== undefined ? event.key : 
+                        (event.event ? event.event.key : null);
+                        
+            console.log("[BuildingMode] Keydown event:", key, event);
+            
+            // Don't process if we're in an input field
+            if (document.activeElement.tagName === 'INPUT' || 
+                document.activeElement.tagName === 'TEXTAREA') {
+                return;
+            }
+            
             // B key toggles building mode
-            if (event.key === 'b' || event.key === 'B') {
+            if (key === 'b' || key === 'B') {
                 this.toggle();
             }
             
-            // Only handle these keys if in building mode
-            if (this.active) {
-                // Handle rotation keys
-                if (event.key === 'q' || event.key === 'Q') {
-                    // Skip if interval already exists
-                    if (!this.rotationInterval) {
-                        // Single keypress rotation
-                        this.rotation = (this.rotation - 15) % 360;
+            // Only process other keys if building mode is active
+            if (!this.active) return;
+            
+            // Q key rotates structure counter-clockwise
+            if (key === 'q' || key === 'Q') {
+                console.log("[BuildingMode] Q key pressed, rotating counter-clockwise");
+                // Skip if interval already exists
+                if (!this.rotationInterval) {
+                    // Single keypress rotation
+                    this.rotation = (this.rotation - 15) % 360;
+                    if (this.rotation < 0) this.rotation += 360;
+                    
+                    console.log("[BuildingMode] New rotation:", this.rotation + "°");
+                    
+                    // Update preview
+                    if (this.lastMousePosition) {
+                        this.updatePreviewPosition(this.lastMousePosition);
+                    }
+                    
+                    // Set up interval for continuous rotation
+                    this.rotationInterval = setInterval(() => {
+                        this.rotation = (this.rotation - this.rotationSpeed) % 360;
                         if (this.rotation < 0) this.rotation += 360;
                         
-                        // Update preview
-                        if (this.lastMousePosition) {
-                            this.updatePreviewPosition(this.lastMousePosition);
-                        }
-                        
-                        // Set up interval for continuous rotation
-                        this.rotationInterval = setInterval(() => {
-                            this.rotation = (this.rotation - this.rotationSpeed) % 360;
-                            if (this.rotation < 0) this.rotation += 360;
-                            
-                            // Update preview
-                            if (this.lastMousePosition) {
-                                this.updatePreviewPosition(this.lastMousePosition);
-                            }
-                        }, this.rotationIntervalMs);
-                    }
-                } 
-                else if (event.key === 'e' || event.key === 'E') {
-                    // Skip if interval already exists
-                    if (!this.rotationInterval) {
-                        // Single keypress rotation
-                        this.rotation = (this.rotation + 15) % 360;
+                        console.log("[BuildingMode] Continuous rotation:", this.rotation + "°");
                         
                         // Update preview
                         if (this.lastMousePosition) {
                             this.updatePreviewPosition(this.lastMousePosition);
                         }
-                        
-                        // Set up interval for continuous rotation
-                        this.rotationInterval = setInterval(() => {
-                            this.rotation = (this.rotation + this.rotationSpeed) % 360;
-                            
-                            // Update preview
-                            if (this.lastMousePosition) {
-                                this.updatePreviewPosition(this.lastMousePosition);
-                            }
-                        }, this.rotationIntervalMs);
+                    }, this.rotationIntervalMs);
+                }
+            }
+            // E key rotates structure clockwise
+            else if (key === 'e' || key === 'E') {
+                console.log("[BuildingMode] E key pressed, rotating clockwise");
+                // Skip if interval already exists
+                if (!this.rotationInterval) {
+                    // Single keypress rotation
+                    this.rotation = (this.rotation + 15) % 360;
+                    
+                    console.log("[BuildingMode] New rotation:", this.rotation + "°");
+                    
+                    // Update preview
+                    if (this.lastMousePosition) {
+                        this.updatePreviewPosition(this.lastMousePosition);
                     }
+                    
+                    // Set up interval for continuous rotation
+                    this.rotationInterval = setInterval(() => {
+                        this.rotation = (this.rotation + this.rotationSpeed) % 360;
+                        
+                        console.log("[BuildingMode] Continuous rotation:", this.rotation + "°");
+                        
+                        // Update preview
+                        if (this.lastMousePosition) {
+                            this.updatePreviewPosition(this.lastMousePosition);
+                        }
+                    }, this.rotationIntervalMs);
                 }
-                
-                // Escape key - exit building mode
-                if (event.key === 'Escape') {
-                    this.toggle();
-                }
+            }
+            
+            // Escape key - exit building mode
+            if (key === 'Escape') {
+                this.toggle();
             }
         });
         
         // Setup keyup event for rotation
-        document.addEventListener('keyup', (event) => {
-            if ((event.key === 'q' || event.key === 'Q' || event.key === 'e' || event.key === 'E') && this.rotationInterval) {
+        window.inputManager.on('keyup', (event) => {
+            // Normalize event
+            const key = event.key !== undefined ? event.key : 
+                       (event.event ? event.event.key : null);
+                       
+            console.log("[BuildingMode] Keyup event:", key, event);
+            
+            if ((key === 'q' || key === 'Q' || key === 'e' || key === 'E') && this.rotationInterval) {
+                console.log("[BuildingMode] Stopping continuous rotation");
                 clearInterval(this.rotationInterval);
                 this.rotationInterval = null;
             }
         });
         
-        // Setup for debug info
-        document.addEventListener('keydown', (event) => {
-            // Press Shift+S to show structure info
-            if (event.key === 'S' && event.shiftKey) {
-                console.log("=== STRUCTURE DEBUG INFO ===");
-                
-                // Check if we have structures in memory
-                if (this.worldStructuresMap) {
-                    console.log(`Total structures in memory: ${this.worldStructuresMap.size}`);
-                    
-                    // List all structures
-                    if (this.worldStructuresMap.size > 0) {
-                        let i = 1;
-                        this.worldStructuresMap.forEach((mesh, key) => {
-                            console.log(`${i}. ${key} at (${Math.round(mesh.position.x)}, ${Math.round(mesh.position.z)})`);
-                            i++;
-                        });
-                    }
-                } else {
-                    console.log("No worldStructuresMap found");
-                }
-                
-                // Check server structures
-                if (window.room && window.room.state && window.room.state.structures) {
-                    console.log(`Total structures on server: ${window.room.state.structures.size}`);
-                    
-                    // List all server structures
-                    if (window.room.state.structures.size > 0) {
-                        let i = 1;
-                        window.room.state.structures.forEach((structure, key) => {
-                            console.log(`${i}. ${key} - ${structure.structureType} at (${structure.x}, ${structure.z})`);
-                            i++;
-                        });
-                    }
-                } else {
-                    console.log("No server structures available");
-                }
-                
-                console.log("===========================");
-            }
-            
-            // Press Shift+R to resync structures
-            if (event.key === 'R' && event.shiftKey) {
-                console.log("Force resyncing structures from server");
-                
-                // Clear and rebuild all structures
-                if (this.worldStructuresMap) {
-                    // Remove all structures from scene
-                    this.worldStructuresMap.forEach((mesh, key) => {
-                        this.removeStructureFromWorld(key);
-                    });
-                    
-                    // Recreate from server
-                    if (window.room && window.room.state && window.room.state.structures) {
-                        console.log(`Recreating ${window.room.state.structures.size} structures from server`);
-                        window.room.state.structures.forEach((structure, key) => {
-                            this.createStructureInWorld(structure, key);
-                        });
-                    }
-                }
-            }
-        });
+        // Setup mouse event listeners using InputManager
+        window.inputManager.on('mousemove', this.handleMouseMove.bind(this));
+        window.inputManager.on('mousedown', this.handleMouseDown.bind(this));
         
-        // Set up mouse motion tracking
-        document.addEventListener('mousemove', (event) => {
-            window.lastMouseEvent = event;
-            if (this.active) {
-                this.updateCursorPosition(event);
-            }
-        });
+        console.log("[BuildingModeManager] Set up all listeners through InputManager");
     }
     
     toggle() {
@@ -407,8 +378,11 @@ class BuildingModeManager {
             this.clickInterceptor.style.zIndex = '900'; // Below our UI but above everything else
             this.clickInterceptor.style.pointerEvents = 'all';
 
-            // Completely rewrite the click handling for reliability - SIMPLIFIED VERSION
-            this.clickInterceptor.addEventListener('mousedown', (event) => {
+            // Add to DOM first so it can be registered
+            document.body.appendChild(this.clickInterceptor);
+
+            // Register with InputManager
+            window.inputManager.registerUIElement('build-click-interceptor', 'click', (event) => {
                 // Only handle LEFT CLICKS (button 0)
                 if (event.button !== 0) return;
                 
@@ -438,12 +412,13 @@ class BuildingModeManager {
                     // Important: Force refresh preview position after building
                     setTimeout(() => {
                         // Force cursor update with current mouse position
-                        if (event) this.updateCursorPosition(event);
+                        if (event) this.updateCursorPosition({
+                            clientX: event.clientX,
+                            clientY: event.clientY
+                        });
                     }, 50);
                 }
             });
-
-            document.body.appendChild(this.clickInterceptor);
             
             // Position cursor at center initially
             this.updateCursorPosition({
@@ -452,7 +427,7 @@ class BuildingModeManager {
             });
             
             // Start tracking mouse movement for placement preview
-            document.addEventListener('mousemove', this.updateCursorPosition);
+            window.inputManager.on('mousemove', this.updateCursorPosition);
             
             // Modify building menu button styles to ensure they're clickable
             const allButtons = this.buildingMenu.querySelectorAll('button');
@@ -466,7 +441,7 @@ class BuildingModeManager {
             document.documentElement.classList.remove('hide-cursor');
             
             // Stop tracking mouse movement
-            document.removeEventListener('mousemove', this.updateCursorPosition);
+            window.inputManager.off('mousemove', this.updateCursorPosition);
             
             // Restore cursor style
             document.body.style.cursor = 'default';
@@ -505,12 +480,18 @@ class BuildingModeManager {
     }
     
     updateCursorPosition(event) {
+        // Normalize event to handle both direct DOM events and InputManager wrapper events
+        const clientX = event.clientX !== undefined ? event.clientX : 
+                        (event.position ? event.position.x : window.innerWidth / 2);
+        const clientY = event.clientY !== undefined ? event.clientY : 
+                        (event.position ? event.position.y : window.innerHeight / 2);
+        
         // Update 2D cursor preview position
-        this.placementPreview.style.left = event.clientX + 'px';
-        this.placementPreview.style.top = event.clientY + 'px';
+        this.placementPreview.style.left = clientX + 'px';
+        this.placementPreview.style.top = clientY + 'px';
         
         // Get 3D world position from screen position
-        const worldPos = this.screenToWorld(event.clientX, event.clientY);
+        const worldPos = this.screenToWorld(clientX, clientY);
         
         if (worldPos && this.active) {
             // Save last position
@@ -948,19 +929,21 @@ class BuildingModeManager {
         };
         
         // Start the listener setup when ready
-        const startListening = () => {
-            if (document.readyState === 'complete') {
-                checkForRoom();
-            } else {
-                window.addEventListener('load', checkForRoom);
-            }
-        };
+        if (document.readyState === 'complete') {
+            checkForRoom();
+        } else {
+            // Register with InputManager for the load event
+            window.inputManager.dispatchEvent('loadstructures', {
+                callback: checkForRoom
+            });
+            
+            // We'll need a global handler since InputManager doesn't directly support load events
+            window.loadStructuresHandler = checkForRoom;
+        }
         
-        startListening();
-        
-        // Also listen for avatarReady event
-        window.addEventListener('avatarReady', () => {
-            console.log("'avatarReady' event received, setting up structure listeners.");
+        // Also register for avatarReady custom event
+        window.inputManager.on('avatarReady', () => {
+            console.log("'avatarReady' event received via InputManager, setting up structure listeners.");
             checkForRoom();
         });
     }
@@ -996,23 +979,120 @@ class BuildingModeManager {
             return originalPointerLockInit.apply(this, arguments);
         };
 
-        // Add a listener to prevent pointer lock even if another system tries to request it
-        document.addEventListener('pointerlockchange', function() {
+        // Add listeners for pointer lock events through InputManager
+        // Create handler functions that can be registered
+        const handlePointerLockChange = () => {
             if (window.preventPointerLock && document.pointerLockElement) {
                 // If pointer lock was activated while it should be prevented, exit it immediately
                 document.exitPointerLock();
                 console.log("Forced exit of pointer lock - building mode active");
             }
-        }, false);
-
-        // Also listen for the pointer lock error event to avoid console errors
-        document.addEventListener('pointerlockerror', function(event) {
+        };
+        
+        const handlePointerLockError = (event) => {
             if (window.preventPointerLock) {
                 // Prevent the error from propagating when we're in building mode
                 event.preventDefault();
                 console.log("Prevented pointer lock error while in building mode");
             }
-        }, false);
+        };
+        
+        // We still need to use direct DOM listeners for these browser events
+        // as they aren't standard input events handled by InputManager
+        document.addEventListener('pointerlockchange', handlePointerLockChange, false);
+        document.addEventListener('pointerlockerror', handlePointerLockError, false);
+    }
+    
+    handleMouseMove(event) {
+        // Only process if building mode is active
+        if (this.active) {
+            // Normalize event to extract clientX and clientY
+            const clientX = event.clientX !== undefined ? event.clientX : 
+                           (event.position ? event.position.x : null);
+            const clientY = event.clientY !== undefined ? event.clientY : 
+                           (event.position ? event.position.y : null);
+                           
+            if (clientX !== null && clientY !== null) {
+                this.updateCursorPosition({
+                    clientX: clientX,
+                    clientY: clientY,
+                    originalEvent: event
+                });
+            }
+            
+            // Store the last event for potential reference
+            this.lastMouseEvent = event;
+        }
+        // Always update for potential hover effects
+        window.lastMouseEvent = event;
+    }
+    
+    handleMouseDown(event) {
+        // Only process if building mode is active
+        if (this.active) {
+            // Get button value
+            const button = event.button !== undefined ? event.button : 
+                           (event.event ? event.event.button : 0);
+                           
+            if (button === 0) { // Left button (0)
+                // Get clientX and clientY
+                const clientX = event.clientX !== undefined ? event.clientX : 
+                               (event.position ? event.position.x : null);
+                const clientY = event.clientY !== undefined ? event.clientY : 
+                               (event.position ? event.position.y : null);
+                               
+                if (clientX !== null && clientY !== null) {
+                    this.placeStructure({
+                        clientX: clientX,
+                        clientY: clientY,
+                        button: button,
+                        originalEvent: event
+                    });
+                }
+            }
+        }
+    }
+    
+    placeStructure(event) {
+        // Get cursor position from normalized event
+        const clientX = event.clientX !== undefined ? event.clientX : 
+                       (event.position ? event.position.x : null);
+        const clientY = event.clientY !== undefined ? event.clientY : 
+                       (event.position ? event.position.y : null);
+                       
+        if (clientX === null || clientY === null) {
+            console.error("[BuildingMode] Missing coordinates in placeStructure event", event);
+            return;
+        }
+        
+        // Get world position
+        const worldPos = this.screenToWorld(clientX, clientY);
+        if (!worldPos) return;
+        
+        // Ensure we have a structure selected
+        if (!this.currentStructure) {
+            console.warn("[BuildingMode] No structure type selected");
+            return;
+        }
+        
+        // Check if position is valid
+        const isValid = this.checkPlacementValidity(worldPos);
+        if (!isValid) {
+            console.warn("[BuildingMode] Cannot place structure here - invalid position");
+            return;
+        }
+        
+        // Send placement request to server
+        if (window.room) {
+            window.room.send("placeStructure", {
+                x: Math.round(worldPos.x),
+                z: Math.round(worldPos.z),
+                type: this.currentStructure,
+                rotation: this.rotation
+            });
+            
+            console.log(`[BuildingMode] Requested to place ${this.currentStructure} at (${Math.round(worldPos.x)}, ${Math.round(worldPos.z)}) with rotation ${this.rotation}°`);
+        }
     }
 }
 

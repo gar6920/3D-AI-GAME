@@ -37,16 +37,41 @@ The core platform provides foundational functionality that all game implementati
   - Loads core modules and initializes the game engine
   - Sets up default player factory and statically loads the 'default' implementation.
   - Dynamically loads implementation-specific modules using the implementation manifest
+  - Initializes the core `InputManager`, `ActionManager`, and `UIManager` instances.
 
 - **controls.js:**
-  - Handles player input (keyboard/mouse), manages different camera control schemes (PointerLock, Orbit, FreeCam, RTS panning/zoom).
+  - **DEPRECATED for raw input handling.** Raw keyboard/mouse events are now exclusively handled by `InputManager`.
+  - Manages different camera control schemes (PointerLock, Orbit, FreeCam, RTS panning/zoom).
   - Supports first-person, third person, free roam, and RTS view modes
-  - Manages input handling for keyboard and mouse
   - Sends calculated rotation values to the server for player rotation.
   - Implements quaternion-based rotation for smooth local camera movement.
   - Applies direct rotation to player mesh for immediate visual feedback.
   - Distinguishes between rotation controls through mouse movement and keyboard (Q/E keys).
   - Run is default movement, Shift activates walking.
+  - **Note:** While raw input capture is moved, camera logic and view mode switching may still reside here, but should ideally be triggered by actions from `ActionManager`.
+
+- **Refactored Input System:**
+  - Implements a modular, extensible input handling architecture through `InputManager` and `ActionManager`.
+  - **InputManager**: 
+    - Exclusively captures all raw keyboard (`keydown`, `keyup`) and mouse (`mousedown`, `mouseup`, `mousemove`, `click`, `wheel`) events from the DOM using its internal `addEventListener` calls. *No other module should directly listen to these raw DOM input events.*
+    - Tracks the state of keys and mouse buttons.
+    - Provides an event system (`on`, `off`, `dispatchEvent`) for other modules to subscribe to specific input events or custom events.
+    - Manages UI interactions via `registerUIElement` and `unregisterUIElement`, ensuring UI clicks are handled centrally.
+    - Provides helper methods like `isKeyPressed`, `getMousePosition`.
+    - Resides globally as `window.inputManager`.
+  - **ActionManager**: 
+    - Translates raw inputs received from `InputManager` into semantic game actions (e.g., 'move_forward', 'jump', 'toggle_building') based on registered bindings.
+    - Maintains awareness of the current game context (e.g., 'firstPerson', 'building', 'rtsView') to potentially alter action behavior.
+    - Provides an event system (`onAction`, `offAction`) for game components to react to actions instead of raw input.
+    - Resides globally as `window.actionManager`.
+  - **GameIntegration**: 
+    - Connects existing game systems (like view toggling, building mode toggling) to the new action-based architecture by subscribing to actions via `ActionManager.onAction`.
+  - Benefits:
+    - **Centralized Input Capture:** All raw DOM input goes through `InputManager`.
+    - **Context-Aware Actions:** Enables different input behaviors in different game modes.
+    - **Improved Separation of Concerns:** Input capture, action mapping, and game logic are distinct.
+    - **Maintainable Event Handling:** Eliminates scattered `addEventListener` calls for inputs.
+    - **No Fallbacks:** The system now relies exclusively on `InputManager`; fallbacks to direct DOM listeners have been removed.
 
 - **game-engine.js:**
   - Initializes the Three.js scene, renderer, and camera
@@ -68,10 +93,12 @@ The core platform provides foundational functionality that all game implementati
     - Creates varied terrain appearance through procedural noise patterns
     - Applies random color variations for a more natural look
     - Optimizes performance with appropriate texture resolution and repetition
+  - Triggers view mode changes based on actions from `ActionManager`.
+  - Suppresses player movement/animation logic based on `ActionManager` context (Free Camera or RTS modes).
 
 - **network-core.js:**
   - Establishes and maintains WebSocket connection to the server via Colyseus
-  - Sends player input state (keys, rotation, viewMode) to the server
+  - Sends player input state (keys, rotation, viewMode) to the server, sourcing state directly from `InputManager.serverInputState`.
   - Processes state updates from the server
   - Creates/updates/removes visual representations of remote players based on server state.
   - Applies server-sent animation state (`currentAnimation`) to remote player models.
@@ -81,7 +108,11 @@ The core platform provides foundational functionality that all game implementati
 - **BuildingModeManager.js:**
   - Implements a class-based encapsulation of the building mode functionality
   - Manages the UI elements for building mode (structure selection buttons, placement preview)
-  - Handles toggle between game and building modes (activated with B key)
+  - Uses `InputManager` to handle the 'B' key press for toggling modes.
+  - Uses `InputManager` to handle 'Q'/'E' keys for rotation.
+  - Uses `InputManager` via `registerUIElement` for handling clicks on its UI buttons and the placement interceptor.
+  - Handles structure placement logic based on `InputManager` mouse events.
+  - Manages toggle between game and building modes (activated with B key)
   - Manages structure rotation controls (Q/E keys for 15° increments)
   - Implements real-time structure placement validation and visual feedback
   - Provides 3D preview models for different structure types
@@ -230,6 +261,7 @@ Each game implementation extends the core platform with specific gameplay mechan
 - Proper separation of local and remote player handling
 - Resilient error handling for edge cases
 - Different rotation handling for local vs remote players
+- Client sends input state (sourced directly from `InputManager.serverInputState`) via `updateInput` message.
 
 ### 6. Building System
 **Technology:** Three.js for rendering, Colyseus for server-side validation and synchronization.
@@ -243,12 +275,12 @@ Each game implementation extends the core platform with specific gameplay mechan
 - Seamless operation across all camera modes
 
 **Client Components:**
-- **BuildingModeManager.js**: Encapsulates all building mode functionality in a class-based architecture:
+- **BuildingModeManager.js**: Encapsulates all building mode functionality:
   - UI overlay creation and management
   - Structure selection menu with different building types
   - Placement preview system with valid/invalid visual feedback
-  - Mouse event handling for structure placement
-  - Keyboard controls for rotation (Q/E keys)
+  - Mouse event handling for structure placement and UI clicks via `InputManager.on('mousedown')` and `InputManager.registerUIElement`
+  - Keyboard controls ('B' toggle, 'Q'/'E' rotation) handled via `InputManager.on('keydown')`
   - Communication with server for placement validation
   - Integration with the main game's controls and camera systems
   - Compatible with all view modes (first-person, third-person, RTS)
@@ -378,6 +410,7 @@ The procedural terrain system creates a natural-looking ground:
   - Layout adjusts dynamically based on player count (full screen for 1 player, top/bottom for 2 players, grid for 3-4 players)
   - Players can use keyboard/mouse or gamepads, with automatic assignment
   - Electron window maximizes automatically for optimal viewing experience
+- Input system refactored to exclusively use `InputManager` for raw DOM event capture (keyboard and mouse) and `ActionManager` for translating inputs to game actions. Direct `addEventListener` calls for these inputs outside `InputManager` have been removed.
 
 ## Data Flow
 
@@ -394,8 +427,14 @@ The procedural terrain system creates a natural-looking ground:
 7.  **Server Connection**: Client connects to Server via WebSocket (Colyseus `network-core.js`).
 8.  **Join Room**: Client joins the 'active' room (`DefaultRoom.js`).
 9.  **State Sync**: Server sends initial `GameState` to Client. Player entities are created client-side (`network-core.js` using `EntityFactory`).
-10. **Input**: Client sends input state (keys pressed, mouse movement, rotation) to Server (`controls.js` -> `network-core.js` -> `BaseRoom.js`).
-11. **Server Processing**: Server updates player state based on input, performs physics/collision checks (`BaseRoom.js` or `DefaultRoom.js`).
+10. **Input**: 
+    - `InputManager` captures raw keyboard/mouse DOM events.
+    - `InputManager` updates its internal state and `serverInputState`.
+    - `InputManager` triggers events (`keydown`, `click`, etc.).
+    - `ActionManager` listens to `InputManager` events, translates them to actions based on context, and triggers action events (`move_forward`, `toggle_building`).
+    - Game components (like `BuildingModeManager`, view toggling logic) listen to `ActionManager` actions.
+    - `network-core.js` periodically reads `InputManager.serverInputState` and sends it to the server.
+11. **Server Processing**: Server updates player state based on received `serverInputState`, performs physics/collision checks (`BaseRoom.js` or `DefaultRoom.js`).
 12. **State Broadcast**: Server broadcasts delta updates of the `GameState` to all clients.
 13. **Client Update**: Client receives state updates, interpolates remote player positions, updates local visuals (`network-core.js`).
 14. **Building**:
@@ -423,8 +462,9 @@ Significant changes were made to the core initialization flow and module managem
 3.  **Manager Objects:**
     *   To centralize control and dependencies, several manager objects are now created and attached to the `window` object within `client/js/main.js` *after* the core modules load but *before* the game engine fully initializes:
         *   `window.networkInterface`: Wraps network functionality (Colyseus client/room).
-        *   `window.inputManager`: Manages core input state, pointer lock, and provides an `addKeyListener` method for different modules (like `BuildModeManager`) to register specific key handlers without conflicting with global controls.
-        *   `window.uiManager`: An instance of the `PlayerUI` class (`core/player-ui.js`). It initially handled player list UI but was augmented with generic `addElement` and `updateHUD` methods to support other UI needs, such as the Build Mode interface.
+        *   `window.inputManager`: An instance of the `InputManager` class. Captures all raw DOM inputs (keyboard, mouse), manages UI element interactions (`registerUIElement`), and provides an event system (`on`, `off`). It is the **sole** handler of raw DOM input events.
+        *   `window.actionManager`: An instance of the `ActionManager` class. Translates raw inputs from `InputManager` into context-aware game actions.
+        *   `window.uiManager`: An instance of the `PlayerUI` class (`core/player-ui.js`). Handles shared UI elements.
 
 4.  **Delayed Initialization (`gameEngineReady` Event):**
     *   `core/game-engine.js` now fires a `gameEngineReady` custom event on the `window` *after* the core engine components (scene, camera, renderer, controls) are fully set up.
@@ -433,9 +473,10 @@ Significant changes were made to the core initialization flow and module managem
 
 5.  **Build Mode Integration:**
     *   `BuildModeManager` (`core/BuildModeManager.js`) is now loaded and initialized as part of the new flow, triggered by the `gameEngineReady` event.
-    *   It utilizes `window.inputManager.addKeyListener` to bind the 'B' key to its `toggleBuildMode` function, separating it from the main movement controls in `core/controls.js`.
-    *   It uses `window.uiManager` (`PlayerUI` instance) to create its UI buttons and menu via `addElement`, and to update the HUD state via `updateHUD`.
-    *   **Current Status:** While the `BuildModeManager` initializes correctly and the 'B' key successfully calls `toggleBuildMode` without errors, the *actual* build mode functionality (visual placement indicator, preview meshes, pointer event handling for placement) is **not currently working** as expected following the refactor. Further debugging is required to restore this functionality.
+    *   It utilizes `window.inputManager.on('keydown', ...)` to bind the 'B', 'Q', and 'E' keys to its methods.
+    *   It uses `window.inputManager.registerUIElement(...)` to handle clicks on its UI buttons and the placement interceptor.
+    *   It uses `window.uiManager` (`PlayerUI` instance) to create its UI elements via `addElement`.
+    *   **Current Status:** The integration with the refactored input system is complete. Building mode toggling and UI interactions should now correctly use `InputManager`.
 
 ## Project Structure
 ```

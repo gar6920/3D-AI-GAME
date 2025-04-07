@@ -102,47 +102,48 @@ window.initControls = function(camera, domElement) {
         document.body.style.cursor = 'auto';
     });
 
-    // Keyboard listeners for movement remain as-is
-    document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('keyup', onKeyUp);
+    // Use InputManager for all input handling
+    window.inputManager.on('keydown', onKeyDown);
+    window.inputManager.on('keyup', onKeyUp);
     
     // Mouse button handlers for classic third-person orbital controls
-    document.addEventListener('mousedown', (event) => {
-        if (event.button === 2) { // Right mouse button
+    window.inputManager.on('mousedown', (data) => {
+        if (data.button === 2) { // Right mouse button
             window.rightMouseDown = true;
-        } else if (event.button === 1) { // Middle mouse button (scroll wheel click)
+        } else if (data.button === 1) { // Middle mouse button (scroll wheel click)
             window.middleMouseDown = true;
         }
     });
     
-    document.addEventListener('mouseup', (event) => {
-        if (event.button === 2) { // Right mouse button
+    window.inputManager.on('mouseup', (data) => {
+        if (data.button === 2) { // Right mouse button
             window.rightMouseDown = false;
-        } else if (event.button === 1) { // Middle mouse button
+        } else if (data.button === 1) { // Middle mouse button
             window.middleMouseDown = false;
         }
     });
     
-    // Prevent context menu from appearing on right-click
+    // Prevent context menu from appearing on right-click (keep as direct)
     document.addEventListener('contextmenu', (event) => {
         event.preventDefault();
     });
 
-    // Add mouse movement tracking with sensitivity adjustment and fix inversion
-    document.addEventListener('mousemove', (event) => {
+    // Use InputManager for mouse movement
+    window.inputManager.on('mousemove', (data) => {
         if (document.pointerLockElement) {
             // Apply sensitivity adjustment to mouse movements
             const sensitivity = window.mouseSensitivity.current;
+            const event = data.event;
             
             if (window.isFirstPerson && !window.isFreeCameraMode) {
                 // First-person: Standard FPS mouse look - rotate with mouse movement
                 // Store movement for server synchronization
-                window.inputState.mouseDelta.x += event.movementX * sensitivity;
-                window.inputState.mouseDelta.y -= event.movementY * sensitivity;
+                window.inputState.mouseDelta.x += data.movement.x * sensitivity;
+                window.inputState.mouseDelta.y -= data.movement.y * sensitivity;
                 
                 // Apply rotation locally for immediate response
-                const rotationX = event.movementY * 0.002 * sensitivity; // Vertical rotation (pitch)
-                const rotationY = event.movementX * 0.002 * sensitivity; // Horizontal rotation (yaw)
+                const rotationX = data.movement.y * 0.002 * sensitivity; // Vertical rotation (pitch)
+                const rotationY = data.movement.x * 0.002 * sensitivity; // Horizontal rotation (yaw)
                 
                 // Update local camera rotation immediately
                 if (window.camera) {
@@ -187,10 +188,10 @@ window.initControls = function(camera, domElement) {
                 // Third-person: Only rotate camera when right mouse button is held (classic behavior)
                 if (window.rightMouseDown || window.middleMouseDown) {
                     // X movement orbits camera horizontally around player
-                    window.thirdPersonCameraOrbitX += event.movementX * window.thirdPersonCameraOrbitSpeed;
+                    window.thirdPersonCameraOrbitX += data.movement.x * window.thirdPersonCameraOrbitSpeed;
                     
                     // Y movement changes camera height/angle (with limits to prevent flipping)
-                    window.thirdPersonCameraOrbitY -= event.movementY * window.thirdPersonCameraOrbitSpeed;
+                    window.thirdPersonCameraOrbitY -= data.movement.y * window.thirdPersonCameraOrbitSpeed;
                     window.thirdPersonCameraOrbitY = THREE.MathUtils.clamp(
                         window.thirdPersonCameraOrbitY,
                         window.thirdPersonCameraMinY,
@@ -199,8 +200,8 @@ window.initControls = function(camera, domElement) {
                 }
             } else if (window.isFreeCameraMode) {
                 // Free camera mode: Standard FPS-style look with mouse
-                window.freeCameraYaw -= event.movementX * window.freeCameraRotationSpeed;
-                window.freeCameraPitch -= event.movementY * window.freeCameraRotationSpeed;
+                window.freeCameraYaw -= data.movement.x * window.freeCameraRotationSpeed;
+                window.freeCameraPitch -= data.movement.y * window.freeCameraRotationSpeed;
                 
                 // Limit pitch to avoid flipping
                 window.freeCameraPitch = THREE.MathUtils.clamp(
@@ -220,12 +221,12 @@ window.initControls = function(camera, domElement) {
         }
     });
     
-    // Add mouse wheel zoom for third-person view
-    document.addEventListener('wheel', (event) => {
+    // Use InputManager for mouse wheel
+    window.inputManager.on('wheel', (data) => {
         // Only handle zoom in third-person mode and not affect the server state
         if (!window.isFirstPerson) {
             // Normalize wheel delta across browsers (positive = zoom in, negative = zoom out)
-            const zoomAmount = -Math.sign(event.deltaY) * window.thirdPersonCameraZoomSpeed;
+            const zoomAmount = -data.delta * window.thirdPersonCameraZoomSpeed;
             
             // Apply zoom to the camera distance
             window.thirdPersonCameraDistance = THREE.MathUtils.clamp(
@@ -362,7 +363,12 @@ function onKeyDown(event) {
             break;
 
         case 'KeyV':
-            window.toggleCameraView(); // Call the global toggleCameraView function
+            // Prevent possible duplicate V key events
+            if (!window.isViewToggleKeyDown) {
+                window.isViewToggleKeyDown = true;
+                console.log("[V KEY] Toggling view from:", window.viewMode);
+                window.toggleCameraView(); // Call the global toggleCameraView function
+            }
             break;
         case 'ShiftLeft':
         case 'ShiftRight':
@@ -420,6 +426,10 @@ function onKeyUp(event) {
             
         case 'Space':
             window.inputState.keys.space = false;
+            break;
+        case 'KeyV':
+            // Reset the lock to prevent duplicate events
+            window.isViewToggleKeyDown = false;
             break;
         case 'ShiftLeft':
         case 'ShiftRight':
@@ -576,15 +586,41 @@ function updateRTSCameraMovement(delta) {
 
 // Function to toggle between camera views
 window.toggleCameraView = function() {
+    // Add a guard to prevent double-toggling
+    if (window.isViewToggleActive) {
+        console.log("[TOGGLE] View toggle already in progress, ignoring");
+        return;
+    }
+    
+    // Set the guard to block duplicate calls
+    window.isViewToggleActive = true;
+    
+    // Reset the guard after a short delay
+    setTimeout(() => {
+        window.isViewToggleActive = false;
+    }, 300); // 300ms should be enough to prevent double-triggering
+
+    const previousViewMode = window.viewMode;
+    console.log("[TOGGLE] Current mode:", previousViewMode);
+    
     if (window.viewMode === 'firstPerson') {
         window.viewMode = 'thirdPerson';
         window.isFirstPerson = false;
         window.isFreeCameraMode = false;
         window.isRTSMode = false;
-        if (typeof window.switchToThirdPersonView === 'function') {
-            window.switchToThirdPersonView();
+        try {
+            if (typeof window.switchToThirdPersonView === 'function') {
+                window.switchToThirdPersonView();
+                console.log("[DEBUG] Switched to third-person view");
+            } else {
+                console.error("[ERROR] switchToThirdPersonView function not found");
+            }
+        } catch (error) {
+            console.error("[ERROR] Error switching to third-person view:", error);
+            // Fall back to first-person if third-person fails
+            window.viewMode = 'firstPerson';
+            window.isFirstPerson = true;
         }
-        console.log("[DEBUG] Switched to third-person view");
     } else if (window.viewMode === 'thirdPerson') {
         window.viewMode = 'freeCamera';
         window.isFirstPerson = false;
@@ -596,28 +632,54 @@ window.toggleCameraView = function() {
             pos.y += 3; // Start slightly above the player
             window.camera.position.copy(pos);
         }
-        if (typeof window.switchToFreeCameraView === 'function') {
-            window.switchToFreeCameraView();
+        try {
+            if (typeof window.switchToFreeCameraView === 'function') {
+                window.switchToFreeCameraView();
+                console.log("[DEBUG] Switched to free camera view");
+            } else {
+                console.error("[ERROR] switchToFreeCameraView function not found");
+            }
+        } catch (error) {
+            console.error("[ERROR] Error switching to free camera view:", error);
+            // Fall back to first-person if free camera fails
+            window.viewMode = 'firstPerson';
+            window.isFirstPerson = true;
+            window.isFreeCameraMode = false;
         }
-        console.log("[DEBUG] Switched to free camera view");
     } else if (window.viewMode === 'freeCamera') {
         window.viewMode = 'rtsView';
         window.isFirstPerson = false;
         window.isFreeCameraMode = false;
         window.isRTSMode = true;
-        if (typeof window.switchToRTSView === 'function') {
-            window.switchToRTSView();
+        try {
+            if (typeof window.switchToRTSView === 'function') {
+                window.switchToRTSView();
+                console.log("[DEBUG] Switched to RTS view");
+            } else {
+                console.error("[ERROR] switchToRTSView function not found");
+            }
+        } catch (error) {
+            console.error("[ERROR] Error switching to RTS view:", error);
+            // Fall back to first-person if RTS fails
+            window.viewMode = 'firstPerson';
+            window.isFirstPerson = true;
+            window.isRTSMode = false;
         }
-        console.log("[DEBUG] Switched to RTS view");
     } else {
         window.viewMode = 'firstPerson';
         window.isFirstPerson = true;
         window.isFreeCameraMode = false;
         window.isRTSMode = false;
-        if (typeof window.switchToFirstPersonView === 'function') {
-            window.switchToFirstPersonView();
+        try {
+            if (typeof window.switchToFirstPersonView === 'function') {
+                window.switchToFirstPersonView();
+                console.log("[DEBUG] Switched back to first-person view");
+            } else {
+                console.error("[ERROR] switchToFirstPersonView function not found");
+            }
+        } catch (error) {
+            console.error("[ERROR] Error switching to first-person view:", error);
         }
-        console.log("[DEBUG] Switched back to first-person view");
     }
     
     // Update mouse sensitivity for the new view mode
@@ -639,6 +701,8 @@ window.toggleCameraView = function() {
             viewToggleBtn.textContent = 'RTS View';
         }
     }
+    
+    console.log("[TOGGLE] Changed from", previousViewMode, "to", window.viewMode);
     
     // Return to prevent recursion
     return window.viewMode;

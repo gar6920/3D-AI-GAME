@@ -199,18 +199,39 @@
     <!-- Building Mode Script -->
     <script src="js/core/BuildingModeManager.js" defer></script>
     
+    <!-- Input Management (Step 1) -->
+    <script src="js/core/InputManager.js" defer></script>
+    
+    <!-- Action Management (Step 2) -->
+    <script src="js/core/ActionManager.js" defer></script>
+    
+    <!-- Game Integration (Step 3) -->
+    <script src="js/core/GameIntegration.js" defer></script>
+    
     <!-- Add main keyboard controls -->
     <script>
-    document.addEventListener('keydown', function(event) {
-        // P key triggers multiplayer setup
-        if (event.key === 'p' || event.key === 'P') {
-            // Check if we're in the main window (not an iframe)
-            if (window === window.parent) {
-                console.log("Starting split-screen multiplayer setup");
-                // Create event to trigger player selection UI
-                document.dispatchEvent(new CustomEvent('startLocalMultiplayer'));
+    // Using InputManager for P key (multiplayer setup)
+    document.addEventListener('DOMContentLoaded', function() {
+        // Wait for InputManager to be ready before registering handlers
+        const waitForInputManager = setInterval(() => {
+            if (window.inputManager && typeof window.inputManager.on === 'function') {
+                clearInterval(waitForInputManager);
+                
+                // Register P key through InputManager
+                window.inputManager.on('keydown', function(event) {
+                    if (event.key === 'p' || event.key === 'P') {
+                        // Check if we're in the main window (not an iframe)
+                        if (window === window.parent) {
+                            console.log("Starting split-screen multiplayer setup");
+                            // Create event to trigger player selection UI
+                            document.dispatchEvent(new CustomEvent('startLocalMultiplayer'));
+                        }
+                    }
+                });
+                
+                console.log("Multiplayer setup P key handler registered with InputManager");
             }
-        }
+        }, 100); // Check every 100ms
     });
     </script>
     

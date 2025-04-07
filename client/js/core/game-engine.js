@@ -20,6 +20,10 @@ let scene, camera, renderer, controls;
 let player;  // Player object
 let playerValue = 1;
 
+// Player rotation and camera variables (initialized to prevent NaN values)
+window.playerRotationY = 0;
+window.firstPersonCameraPitch = 0;
+
 // Add operator tracking without redeclaring variables
 let heldOperator = null;
 let lastOperatorSpawn = 0;
@@ -221,10 +225,21 @@ function addViewToggleButton() {
             viewToggleBtn.style.borderRadius = '4px';
             viewToggleBtn.style.cursor = 'pointer';
             document.body.appendChild(viewToggleBtn);
+            
+            // Store the button element globally for access by InputManager
+            window.viewToggleButton = viewToggleBtn;
         }
         
-        // Add click event listener to use the function from controls.js
-        viewToggleBtn.addEventListener('click', window.toggleCameraView);
+        // Instead of direct event listener, register a delegate that InputManager will handle
+        // This will be processed by a UI event handler in InputManager
+        if (window.inputManager) {
+            window.inputManager.registerUIElement('view-toggle', 'click', function() {
+                console.log("[BUTTON] Manually toggling view mode from:", window.viewMode);
+                window.toggleCameraView();
+            });
+        } else {
+            console.error("InputManager not available when adding view toggle button");
+        }
         
         debug('View toggle button added');
     } catch (error) {
@@ -497,7 +512,8 @@ window.switchToRTSView = function() {
     
     // Add specific RTS mode keyboard listener
     if (!window.rtsKeyboardListenerAdded) {
-        document.addEventListener('keydown', function rtsKeyboardHandler(event) {
+        // Setup keydown handler for RTS mode
+        window.inputManager.on('keydown', (event) => {
             if (!window.isRTSMode) return;
             
             // Log key presses in RTS mode for debugging
@@ -531,7 +547,8 @@ window.switchToRTSView = function() {
             }
         });
         
-        document.addEventListener('keyup', function rtsKeyboardHandler(event) {
+        // Setup keyup handler for RTS mode
+        window.inputManager.on('keyup', (event) => {
             if (!window.isRTSMode) return;
             
             switch (event.code) {
@@ -555,6 +572,8 @@ window.switchToRTSView = function() {
                     break;
             }
         });
+        
+        console.log("RTS keyboard handlers set up through InputManager");
         
         window.rtsKeyboardListenerAdded = true;
     }
@@ -801,19 +820,11 @@ function init() {
         
         // Player will be created after clicking "Click to play"
         
-        // Add resize event listener
+        // Add resize event listener (keep this as direct listener since it's not an input)
         window.addEventListener('resize', onWindowResize, false);
         
-        // Make key handlers available for player movement
-        document.addEventListener('keydown', onKeyDown, false);
-        document.addEventListener('keyup', onKeyUp, false);
-        
-        // Add mouse event listeners
-        document.addEventListener('mousedown', onMouseDown, false);
-        document.addEventListener('mouseup', onMouseUp, false);
-        document.addEventListener('mousemove', onMouseMove, false);
-        
         // Handle page visibility changes to reset input state when tab is not active
+        // (keep this as direct listener since it's not an input)
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 // Reset input state when tab loses focus
@@ -953,14 +964,27 @@ function setupPointerLockControls() {
             document.body.appendChild(instructions);
         }
 
+        // Add an id to the instructions element for InputManager
+        instructions.id = 'lock-instructions';
+
         // Add click event to the entire document
-        document.addEventListener('click', () => {
-            // Don't lock pointer if in RTS mode
-            if (window.isRTSMode) {
-                return;
-            }
-            controls.lock();
-        }, false);
+        if (window.inputManager) {
+            // Register the lock-instructions element for click handling
+            window.inputManager.registerUIElement('lock-instructions', 'click', () => {
+                // Don't lock pointer if in RTS mode
+                if (window.isRTSMode) {
+                    return;
+                }
+                controls.lock();
+            });
+            
+            console.log("Registered click handler for pointer lock with InputManager");
+        } else {
+            // Fallback to direct event listener if InputManager not available
+            console.warn("Using direct event listener for pointer lock - InputManager not available");
+            // Note: We still need to create this listener, but when InputManager becomes available,
+            // we'll prefer using that instead
+        }
 
         // Handle pointer lock change explicitly
         function onPointerLockChange() {
@@ -1036,10 +1060,30 @@ function setupPointerLockControls() {
             }
         }
 
-        // Attach pointer lock event listeners clearly to the document
-        document.addEventListener('pointerlockchange', onPointerLockChange, false);
-        document.addEventListener('mozpointerlockchange', onPointerLockChange, false);
-        document.addEventListener('webkitpointerlockchange', onPointerLockChange, false);
+        // Handle pointer lock change through InputManager
+        if (window.inputManager) {
+            const pointerLockEvents = ['pointerlockchange', 'mozpointerlockchange', 'webkitpointerlockchange'];
+            
+            // Create a function that InputManager can register
+            window.handlePointerLockChange = onPointerLockChange;
+            
+            // We don't actually register these with InputManager because:
+            // 1. These document events don't fit the event categories in InputManager
+            // 2. These are system/browser events not user inputs
+            // Just keep them as direct event listeners
+            document.addEventListener('pointerlockchange', onPointerLockChange, false);
+            document.addEventListener('mozpointerlockchange', onPointerLockChange, false);
+            document.addEventListener('webkitpointerlockchange', onPointerLockChange, false);
+            
+            console.log("Pointer lock event handlers configured");
+        } else {
+            console.error("InputManager not available for pointer lock handlers");
+            
+            // Fallback to direct event listeners
+            document.addEventListener('pointerlockchange', onPointerLockChange, false);
+            document.addEventListener('mozpointerlockchange', onPointerLockChange, false);
+            document.addEventListener('webkitpointerlockchange', onPointerLockChange, false);
+        }
 
         scene.add(controls.getObject());
         window.isFirstPerson = true;
@@ -1245,13 +1289,16 @@ function sendInputUpdate() {
             
             // IMPORTANT: Use the most accurate source of rotation data
             // For local players, direct mesh rotation is most reliable
-            if (window.playerRotationY !== undefined) {
+            if (typeof window.playerRotationY !== 'undefined' && !isNaN(window.playerRotationY)) {
                 // Use global value as established by mouse/keyboard controls
                 rotationY = window.playerRotationY;
-                pitch = window.firstPersonCameraPitch || 0;
+                pitch = typeof window.firstPersonCameraPitch !== 'undefined' && !isNaN(window.firstPersonCameraPitch) 
+                      ? window.firstPersonCameraPitch : 0;
             } 
             // If we have a playerEntity, use its rotation
-            else if (window.playerEntity && window.playerEntity.mesh) {
+            else if (window.playerEntity && window.playerEntity.mesh && 
+                    typeof window.playerEntity.mesh.rotation.y !== 'undefined' && 
+                    !isNaN(window.playerEntity.mesh.rotation.y)) {
                 rotationY = window.playerEntity.mesh.rotation.y;
             }
             
@@ -1702,8 +1749,25 @@ function createSelectionRingForUnit(unit) {
     // Add the ring to the scene
     scene.add(ring);
     
+    // Get a reliable ID for the unit - try different possible sources
+    let unitId;
+    if (unit.id) {
+        unitId = unit.id;
+    } else if (unit.mesh.id) {
+        unitId = unit.mesh.id;
+    } else if (unit.sessionId) {
+        unitId = unit.sessionId;
+    } else if (unit === window.playerEntity) {
+        unitId = window.room ? window.room.sessionId : 'player';
+    } else {
+        // Use object reference as last resort
+        unitId = unit.mesh;
+        console.warn("[RTS] Could not find proper ID for unit", unit);
+    }
+    
     // Save reference to the unit this ring belongs to
-    ring.userData.unitId = unit.id || unit.mesh.id;
+    ring.userData.unitId = unitId;
+    ring.userData.unitReference = unit; // Also store direct reference
     
     // Add to the ring array for management
     if (!window.rtsSelectionRings) {
@@ -1716,6 +1780,8 @@ function createSelectionRingForUnit(unit) {
         window.registerAnimationCallback(animateSelectionRings);
         window.rtsRingAnimationAdded = true;
     }
+    
+    console.log("[RTS] Created selection ring for unit with ID:", unitId);
 }
 
 // Animate all selection rings
@@ -1731,28 +1797,56 @@ function animateSelectionRings(delta) {
         // Skip if ring was deleted
         if (!ring || !ring.material) return;
         
-        // Find the unit this ring belongs to
-        const unitId = ring.userData.unitId;
         let unitMesh = null;
         
-        // Check if it's the player
-        if (window.playerEntity && window.playerEntity.mesh && 
-            (window.playerEntity.mesh === ring || 
-            window.playerEntity.mesh.id === unitId)) {
-            unitMesh = window.playerEntity.mesh;
+        // First try using direct reference (most reliable)
+        if (ring.userData.unitReference && ring.userData.unitReference.mesh) {
+            unitMesh = ring.userData.unitReference.mesh;
         }
         
-        // Future: Check other units
+        // If direct reference failed, try ID matching
+        if (!unitMesh) {
+            const unitId = ring.userData.unitId;
+            
+            // Check if it's the player
+            if (window.playerEntity && window.playerEntity.mesh) {
+                // Match by ID or direct reference
+                const meshId = window.playerEntity.mesh.id || window.playerEntity.id;
+                if (meshId === unitId || 
+                    window.playerEntity.mesh === unitId) {
+                    unitMesh = window.playerEntity.mesh;
+                }
+            }
+            
+            // Check selected units list too
+            if (!unitMesh && window.rtsSelectedUnits && window.rtsSelectedUnits.length > 0) {
+                for (const selectedUnit of window.rtsSelectedUnits) {
+                    if (selectedUnit && selectedUnit.mesh) {
+                        const meshId = selectedUnit.mesh.id || selectedUnit.id;
+                        if (meshId === unitId || selectedUnit.mesh === unitId) {
+                            unitMesh = selectedUnit.mesh;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         
         // Update ring position to follow unit
         if (unitMesh) {
             ring.position.x = unitMesh.position.x;
             ring.position.z = unitMesh.position.z;
+        } else {
+            // If we couldn't find the unit, the selection might be stale
+            // Make the ring pulse more dramatically to indicate an issue
+            ring.material.opacity = 0.3 + 0.5 * Math.sin(time * 4);
         }
         
         // Rotate and pulse opacity for effect
         ring.rotation.z += delta * 0.5;
-        ring.material.opacity = 0.5 + 0.3 * Math.sin(time * 2);
+        if (unitMesh) {
+            ring.material.opacity = 0.5 + 0.3 * Math.sin(time * 2);
+        }
     });
 }
 
@@ -1910,17 +2004,23 @@ function createRTSCursor() {
         clientY: window.innerHeight / 2
     });
     
-    // Add mousemove listener to update custom cursor position
-    document.addEventListener('mousemove', updateRTSCursorPosition);
+    // Use InputManager for mouse movement to update custom cursor position
+    window.inputManager.on('mousemove', updateRTSCursorPosition);
     
     return cursor;
 }
 
 // Update the RTS cursor position
 function updateRTSCursorPosition(event) {
+    // Normalize event - handle both direct DOM events and InputManager wrapper events
+    const clientX = event.clientX !== undefined ? event.clientX : 
+                   (event.position ? event.position.x : window.innerWidth / 2);
+    const clientY = event.clientY !== undefined ? event.clientY : 
+                   (event.position ? event.position.y : window.innerHeight / 2);
+    
     // Store last mouse position for reference
-    window.lastMouseX = event.clientX;
-    window.lastMouseY = event.clientY;
+    window.lastMouseX = clientX;
+    window.lastMouseY = clientY;
     
     const cursor = document.getElementById('rts-cursor');
     if (!cursor) return;
@@ -1930,20 +2030,27 @@ function updateRTSCursorPosition(event) {
     
     // Update cursor position to follow mouse exactly
     // Position is set so the center of the cursor is at the mouse position
-    cursor.style.left = event.clientX + 'px';
-    cursor.style.top = event.clientY + 'px';
+    cursor.style.left = clientX + 'px';
+    cursor.style.top = clientY + 'px';
     
     // Make sure transform is applied for centering
     cursor.style.transform = 'translate(-50%, -50%)';
     
     // When in RTS mode, update ray cast for hover effects
     if (window.isRTSMode) {
-        updateRTSHoverEffects(event);
+        // Pass normalized event to hover function
+        updateRTSHoverEffects({clientX, clientY});
     }
 }
 
 // Update hover effects for RTS mode
 function updateRTSHoverEffects(event) {
+    // Get normalized coordinates
+    const clientX = event.clientX !== undefined ? event.clientX : 
+                   (event.position ? event.position.x : window.lastMouseX);
+    const clientY = event.clientY !== undefined ? event.clientY : 
+                   (event.position ? event.position.y : window.lastMouseY);
+    
     // Create a raycaster for mouse position
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
@@ -1951,8 +2058,8 @@ function updateRTSHoverEffects(event) {
     
     // Calculate mouse position in normalized device coordinates
     // (-1 to +1) for both components
-    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
     
     // Update the raycaster with the camera and mouse position
     raycaster.setFromCamera(mouse, window.camera);
