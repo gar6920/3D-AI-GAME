@@ -843,10 +843,34 @@ function init() {
         // Expose sendInputUpdate to window for access from other modules
         window.sendInputUpdate = sendInputUpdate;
         
+        // Create the gameEngine object and assign core components
+        const gameEngine = {
+            scene: scene,
+            camera: camera,
+            renderer: renderer,
+            controls: controls,
+            // Add other necessary managers if they exist globally or are created here
+            // Example: Assuming InputManager and UIManager are set up elsewhere on window
+            inputManager: window.inputManager, 
+            uiManager: window.uiManager,
+            networkInterface: window.networkInterface // Assuming networkInterface is set up
+        };
+
+        // Assign the created object to the global window scope
+        window.gameEngine = gameEngine;
+        console.log("Assigned gameEngine object to window:", window.gameEngine);
+
         // Start the animation loop
         requestAnimationFrame(animate);
         
         debug('Game successfully initialized');
+
+        // Signal that the game engine is fully initialized and ready
+        // Use setTimeout to ensure assignment completes before event fires
+        setTimeout(() => {
+            console.log("GameEngine fully initialized. Firing ready event (after timeout).");
+            window.dispatchEvent(new CustomEvent('gameEngineReady'));
+        }, 0);
     } catch (error) {
         debug(`Full initialization error: ${error.message}`, true);
         console.error('Full initialization error:', error);
@@ -1583,7 +1607,7 @@ function selectUnitInRTSMode() {
     const mouse = new THREE.Vector2();
     
     // Calculate mouse position in normalized device coordinates
-    // Use the cursor's center point for more accurate picking
+    // (-1 to +1) for both components
     mouse.x = ((cursorX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((cursorY - rect.top) / rect.height) * 2 + 1;
     
@@ -1598,7 +1622,6 @@ function selectUnitInRTSMode() {
         selectableObjects.push(window.playerEntity.mesh);
     }
     
-    // Add other selectable units if any
     // For future: Add enemy units, resources, buildings, etc.
     
     // Perform the raycast
@@ -1714,7 +1737,8 @@ function animateSelectionRings(delta) {
         
         // Check if it's the player
         if (window.playerEntity && window.playerEntity.mesh && 
-            (window.playerEntity.id === unitId || window.playerEntity.mesh.id === unitId)) {
+            (window.playerEntity.mesh === ring || 
+            window.playerEntity.mesh.id === unitId)) {
             unitMesh = window.playerEntity.mesh;
         }
         
@@ -1761,6 +1785,7 @@ function moveSelectedUnits() {
     const mouse = new THREE.Vector2();
     
     // Calculate mouse position in normalized device coordinates
+    // (-1 to +1) for both components
     mouse.x = ((cursorX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((cursorY - rect.top) / rect.height) * 2 + 1;
     

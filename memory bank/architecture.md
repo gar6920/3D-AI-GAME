@@ -295,7 +295,7 @@ The player model system uses several key architecture components working togethe
      - Specific animation name mappings ('idle' → 'Idle.002', etc.)
 
 2. **Model Loading Process:**
-   - Creates invisible placeholder mesh immediately
+   - Creates invisible placeholder mesh initially
    - Asynchronously loads specified GLB model
    - Creates a container hierarchy for proper rotation
    - Sets up animation mixer and clips
@@ -406,6 +406,36 @@ The procedural terrain system creates a natural-looking ground:
     *   Client selects units, issues move command (`game-engine.js`/`rts-view.js` -> `network-core.js`).
     *   Server receives command, updates target position for player entities (`BaseRoom.js`).
     *   Server state updates cause units to move on all clients.
+
+## Initialization and Core Flow Refactoring (April 2025)
+
+Significant changes were made to the core initialization flow and module management:
+
+1.  **Entry Point (`index.html` -> `client/js/main.js`):** 
+    *   The primary game logic initialization now resides in `client/js/main.js`.
+    *   `index.html` primarily loads essential libraries (Three.js, Colyseus) and then calls the `initGame()` function exported by `client/js/main.js`.
+    *   The previous `core/main.js` file, which handled game setup, has been **deleted**, and its relevant logic merged into `client/js/main.js` and `core/game-engine.js`.
+
+2.  **Asynchronous Module Loading:** 
+    *   `client/js/main.js` uses dynamic `import()` statements to load core JavaScript modules (`game-engine.js`, `controls.js`, `network-core.js`, `player-ui.js`, `BuildModeManager.js`) asynchronously.
+    *   This ensures that the main game initialization (`initGameEngine()`) only proceeds *after* all essential code modules have been loaded.
+
+3.  **Manager Objects:**
+    *   To centralize control and dependencies, several manager objects are now created and attached to the `window` object within `client/js/main.js` *after* the core modules load but *before* the game engine fully initializes:
+        *   `window.networkInterface`: Wraps network functionality (Colyseus client/room).
+        *   `window.inputManager`: Manages core input state, pointer lock, and provides an `addKeyListener` method for different modules (like `BuildModeManager`) to register specific key handlers without conflicting with global controls.
+        *   `window.uiManager`: An instance of the `PlayerUI` class (`core/player-ui.js`). It initially handled player list UI but was augmented with generic `addElement` and `updateHUD` methods to support other UI needs, such as the Build Mode interface.
+
+4.  **Delayed Initialization (`gameEngineReady` Event):**
+    *   `core/game-engine.js` now fires a `gameEngineReady` custom event on the `window` *after* the core engine components (scene, camera, renderer, controls) are fully set up.
+    *   `client/js/main.js` listens for this event.
+    *   Modules requiring a fully initialized game engine and its managers (like `BuildModeManager`) are now initialized *within* the `gameEngineReady` event listener. This ensures all dependencies (like `inputManager`, `uiManager`, `scene`, `camera`) are available when the module's `init()` method is called.
+
+5.  **Build Mode Integration:**
+    *   `BuildModeManager` (`core/BuildModeManager.js`) is now loaded and initialized as part of the new flow, triggered by the `gameEngineReady` event.
+    *   It utilizes `window.inputManager.addKeyListener` to bind the 'B' key to its `toggleBuildMode` function, separating it from the main movement controls in `core/controls.js`.
+    *   It uses `window.uiManager` (`PlayerUI` instance) to create its UI buttons and menu via `addElement`, and to update the HUD state via `updateHUD`.
+    *   **Current Status:** While the `BuildModeManager` initializes correctly and the 'B' key successfully calls `toggleBuildMode` without errors, the *actual* build mode functionality (visual placement indicator, preview meshes, pointer event handling for placement) is **not currently working** as expected following the refactor. Further debugging is required to restore this functionality.
 
 ## Project Structure
 ```

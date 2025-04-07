@@ -14,7 +14,83 @@ class PlayerUI {
         this.setupPlayerListKeyControls();
         this.initialized = true;
     }
+
+    // Generic method to add UI elements
+    addElement(elementType, options = {}) {
+        const element = document.createElement(elementType);
+
+        // Apply properties
+        if (options.id) element.id = options.id;
+        if (options.className) element.className = options.className;
+        if (options.text) element.textContent = options.text;
+        if (options.html) element.innerHTML = options.html;
+        if (options.value) element.value = options.value;
+
+        // Apply styles
+        if (options.style) {
+            Object.assign(element.style, options.style);
+        }
+
+        // Append to parent or body
+        const parentElement = options.parent || document.body;
+        parentElement.appendChild(element);
+
+        // Add event listeners
+        if (options.listeners) {
+            Object.entries(options.listeners).forEach(([event, listener]) => {
+                element.addEventListener(event, listener);
+            });
+        }
+        
+        // Assign onclick if provided directly
+        if (options.onclick) {
+            element.onclick = options.onclick;
+        }
+
+        console.log(`UIManager: Added element <${elementType}> with ID: ${options.id || 'N/A'}`);
+        return element; // Return the created element
+    }
     
+    // *** NEW: Placeholder for updating HUD elements ***
+    updateHUD(data = {}) {
+        // Example: Update elements based on data provided
+        // For BuildModeManager, this might involve showing/hiding menus,
+        // updating selected item text, etc.
+        console.log("UIManager: updateHUD called with data:", data);
+
+        // Example implementation (needs refinement based on actual needs):
+        if (data.buildModeActive !== undefined) {
+            const buildMenu = document.getElementById('building-menu');
+            if (buildMenu) {
+                buildMenu.style.display = data.buildModeActive ? 'block' : 'none';
+            }
+            const buildButton = document.getElementById('toggle-build-mode-btn');
+            if (buildButton) {
+                buildButton.textContent = `Build Mode (${data.buildModeActive ? 'ON' : 'OFF'}) (B)`;
+                buildButton.style.backgroundColor = data.buildModeActive ? 'lightgreen' : '';
+            }
+        }
+        if (data.selectedStructure !== undefined) {
+            // Find or create an element to display the selected structure
+            let structureDisplay = document.getElementById('selected-structure-display');
+            if (!structureDisplay) {
+                structureDisplay = this.addElement('div', {
+                    id: 'selected-structure-display',
+                    style: {
+                        position: 'absolute',
+                        bottom: '20px', // Adjust position as needed
+                        left: '150px', // Adjust position as needed
+                        zIndex: '100',
+                        color: 'white',
+                        background: 'rgba(0,0,0,0.5)',
+                        padding: '5px'
+                    }
+                });
+            }
+            structureDisplay.textContent = `Selected: ${data.selectedStructure || 'None'}`;
+        }
+    }
+
     // Update player list in UI
     updatePlayerListUI() {
         // Get player list container
