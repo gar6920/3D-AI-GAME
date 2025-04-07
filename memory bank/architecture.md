@@ -78,6 +78,17 @@ The core platform provides foundational functionality that all game implementati
   - Handles player joining/leaving events
   - Manages Colyseus connection, state synchronization, player join/leave, entity creation/updates based on server state. Handles remote player interpolation.
 
+- **BuildingModeManager.js:**
+  - Implements a class-based encapsulation of the building mode functionality
+  - Manages the UI elements for building mode (structure selection buttons, placement preview)
+  - Handles toggle between game and building modes (activated with B key)
+  - Manages structure rotation controls (Q/E keys for 15° increments)
+  - Implements real-time structure placement validation and visual feedback
+  - Provides 3D preview models for different structure types
+  - Communicates with server for structure placement validation and confirmation
+  - Ensures proper integration with different camera modes and pointer controls
+  - Maintains compatibility with the game's controls and UI systems
+
 - **Entity.js:**
   - Base class for all game entities
   - Provides core entity functionality (position, rotation, scale)
@@ -232,12 +243,18 @@ Each game implementation extends the core platform with specific gameplay mechan
 - Seamless operation across all camera modes
 
 **Client Components:**
-- Building mode UI overlay with structure selection menu
-- Structure preview mesh with valid/invalid placement indicators
-- Click-to-place functionality with server authorization
-- Structure rotation controls (Q/E for 15° increments)
-- Cross-camera mode compatibility (first-person, third-person, RTS)
-- Interactive grid system for structure placement
+- **BuildingModeManager.js**: Encapsulates all building mode functionality in a class-based architecture:
+  - UI overlay creation and management
+  - Structure selection menu with different building types
+  - Placement preview system with valid/invalid visual feedback
+  - Mouse event handling for structure placement
+  - Keyboard controls for rotation (Q/E keys)
+  - Communication with server for placement validation
+  - Integration with the main game's controls and camera systems
+  - Compatible with all view modes (first-person, third-person, RTS)
+  - Optimized cursor handling and interactive grid system
+  - Structure preview meshes for different building types
+  - Real-time collision detection with existing structures
 
 **Server Components:**
 - Structure schema extending BaseEntity
@@ -252,31 +269,14 @@ Each game implementation extends the core platform with specific gameplay mechan
 - Additional types can be added by extending the Structure schema
 
 **Networking Flow:**
-1.  **Initial Connection**: Client browser navigates to the root URL (`/`).
-2.  **Redirect**: Server receives request for `/`, executes `res.redirect('/select')`.
-3.  **Selection Page**: Client browser requests `/select`. Server serves `public/player_select.html`.
-4.  **Player Choice**: User clicks a button on the selection page.
-    *   **1 Player**: Browser navigates to `/game`.
-    *   **2-4 Players**: Browser navigates to `/setup?players=N`.
-5.  **Game Page Load**: 
-    *   If `/game` was requested, server serves `client/index.html`.
-    *   If `/setup` was requested, server serves `four_player_setup.html`, which then loads `/game` in iframes.
-6.  **Client Initialization**: `client/index.html` loads necessary JS (`main.js`).
-7.  **Server Connection**: Client connects to Server via WebSocket (Colyseus `network-core.js`).
-8.  **Join Room**: Client joins the 'active' room (`DefaultRoom.js`).
-9.  **State Sync**: Server sends initial `GameState` to Client. Player entities are created client-side (`network-core.js` using `EntityFactory`).
-10. **Input**: Client sends input state (keys pressed, mouse movement, rotation) to Server (`controls.js` -> `network-core.js` -> `BaseRoom.js`).
-11. **Server Processing**: Server updates player state based on input, performs physics/collision checks (`BaseRoom.js` or `DefaultRoom.js`).
-12. **State Broadcast**: Server broadcasts delta updates of the `GameState` to all clients.
-13. **Client Update**: Client receives state updates, interpolates remote player positions, updates local visuals (`network-core.js`).
-14. **Building**:
-    *   Client enters build mode, sends placement request (`game-engine.js` -> `network-core.js`).
-    *   Server validates, updates `GameState.structures`, broadcasts change (`BaseRoom.js`).
-    *   Clients render the new structure (`network-core.js`).
-15. **RTS Commands**:
-    *   Client selects units, issues move command (`game-engine.js`/`rts-view.js` -> `network-core.js`).
-    *   Server receives command, updates target position for player entities (`BaseRoom.js`).
-    *   Server state updates cause units to move on all clients.
+1. Client toggles building mode (B key) via BuildingModeManager
+2. BuildingModeManager creates UI elements and enters placement mode
+3. Client selects structure type and positions placement preview
+4. Client clicks to place structure, BuildingModeManager sends request to server
+5. Server validates placement, checks for collisions
+6. Server creates structure in GameState and broadcasts to all clients
+7. All clients (including the requester) receive structure updates
+8. BuildingModeManager refreshes the preview position for the next placement
 
 ## Player Architecture
 
@@ -516,3 +516,4 @@ Significant changes were made to the core initialization flow and module managem
 ├── update_compiled_code.bat # Utility script to generate compiled_code.txt
 └── memory bank/            # Documentation (like this file)
     └── architecture.md     # This architecture documentation
+```
