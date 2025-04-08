@@ -7,6 +7,15 @@ const { autoUpdater } = require('electron-updater');
 let mainWindow;
 let gameWindows = [];
 
+// Gamepad management
+const gamepads = {}; // Store connected gamepads
+const gamepadAssignments = {}; // Map gamepad to player
+const playerInputMap = {}; // Map player to input type & gamepad
+
+// Gamepad polling
+let gamepadPollingInterval = null;
+const GAMEPAD_POLL_RATE = 16; // ~60fps
+
 // Parse command line arguments for environment configuration
 function parseCommandLineArgs() {
   const args = process.argv.slice(1);
@@ -89,6 +98,7 @@ function createMainWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
     closeGameWindows();
+    stopGamepadPolling();
   });
 }
 
@@ -113,6 +123,175 @@ async function checkServerAvailability() {
       reject(new Error('Server connection timed out'));
     });
   });
+}
+
+// Initialize gamepad detection
+function initializeGamepadDetection() {
+  console.log('Initializing gamepad detection');
+  
+  // Set up polling interval for gamepad states
+  startGamepadPolling();
+  
+  // This is a workaround since Electron doesn't expose gamepad API directly
+  ipcMain.on('gamepad-detected', (event, data) => {
+    if (data.connected) {
+      console.log(`Gamepad connected: ${data.id}, index: ${data.index}`);
+      gamepads[data.index] = {
+        id: data.id,
+        index: data.index,
+        timestamp: Date.now(),
+        assigned: false
+      };
+      
+      // Notify all game windows about newly connected gamepad
+      sendGamepadConnectionUpdate(data.index, true);
+    } else {
+      console.log(`Gamepad disconnected: index: ${data.index}`);
+      
+      // Check if this gamepad was assigned to a player
+      if (gamepads[data.index] && gamepadAssignments[data.index] !== undefined) {
+        const playerId = gamepadAssignments[data.index];
+        // Unassign the gamepad
+        delete gamepadAssignments[data.index];
+        
+        // Update player input map
+        if (playerInputMap[playerId] && playerInputMap[playerId].type === 'gamepad') {
+          delete playerInputMap[playerId];
+        }
+      }
+      
+      // Remove the gamepad from our list
+      delete gamepads[data.index];
+      
+      // Notify all game windows
+      sendGamepadConnectionUpdate(data.index, false);
+    }
+  });
+}
+
+// Start polling for gamepad states
+function startGamepadPolling() {
+  if (gamepadPollingInterval) return; // Already polling
+  
+  console.log('Starting gamepad polling');
+  gamepadPollingInterval = setInterval(() => {
+    // Request an update from renderer (gamepads can only be accessed from a renderer process)
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('poll-gamepads');
+    } else if (gameWindows.length > 0) {
+      // If main window is closed but we have game windows, poll through one of them
+      gameWindows[0].webContents.send('poll-gamepads');
+    }
+  }, GAMEPAD_POLL_RATE);
+}
+
+// Stop gamepad polling
+function stopGamepadPolling() {
+  if (gamepadPollingInterval) {
+    clearInterval(gamepadPollingInterval);
+    gamepadPollingInterval = null;
+    console.log('Gamepad polling stopped');
+  }
+}
+
+// Send gamepad connection updates to all windows
+function sendGamepadConnectionUpdate(gamepadIndex, isConnected) {
+  // Send to main window
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('gamepad-connection-update', {
+      index: gamepadIndex,
+      connected: isConnected,
+      gamepad: isConnected ? gamepads[gamepadIndex] : null
+    });
+  }
+  
+  // Send to all game windows
+  gameWindows.forEach(window => {
+    if (!window.isDestroyed()) {
+      window.webContents.send('gamepad-connection-update', {
+        index: gamepadIndex,
+        connected: isConnected,
+        gamepad: isConnected ? gamepads[gamepadIndex] : null
+      });
+    }
+  });
+}
+
+// Handle gamepad input from renderer
+function handleGamepadInput(data) {
+  // Check if this gamepad is assigned to a player
+  if (gamepadAssignments[data.gamepadIndex] === undefined) return;
+  
+  const playerId = gamepadAssignments[data.gamepadIndex];
+  
+  // Find the game window for this player
+  const targetWindow = gameWindows[playerId];
+  if (!targetWindow || targetWindow.isDestroyed()) return;
+  
+  // Forward the input to the appropriate game window
+  targetWindow.webContents.send('gamepad-input', {
+    type: data.type, // 'button' or 'axis'
+    gamepadIndex: data.gamepadIndex,
+    buttonIndex: data.buttonIndex,
+    axisIndex: data.axisIndex,
+    isPressed: data.isPressed,
+    value: data.value
+  });
+}
+
+// Assign gamepad to player
+function assignGamepadToPlayer(gamepadIndex, playerId) {
+  console.log(`Assigning gamepad ${gamepadIndex} to player ${playerId}`);
+  
+  // Unassign any previously assigned gamepad for this player
+  Object.keys(gamepadAssignments).forEach(gpIndex => {
+    if (gamepadAssignments[gpIndex] === playerId) {
+      delete gamepadAssignments[gpIndex];
+      console.log(`Unassigned previous gamepad ${gpIndex} from player ${playerId}`);
+    }
+  });
+  
+  // Assign the new gamepad
+  gamepadAssignments[gamepadIndex] = playerId;
+  gamepads[gamepadIndex].assigned = true;
+  
+  // Update player input map
+  playerInputMap[playerId] = {
+    type: 'gamepad',
+    gamepadIndex: gamepadIndex
+  };
+  
+  // Notify the target game window about its assigned gamepad
+  const targetWindow = gameWindows[playerId];
+  if (targetWindow && !targetWindow.isDestroyed()) {
+    targetWindow.webContents.send('controller-setup', {
+      type: 'gamepad',
+      gamepadIndex: gamepadIndex,
+      gamepadId: gamepads[gamepadIndex].id
+    });
+  }
+  
+  return true;
+}
+
+// Assign keyboard/mouse to player
+function assignKeyboardToPlayer(playerId) {
+  console.log(`Assigning keyboard/mouse to player ${playerId}`);
+  
+  // Update player input map
+  playerInputMap[playerId] = {
+    type: 'keyboard'
+  };
+  
+  // Notify the target game window
+  const targetWindow = gameWindows[playerId];
+  if (targetWindow && !targetWindow.isDestroyed()) {
+    targetWindow.webContents.send('controller-setup', {
+      type: 'keyboard'
+    });
+  }
+  
+  return true;
 }
 
 // Launch the game with specific player configuration
@@ -153,16 +332,83 @@ function launchGame(playerCount, implementation = 'default') {
 
   multiplayerWindow.setMenuBarVisibility(false);
   gameWindows.push(multiplayerWindow);
+  
+  // Make sure gamepad polling is active
+  startGamepadPolling();
+  
+  // Reset player input assignments for new game
+  for (let i = 0; i < playerCount; i++) {
+    playerInputMap[i] = null;
+  }
+}
+
+// Create a game window for a specific player with appropriate input device
+function createPlayerGameWindow(playerIndex, inputType, options = {}) {
+  console.log(`Creating game window for Player ${playerIndex + 1} with input type: ${inputType}`);
+  
+  const gameWindow = new BrowserWindow({
+    width: options.width || 800,
+    height: options.height || 600,
+    x: options.x,
+    y: options.y,
+    title: `3D AI Game - Player ${playerIndex + 1}`,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      preload: path.join(__dirname, 'game-preload.js')
+    }
+  });
+  
+  // Load the game URL with player-specific parameters
+  const gameUrl = new URL(`${SERVER_URL}/game`);
+  gameUrl.searchParams.append('implementation', options.implementation || 'default');
+  gameUrl.searchParams.append('playerId', playerIndex);
+  gameUrl.searchParams.append('inputType', inputType);
+  
+  gameWindow.loadURL(gameUrl.toString());
+  
+  // Set game window properties
+  gameWindow.setMenuBarVisibility(false);
+  
+  // Add to gameWindows array at specific index
+  gameWindows[playerIndex] = gameWindow;
+  
+  // Setup window close handler
+  gameWindow.on('closed', () => {
+    gameWindows[playerIndex] = null;
+    
+    // Check if all game windows are closed
+    const allClosed = gameWindows.every(win => win === null);
+    if (allClosed) {
+      // Reset any gamepad assignments
+      Object.keys(gamepadAssignments).forEach(key => {
+        delete gamepadAssignments[key];
+        if (gamepads[key]) {
+          gamepads[key].assigned = false;
+        }
+      });
+    }
+  });
+  
+  return gameWindow;
 }
 
 // Close all game windows
 function closeGameWindows() {
   gameWindows.forEach(window => {
-    if (!window.isDestroyed()) {
+    if (window && !window.isDestroyed()) {
       window.close();
     }
   });
   gameWindows = [];
+  
+  // Reset gamepad assignments
+  Object.keys(gamepadAssignments).forEach(key => {
+    delete gamepadAssignments[key];
+    if (gamepads[key]) {
+      gamepads[key].assigned = false;
+    }
+  });
 }
 
 // Handle URL protocol launches
@@ -248,7 +494,7 @@ function setupIPC() {
     app.quit();
   });
   
-  // Handle server start/stop
+  // Handle server check
   ipcMain.on('check-server', async (event) => {
     try {
       await checkServerAvailability();
@@ -257,6 +503,38 @@ function setupIPC() {
       console.error('Server check failed:', error);
       event.reply('server-status', { available: false, error: error.message });
     }
+  });
+  
+  // Handle gamepad assignment from multiplayer screen
+  ipcMain.on('assign-gamepad', (event, { gamepadIndex, playerIndex }) => {
+    assignGamepadToPlayer(gamepadIndex, playerIndex);
+  });
+  
+  // Handle keyboard assignment from multiplayer screen
+  ipcMain.on('assign-keyboard', (event, { playerIndex }) => {
+    assignKeyboardToPlayer(playerIndex);
+  });
+  
+  // Handle gamepad input from polling
+  ipcMain.on('gamepad-input', (event, data) => {
+    handleGamepadInput(data);
+  });
+  
+  // Handle game window ready notification
+  ipcMain.on('game-window-ready', (event) => {
+    // Find which window sent this
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const playerIndex = gameWindows.findIndex(win => win === window);
+    
+    if (playerIndex >= 0 && playerInputMap[playerIndex]) {
+      // Send input setup to the window
+      event.sender.send('controller-setup', playerInputMap[playerIndex]);
+    }
+  });
+  
+  // Handle create-player-window request
+  ipcMain.on('create-player-window', (event, { playerIndex, inputType, config }) => {
+    createPlayerGameWindow(playerIndex, inputType, config);
   });
 }
 
@@ -285,6 +563,7 @@ app.whenReady().then(() => {
   createMainWindow();
   setupIPC();
   setupAutoUpdater();
+  initializeGamepadDetection();
   
   // Check for updates (only in production)
   if (process.env.NODE_ENV !== 'development') {

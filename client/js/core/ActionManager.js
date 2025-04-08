@@ -29,6 +29,12 @@ class ActionManager {
         window.inputManager.on('mousemove', this.handleMouseMove.bind(this));
         window.inputManager.on('wheel', this.handleWheel.bind(this));
         
+        // Add gamepad support
+        window.inputManager.on('gamepadbuttondown', this.handleGamepadButton.bind(this, true));
+        window.inputManager.on('gamepadbuttonup', this.handleGamepadButton.bind(this, false));
+        window.inputManager.on('gamepadaxismove', this.handleGamepadAxis.bind(this));
+        window.inputManager.on('inputtypechange', this.handleInputTypeChange.bind(this));
+        
         console.log('🔌 ActionManager: Registered event handlers with InputManager');
         
         // Register default bindings
@@ -55,7 +61,7 @@ class ActionManager {
         this.registerAction('primary_action', 'Primary action/attack');
         this.registerAction('secondary_action', 'Secondary action');
         
-        // Bind to inputs
+        // Bind to keyboard inputs
         this.bindInput('key', 'KeyW', 'move_forward');
         this.bindInput('key', 'ArrowUp', 'move_forward');
         this.bindInput('key', 'KeyS', 'move_backward');
@@ -73,6 +79,20 @@ class ActionManager {
         this.bindInput('key', 'KeyB', 'toggle_building');
         this.bindInput('mouseButton', '0', 'primary_action');
         this.bindInput('mouseButton', '2', 'secondary_action');
+        
+        // Bind to gamepad inputs (standard mapping)
+        this.bindInput('gamepadButton', '0', 'jump');          // A button
+        this.bindInput('gamepadButton', '1', 'toggle_view');   // B button 
+        this.bindInput('gamepadButton', '2', 'secondary_action'); // X button
+        this.bindInput('gamepadButton', '3', 'primary_action'); // Y button
+        this.bindInput('gamepadButton', '4', 'rotate_left');   // LB
+        this.bindInput('gamepadButton', '5', 'rotate_right');  // RB
+        this.bindInput('gamepadButton', '6', 'sprint');        // LT
+        this.bindInput('gamepadButton', '7', 'sprint');        // RT (alternative)
+        this.bindInput('gamepadButton', '8', 'toggle_building'); // Back/Select
+        
+        // Note: Analog stick movement is handled directly by polling in InputManager
+        // and mapping to WASD keys, so we don't need explicit bindings here
         
         console.log('🎮 ActionManager: Registered default actions and bindings');
         console.log('   Total actions:', Object.keys(this.actions).length);
@@ -170,6 +190,38 @@ class ActionManager {
         }
     }
     
+    handleGamepadButton(isActive, data) {
+        const key = `gamepadButton:${data.buttonIndex}`;
+        const actionId = this.bindings[key];
+        
+        if (actionId) {
+            console.log(`🎮 ActionManager: Gamepad button ${data.buttonIndex} triggered action '${actionId}' (${isActive ? 'pressed' : 'released'})`);
+            
+            // Mirror to existing global state first (for compatibility)
+            this.updateGlobalState(actionId, isActive);
+            
+            // Trigger action for subscribers
+            this.triggerAction(actionId, {
+                active: isActive,
+                original: data
+            });
+        }
+    }
+    
+    handleGamepadAxis(data) {
+        // Analog stick movement is mapped directly to WASD keys by InputManager,
+        // which updates this.keys and serverInputState
+        // so no need to directly map axes-to-actions here
+        
+        // But we can check if the axis is a trigger in future implementations
+        // (Some gamepads have LT/RT as axes 2/5 instead of buttons 6/7)
+    }
+    
+    handleInputTypeChange(data) {
+        // React to changes in input type (keyboard/mouse <-> gamepad)
+        console.log(`🔄 ActionManager: Input type changed to ${data.type}`);
+    }
+    
     handleMouseMove(data) {
         // No specific action bindings for mousemove currently
         // Just for future expansion
@@ -217,6 +269,19 @@ class ActionManager {
             case 'rotate_right':
                 window.turnRight = isActive;
                 window.inputState.keys.e = isActive;
+                break;
+            case 'toggle_view':
+                // Only trigger on activation (key down), not release
+                if (isActive && typeof window.toggleCameraView === 'function') {
+                    window.toggleCameraView();
+                }
+                break;
+            case 'toggle_building':
+                // Only trigger on activation (key down), not release
+                if (isActive && window.buildingModeManager && 
+                    typeof window.buildingModeManager.toggle === 'function') {
+                    window.buildingModeManager.toggle();
+                }
                 break;
         }
     }

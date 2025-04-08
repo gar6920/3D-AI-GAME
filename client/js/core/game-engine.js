@@ -1225,6 +1225,13 @@ function animate(currentTime) {
     
     // Execute all registered animation callbacks
     if (window.animationCallbacks && window.animationCallbacks.length > 0) {
+        // Add debug logging every few seconds
+        if (!window._lastCallbacksLog || currentTime - window._lastCallbacksLog > 5000) {
+            window._lastCallbacksLog = currentTime;
+            console.log(`Animation callbacks: ${window.animationCallbacks.length} registered`, 
+                window.animationCallbacks.map(cb => cb.name || 'anonymous'));
+        }
+        
         for (let i = 0; i < window.animationCallbacks.length; i++) {
             try {
                 window.animationCallbacks[i](delta);

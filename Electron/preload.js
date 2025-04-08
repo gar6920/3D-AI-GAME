@@ -5,17 +5,33 @@ const { contextBridge, ipcRenderer } = require('electron');
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld(
   'api', {
-    startGame: (config) => {
-      return ipcRenderer.invoke('start-game', config);
+    startGame: (playerCount, implementation) => {
+      ipcRenderer.send('start-game', { playerCount, implementation });
     },
-    onGameStarted: (callback) => {
-      ipcRenderer.on('game-started', (event, ...args) => callback(...args));
+    
+    quitApp: () => {
+      ipcRenderer.send('quit-app');
     },
-    stopGame: () => {
-      ipcRenderer.send('stop-game');
+    
+    checkServer: () => {
+      ipcRenderer.send('check-server');
     },
-    getAvailableImplementations: () => {
-      return ipcRenderer.invoke('get-implementations');
+    
+    onServerStatus: (callback) => {
+      ipcRenderer.on('server-status', (event, ...args) => callback(...args));
+    },
+    
+    // Gamepad detection
+    onGamepadConnectionUpdate: (callback) => {
+      ipcRenderer.on('gamepad-connection-update', (event, data) => callback(data));
+    },
+    
+    onPollGamepads: (callback) => {
+      ipcRenderer.on('poll-gamepads', (event) => callback());
+    },
+    
+    sendGamepadDetected: (data) => {
+      ipcRenderer.send('gamepad-detected', data);
     }
   }
 );
