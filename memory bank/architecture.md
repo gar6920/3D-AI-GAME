@@ -176,6 +176,40 @@ Each game implementation extends the core platform with specific gameplay mechan
 15. **State Broadcast**: Server sends delta updates.
 16. **Client Update**: `network-core.js` receives updates, updates visuals, `BuildingModeManager`'s state listeners update structures.
 
+## Input Handling and State Synchronization
+
+This section describes how user input (mouse, keyboard, gamepad) is processed and synchronized, particularly focusing on camera control.
+
+**Core Component:** `client/js/core/InputManager.js`
+
+*   **Centralized Management:** `InputManager` is responsible for capturing raw input events (keyboard presses, mouse movements, gamepad polling) and maintaining the canonical input state.
+*   **Input Types:** It tracks the `lastActiveInputType` (keyboard/mouse or gamepad) to manage behavior differences.
+*   **Keyboard/Buttons:** Key and button presses are mapped to a boolean state object (`this.keys`).
+*   **Mouse Camera Control (Pointer Lock):**
+    *   When pointer lock is active (`document.pointerLockElement` is true), `InputManager.onMouseMove` directly accumulates `event.movementX/Y` into its internal `this.mouseDelta` and `this.serverInputState.mouseDelta`.
+    *   The `controls.js` `mousemove` callback (which *only* runs when pointer lock is active) reads the movement data passed by `InputManager` to apply local camera rotation.
+*   **Gamepad Camera Control (Simulated Pointer Lock):**
+    *   When the gamepad is active and pointer lock is *not* active, `InputManager.update` reads the right stick position.
+    *   If the stick is outside the deadzone, it calculates equivalent `movementX/Y` values.
+    *   These values are written to the internal `this.mouseDelta` and `this.serverInputState.mouseDelta`, simulating mouse movement.
+*   **State Synchronization (`syncToGlobalState`):**
+    *   Called within `InputManager.update`, this method copies the processed input state (key states and the calculated `mouseDelta`) from `InputManager`'s internal state (`this.keys`, `this.mouseDelta`) to the global `window.inputState` object (`window.inputState.keys`, `window.inputState.mouseDelta`).
+*   **Delta Reset Logic:**
+    *   Crucially, `InputManager.update` resets the internal `this.mouseDelta` and `this.serverInputState.mouseDelta` to zero *at the end* of its execution cycle. This ensures each frame starts with a clean delta, preventing accumulation issues from the previous frame.
+    *   (Previously Fixed Issue): An earlier implementation reset delta based on pointer lock state at the *start* of `update`, which led to issues when pointer lock was active or when `sendInputUpdate` ran before `InputManager.update`.
+
+**Consuming Components:**
+
+*   **`client/js/core/game-engine.js` (`sendInputUpdate`):**
+    *   Reads the final input state (including `mouseDelta`) from the global `window.inputState`.
+    *   Uses this state to prepare and send network updates to the server.
+    *   Resets the global `window.inputState.mouseDelta` *after* sending the update.
+    *   (Previously Fixed Issue): Ensuring `InputManager.update` (and thus `syncToGlobalState`) runs *before* `sendInputUpdate` in the main animation loop prevents `sendInputUpdate` from reading stale delta values from the previous frame.
+*   **`client/js/core/controls.js` (`mousemove` callback):**
+    *   When pointer lock is active, this callback receives movement data from `InputManager`.
+    *   It uses this data *only* to apply local camera rotation.
+    *   (Previously Fixed Issue): Removed redundant code that was also accumulating delta into `window.inputState.mouseDelta` within this callback.
+
 ## Project Structure (Simplified View)
 
 ```
@@ -200,4 +234,3 @@ Each game implementation extends the core platform with specific gameplay mechan
 ├── memory bank/
 │   └── architecture.md     # This architecture documentation
 └── ... (launch scripts etc.)
-```

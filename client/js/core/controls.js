@@ -137,9 +137,6 @@ window.initControls = function(camera, domElement) {
             
             if (window.isFirstPerson && !window.isFreeCameraMode) {
                 // First-person: Standard FPS mouse look - rotate with mouse movement
-                // Store movement for server synchronization
-                window.inputState.mouseDelta.x += data.movement.x * sensitivity;
-                window.inputState.mouseDelta.y -= data.movement.y * sensitivity;
                 
                 // Apply rotation locally for immediate response
                 const rotationX = data.movement.y * 0.002 * sensitivity; // Vertical rotation (pitch)
@@ -860,4 +857,3 @@ function processGamepadInput(gamepad) {
     // Store the previous state
     prevGamepadData = { ...gamepadData };
 }
-

@@ -22,7 +22,7 @@ class InputManager {
         
         // Gamepad configuration
         this.gamepadConfig = {
-            deadzone: 0.10, // Reduced deadzone for more responsive controls
+            deadzone: 0.15, // Reduced deadzone for more responsive controls (Reverted from 0.30)
             lookSensitivity: 40, // Increased sensitivity for camera rotation
             movementAxes: { // Which axes map to WASD movement
                 horizontal: 0, // Left stick horizontal
@@ -356,7 +356,7 @@ class InputManager {
         if (gamepadIndex !== this.activeGamepadIndex) return;
         
         // Apply deadzone
-        const deadzone = this.gamepadConfig.deadzone;
+        const deadzone = this.gamepadConfig.deadzone; // Reverted to 0.15
         const processedValue = Math.abs(value) < deadzone ? 0 : value;
         
         // Debug log for all axis movements
@@ -789,7 +789,7 @@ class InputManager {
         }
     }
     
-    update(delta) {
+    update(deltaTime) {
         // Poll gamepads for updates if in browser mode
         this.pollGamepads();
         
@@ -800,12 +800,22 @@ class InputManager {
         const timeSinceLastUpdate = now - this._lastUpdateTime;
         this._lastUpdateTime = now;
         
+        // Reset mouseDelta at the start unless pointer is locked
+        if (!document.pointerLockElement) {
+            this.mouseDelta.x = 0;
+            this.mouseDelta.y = 0;
+            this.serverInputState.mouseDelta.x = 0;
+            this.serverInputState.mouseDelta.y = 0;
+        }
+        
         // Handle right stick camera movement in update loop for smooth motion
         if (this.lastActiveInputType === 'gamepad' && this.isGamepadAvailable) {
-            const deadzone = this.gamepadConfig.deadzone;
+            const deadzone = this.gamepadConfig.deadzone; // Reverted to 0.15
             const lookSensitivity = 200.0; // Increased sensitivity for camera
             
-            // Calculate camera movement based on stick position and delta time
+            const rawStickX = this.rightStickPosition.x.toFixed(3);
+            const rawStickY = this.rightStickPosition.y.toFixed(3);
+
             if (Math.abs(this.rightStickPosition.x) > deadzone || Math.abs(this.rightStickPosition.y) > deadzone) {
                 // Apply smoothing to the stick values
                 const smoothingFactor = 0.8; // Higher = smoother but more latency
@@ -816,16 +826,27 @@ class InputManager {
                 this._smoothedRightY = (this._smoothedRightY * smoothingFactor) + (this.rightStickPosition.y * (1 - smoothingFactor));
                 
                 // Scale movement by delta time for consistent speed
-                const deltaScale = (delta || (1/60)) * 60; // Normalize to 60fps if no delta provided
+                const deltaScale = (deltaTime || (1/60)) * 60; // Normalize to 60fps if no delta provided
                 const movementX = this._smoothedRightX * lookSensitivity * deltaScale;
                 const movementY = this._smoothedRightY * lookSensitivity * deltaScale;
                 
-                // Update mouseDelta for camera movement
-                this.mouseDelta.x = movementX;
-                this.mouseDelta.y = movementY;
-                this.serverInputState.mouseDelta.x = movementX;
-                this.serverInputState.mouseDelta.y = movementY;
-                
+                // Update mouseDelta ONLY when stick is active and pointer is NOT locked
+                if (!document.pointerLockElement) {
+                    this.mouseDelta.x = movementX;
+                    this.mouseDelta.y = movementY;
+                    this.serverInputState.mouseDelta.x = movementX;
+                    this.serverInputState.mouseDelta.y = movementY;
+                } else {
+                    // If pointer IS locked, mouse input takes precedence, clear any gamepad delta contribution
+                    // (onMouseMove handles the actual delta when locked)
+                    // We might not strictly need this else block if the initial reset covers it,
+                    // but it makes the intent clearer.
+                    this.mouseDelta.x = 0; 
+                    this.mouseDelta.y = 0;
+                    this.serverInputState.mouseDelta.x = 0;
+                    this.serverInputState.mouseDelta.y = 0;
+                }
+
                 // Create and dispatch a synthetic mouse movement event
                 const mouseData = {
                     position: this.mousePosition,
@@ -839,29 +860,33 @@ class InputManager {
                 // Trigger mousemove callbacks for camera update
                 this.callbacks.mousemove.forEach(callback => callback(mouseData));
                 
-                // Log camera movement
-                if (!this._lastCameraLog || now - this._lastCameraLog > 1000) {
-                    this._lastCameraLog = now;
-                    console.log(`[Gamepad] Camera movement:`, {
-                        sensitivity: lookSensitivity,
-                        stickX: this._smoothedRightX.toFixed(3),
-                        stickY: this._smoothedRightY.toFixed(3),
-                        movementX: movementX.toFixed(2),
-                        movementY: movementY.toFixed(2),
-                        deltaTime: deltaScale.toFixed(2)
-                    });
-                }
+                console.log(`[Gamepad] Camera movement:`, {
+                    sensitivity: lookSensitivity,
+                    stickX: this._smoothedRightX.toFixed(3),
+                    stickY: this._smoothedRightY.toFixed(3),
+                    movementX: movementX.toFixed(2),
+                    movementY: movementY.toFixed(2),
+                    deltaTime: deltaScale.toFixed(2)
+                });
             } else {
-                // Reset movement and smoothing when stick is in deadzone
+                // Reset smoothing values (mouseDelta already reset above unless pointer locked)
                 this._smoothedRightX = 0;
                 this._smoothedRightY = 0;
-                this.mouseDelta.x = 0;
-                this.mouseDelta.y = 0;
-                this.serverInputState.mouseDelta.x = 0;
-                this.serverInputState.mouseDelta.y = 0;
+                // Explicitly reset delta here too if pointer isn't locked, just to be safe
+                if (!document.pointerLockElement) {
+                    this.mouseDelta.x = 0;
+                    this.mouseDelta.y = 0;
+                    this.serverInputState.mouseDelta.x = 0;
+                    this.serverInputState.mouseDelta.y = 0;
+                }
             }
+        } else {
+            // Log if not processing gamepad (e.g., keyboard/mouse active)
+            // console.log(`[Input Update] Not processing gamepad input (last type: ${this.lastActiveInputType}, pointer locked: ${!!document.pointerLockElement})`);
+            // mouseDelta was already reset at the start if pointer wasn't locked.
+            // If pointer IS locked, onMouseMove handles the delta.
         }
-        
+
         // CRITICAL: Sync InputManager state to global state variables
         // This ensures gamepad inputs affect movement
         this.syncToGlobalState();
@@ -931,6 +956,17 @@ class InputManager {
         } else if (window.playerEntity && window.playerEntity.mesh) {
             this.serverInputState.clientRotation.rotationY = window.playerEntity.mesh.rotation.y || 0;
         }
+        
+        // --- Final Reset ---
+        // Reset internal mouseDelta AFTER it has been synced and potentially used by callbacks
+        // This ensures the next frame starts fresh.
+        this.mouseDelta.x = 0;
+        this.mouseDelta.y = 0;
+        // Optionally reset serverInputState.mouseDelta too, though sendInputUpdate resets window.inputState
+        // If sendInputUpdate uses window.inputState, this might be redundant, but doesn't hurt.
+        this.serverInputState.mouseDelta.x = 0; 
+        this.serverInputState.mouseDelta.y = 0;
+        // --- End Final Reset ---
     }
     
     // Registration methods for callbacks
