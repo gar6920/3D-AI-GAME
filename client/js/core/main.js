@@ -176,6 +176,17 @@ function loadImplementationModules(implementationName) {
 function initGameEngine() {
     console.log('Initializing game engine...');
     
+    // ** Instantiate InputManager **
+    // Ensure the class is defined (loaded via index.html)
+    console.log('[Main] Checking window.InputManager before instantiation:', typeof window.InputManager, window.InputManager);
+    if (window.InputManager) {
+        window.inputManager = new InputManager();
+        console.log('[Main] InputManager instantiated.');
+    } else {
+        console.error('[Main] InputManager class definition not found during initGameEngine!');
+        return; // Cannot proceed without InputManager
+    }
+    
     // Player factory - determines which Player class to use
     window.createPlayerEntity = function(scene, isLocal = true, options = {}) {
         let PlayerClass;
@@ -222,6 +233,14 @@ function initGameEngine() {
     loadScript('js/core/game-engine.js')
         .then(() => {
             console.log('Game engine script loaded, starting engine...');
+            
+            // ** Register InputManager's update callback NOW **
+            if (window.inputManager && typeof window.inputManager.registerUpdateCallback === 'function') {
+                window.inputManager.registerUpdateCallback();
+            } else {
+                console.error('[Main] Failed to register InputManager update callback after engine load.');
+            }
+
             // The game engine's initialization logic (e.g., inside its own init function)
             // should now be able to run, potentially calling createPlayerEntity itself.
             
@@ -265,7 +284,34 @@ function loadScript(src) {
 }
 
 // Start the game when the document is ready
-document.addEventListener('DOMContentLoaded', initGame);
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('[Main] DOMContentLoaded fired.');
+
+    // ** Instantiate Managers **
+    // Classes should be defined now due to synchronous loading in <head>
+    if (typeof InputManager !== 'undefined') {
+        window.inputManager = new InputManager();
+        console.log('[Main] InputManager instantiated.');
+    } else {
+        console.error('[Main] CRITICAL: InputManager class not found at DOMContentLoaded!');
+        return; // Stop if core manager missing
+    }
+
+    if (typeof ActionManager !== 'undefined') {
+        window.actionManager = new ActionManager(); // Requires inputManager to exist
+        console.log('[Main] ActionManager instantiated.');
+    } else {
+        console.error('[Main] CRITICAL: ActionManager class not found at DOMContentLoaded!');
+        // Handle appropriately - maybe return or allow limited functionality
+    }
+
+    // ** Notify other scripts that managers are ready **
+    console.log('[Main] Dispatching managersReady event.');
+    document.dispatchEvent(new CustomEvent('managersReady'));
+
+    // Proceed with the rest of game initialization which might load more scripts
+    initGame(); 
+});
 
 // After player count is selected, trigger the controller assignment UI
 function onPlayerCountSelected(playerCount) {

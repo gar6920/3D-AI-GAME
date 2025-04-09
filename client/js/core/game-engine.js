@@ -47,7 +47,7 @@ let viewToggleBtn = null; // Global reference for the view toggle button
 // Initialize networking variables
 let lastSentPosition = new THREE.Vector3();
 let lastSentRotation = 0;
-let positionUpdateInterval = 100; // ms between position updates
+let positionUpdateInterval = 1000 / 30; // ms between position updates
 let lastPositionUpdate = 0;
 let inputUpdateInterval = 1000 / 30; // 30Hz input updates
 let lastInputUpdate = 0;
@@ -931,6 +931,17 @@ function initScene() {
     } catch (error) {
         debug(`Error creating scene: ${error.message}`, true);
     }
+
+    // <<< Initialize DefaultEnvironmentManager AFTER scene is created >>>
+    if (window.defaultEnvironmentManager && typeof window.defaultEnvironmentManager.initialize === 'function') {
+        console.log('[game-engine] Scene created, calling defaultEnvironmentManager.initialize...');
+        window.defaultEnvironmentManager.initialize(scene);
+    } else {
+        console.warn('[game-engine] defaultEnvironmentManager not found or initialize method missing.');
+    }
+    // <<< END >>>
+
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 }
 
 // Setup PointerLock controls

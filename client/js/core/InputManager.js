@@ -122,25 +122,6 @@ class InputManager {
             }
         }
         
-        // Register for animation loop updates
-        if (window.registerAnimationCallback) {
-            const result = window.registerAnimationCallback(this.update);
-            console.log(`InputManager: Registered animation callback, success: ${result}`);
-        } else {
-            console.error("InputManager: Failed to register animation callback - window.registerAnimationCallback not found");
-        }
-        
-        // EMERGENCY FALLBACK: Set up a separate polling interval in case animation loop isn't working
-        // This ensures gamepad input will work regardless of animation frame issues
-        this._fallbackPollInterval = setInterval(() => {
-            // If we haven't had an update in 100ms, use the fallback
-            const now = performance.now();
-            if (!this._lastUpdateTime || (now - this._lastUpdateTime) > 100) {
-                console.log('[InputManager] Using fallback polling for gamepad');
-                this.update(1/60); // Simulate a 60fps frame time
-            }
-        }, 16); // Poll at 60fps
-        
         console.log("InputManager initialized with centralized event handling and gamepad support");
     }
     
@@ -1048,7 +1029,26 @@ class InputManager {
             this.configureGamepad(deviceConfig);
         }
     }
+
+    // New method to be called AFTER game-engine.js is loaded
+    registerUpdateCallback() {
+        if (window.registerAnimationCallback) {
+            const result = window.registerAnimationCallback(this.update);
+            if (result) {
+                console.log('[InputManager] Update callback registered with game engine.');
+            } else {
+                console.error('[InputManager] registerAnimationCallback function returned false.');
+            }
+        } else {
+            // This error now indicates a problem in the calling code (main.js)
+            console.error('[InputManager] registerAnimationCallback not found when attempting to register update.');
+        }
+    }
 }
 
-// Create instance
-window.inputManager = new InputManager(); 
+// Explicitly attach to window object
+window.InputManager = InputManager;
+console.log('[InputManager.js] Explicitly assigned InputManager to window. Type:', typeof window.InputManager);
+
+// Create instance - REMOVED
+// window.inputManager = new InputManager(); 

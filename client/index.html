@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D AI Game Platform</title>
     <link rel="stylesheet" href="css/styles.css">
+    
+    <!-- Load Manager Classes Synchronously VERY EARLY -->
+    <script src="js/core/InputManager.js"></script>
+    <script src="js/core/ActionManager.js"></script>
+
     <style>
         body {
             margin: 0;
@@ -189,20 +194,19 @@
     <script src="https://unpkg.com/colyseus.js@^0.14.13/dist/colyseus.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/simplex-noise@3.0.0/dist/simplex-noise.min.js" defer></script>
     
-    <!-- Main loader script -->
+    <!-- Input Management - REMOVED from here -->
+    <!-- <script src="js/core/InputManager.js"></script> -->
+    
+    <!-- Action Management - REMOVED from here -->
+    <!-- <script src="js/core/ActionManager.js"></script> -->
+    
+    <!-- Main loader script (Deferred) -->
     <script src="js/core/main.js" defer></script>
     
     <!-- Local multiplayer scripts -->
-    <script src="js/localMultiplayer.js" defer></script>
-        
+            
     <!-- Building Mode Script -->
     <script src="js/core/BuildingModeManager.js" defer></script>
-    
-    <!-- Input Management (Step 1) -->
-    <script src="js/core/InputManager.js" defer></script>
-    
-    <!-- Action Management (Step 2) -->
-    <script src="js/core/ActionManager.js" defer></script>
     
     <!-- Game Integration (Step 3) -->
     <script src="js/core/GameIntegration.js" defer></script>

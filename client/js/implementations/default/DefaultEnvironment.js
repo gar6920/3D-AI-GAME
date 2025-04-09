@@ -3,50 +3,30 @@
  * Implementation-specific environment objects for the default implementation
  */
 
-// Self-initializing module - hooks into window.scene when available
-(function() {
-    console.log('[DefaultEnvironment] Module loaded');
-    
-    // Check if scene exists, otherwise set up a scene watcher
-    if (window.scene) {
-        initializeEnvironment(window.scene);
-    } else {
-        // Set up a scene watcher to detect when scene becomes available
-        setupSceneWatcher();
+class DefaultEnvironmentManager {
+    constructor() {
+        console.log('[DefaultEnvironmentManager] Instance created.');
+        this.initialized = false;
     }
-    
-    function setupSceneWatcher() {
-        console.log('[DefaultEnvironment] Setting up scene watcher');
-        
-        // Check every 100ms if scene is available
-        const checkInterval = setInterval(() => {
-            if (window.scene) {
-                console.log('[DefaultEnvironment] Scene detected, initializing environment');
-                clearInterval(checkInterval);
-                initializeEnvironment(window.scene);
-            }
-        }, 100);
-        
-        // Safety timeout after 10 seconds
-        setTimeout(() => {
-            if (checkInterval) {
-                clearInterval(checkInterval);
-                console.warn('[DefaultEnvironment] Timeout waiting for scene');
-            }
-        }, 10000);
-    }
-    
-    function initializeEnvironment(scene) {
-        console.log('[DefaultEnvironment] Initializing environment objects');
+
+    // Changed: This function now expects the scene to be passed in
+    initialize(scene) {
+        if (this.initialized) return;
+        if (!scene) {
+            console.error('[DefaultEnvironmentManager] Initialize called without a valid scene!');
+            return;
+        }
+        console.log('[DefaultEnvironmentManager] Initializing environment objects...');
         
         // Load the hovercar
-        loadHovercar(scene);
+        this.loadHovercar(scene);
+        this.initialized = true;
     }
     
-    function loadHovercar(scene) {
+    loadHovercar(scene) {
         const loader = new THREE.GLTFLoader();
         
-        console.log('[DefaultEnvironment] Loading hovercar model');
+        console.log('[DefaultEnvironmentManager] Loading hovercar model');
         loader.load(
             'assets/models/free_merc_hovercar.glb',
             (gltf) => {
@@ -72,17 +52,22 @@
                 // Add to scene
                 scene.add(hovercar);
                 
-                console.log('[DefaultEnvironment] Hovercar model loaded successfully');
+                console.log('[DefaultEnvironmentManager] Hovercar model loaded successfully');
             },
             (xhr) => {
                 const percent = Math.round(xhr.loaded / xhr.total * 100);
                 if (percent % 25 === 0) { // Log at 0, 25, 50, 75, 100%
-                    console.log(`[DefaultEnvironment] Hovercar ${percent}% loaded`);
+                    console.log(`[DefaultEnvironmentManager] Hovercar ${percent}% loaded`);
                 }
             },
             (error) => {
-                console.error('[DefaultEnvironment] Error loading hovercar model:', error);
+                console.error('[DefaultEnvironmentManager] Error loading hovercar model:', error);
             }
         );
     }
-})(); 
+}
+
+// Create instance and make it globally available
+if (typeof window !== 'undefined') {
+    window.defaultEnvironmentManager = new DefaultEnvironmentManager();
+} 

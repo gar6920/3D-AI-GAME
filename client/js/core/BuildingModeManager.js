@@ -36,27 +36,15 @@ class BuildingModeManager {
         this.checkPlacementValidity = this.checkPlacementValidity.bind(this);
         this.updatePreviewPosition = this.updatePreviewPosition.bind(this);
         this.createPreviewModels = this.createPreviewModels.bind(this);
+        this.init = this.init.bind(this);
         
         // Initialize when ready
-        this.initWhenReady();
-    }
-    
-    initWhenReady() {
-        console.log("Building mode manager initialized, waiting for DOM...");
-        
-        if (document.readyState === 'loading') {
-            // Use InputManager for DOM loaded events
-            setTimeout(() => {
-                window.inputManager.on('domcontentloaded', () => this.init());
-            }, 0);
-        } else {
-            // If DOMContentLoaded already fired, wait a bit to make sure the game loaded
-            setTimeout(() => this.init(), 2000);
-        }
+        // this.initWhenReady();
     }
     
     init() {
-        console.log("Building mode manager initializing...");
+        // This function will now be called externally after managers are ready
+        console.log("[BuildingModeManager] Initializing...");
         
         // Global flag to track if user has interacted with the game
         window.hasInteracted = false;
@@ -74,9 +62,6 @@ class BuildingModeManager {
         
         // Make functionality available globally
         this.exposeGlobalFunctions();
-        
-        // Setup structure listeners for server updates
-        this.setupStructureListeners();
         
         console.log("Building mode manager initialization complete - press B to toggle");
     }
@@ -209,11 +194,6 @@ class BuildingModeManager {
                 return;
             }
             
-            // B key toggles building mode
-            if (key === 'b' || key === 'B') {
-                this.toggle();
-            }
-            
             // Only process other keys if building mode is active
             if (!this.active) return;
             
@@ -305,7 +285,9 @@ class BuildingModeManager {
     }
     
     toggle() {
+        console.log('[BuildingModeManager] toggle() called.');
         this.active = !this.active;
+        console.log(`[BuildingModeManager] Toggled state. Active: ${this.active}`);
         
         // Update prevention flag
         window.preventPointerLock = this.active;
@@ -345,9 +327,21 @@ class BuildingModeManager {
         
         // Unlock/lock pointer
         if (this.active) {
+            console.log('[BuildingModeManager] Activating - Checking element status:');
+            console.log(`  - this.buildingMenu: ${this.buildingMenu ? 'Exists' : 'NULL'}`);
+            console.log(`  - this.placementPreview: ${this.placementPreview ? 'Exists' : 'NULL'}`);
+            console.log(`  - this.buildingPreview: ${this.buildingPreview ? 'Exists' : 'NULL'}`);
+            console.log(`  - window.controls: ${window.controls ? 'Exists' : 'NULL'}`);
+
             // Unlock the pointer to show cursor
-            if (window.controls && window.controls.isLocked) {
-                window.controls.unlock();
+            if (window.controls) {
+                console.log(`[BuildingModeManager] Controls state before unlock: isLocked=${window.controls.isLocked}, enabled=${window.controls.enabled}`);
+                if (window.controls.isLocked) {
+                    window.controls.unlock();
+                }
+                // Disable pointer lock controls to prevent auto-locking
+                window.controls.enabled = false;
+                console.log(`[BuildingModeManager] Controls state after changes: enabled=${window.controls.enabled}`);
             }
             
             // Most aggressive approach - add class to html element
@@ -362,10 +356,8 @@ class BuildingModeManager {
                 window.renderer.domElement.style.cursor = `url(${transparentCursor}), none`;
             }
             
-            // Disable pointer lock controls to prevent auto-locking
-            if (window.controls) {
-                window.controls.enabled = false;
-            }
+            console.log(`[BuildingModeManager] Building Menu display style: ${this.buildingMenu.style.display}`);
+            console.log(`[BuildingModeManager] Body cursor style: ${document.body.style.cursor}`);
             
             // Add a click interceptor div to prevent clicks from triggering pointer lock
             this.clickInterceptor = document.createElement('div');
@@ -401,13 +393,15 @@ class BuildingModeManager {
                 
                 // Send structure placement request to server - SIMPLE VERSION
                 if (window.room) {
-                    window.room.send("placeStructure", {
+                    const placementData = {
                         structureType: this.currentStructure,
                         x: Math.round(worldPos.x),
                         y: Math.round(worldPos.y) || 0,
                         z: Math.round(worldPos.z),
                         rotation: this.rotation * (Math.PI / 180)
-                    });
+                    };
+                    console.log('[BuildingModeManager] Sending placeStructure request:', placementData);
+                    window.room.send("placeStructure", placementData);
                     
                     // Important: Force refresh preview position after building
                     setTimeout(() => {
@@ -853,99 +847,42 @@ class BuildingModeManager {
         return false;
     }
     
-    setupStructureListeners() {
-        console.log("Setting up structure listeners");
-        
-        // Add responseHandler function
-        if (window.room) {
-            window.room.onMessage("structurePlaced", (response) => {
-                console.log("Server responded to structure placement:", response);
-                
-                if (response.success) {
-                    console.log("Structure placed successfully, id:", response.id);
-                    
-                    // Force update the preview to show it's ready for the next build
-                    setTimeout(() => {
-                        if (window.lastMouseEvent) {
-                            // Re-trigger cursor update to refresh preview
-                            this.updateCursorPosition(window.lastMouseEvent);
-                        }
-                    }, 200);
-                } else {
-                    console.error("Server rejected structure placement:", response.error);
-                }
-            });
+    initializeStructureListeners(room) {
+        if (!room || !room.state || !room.state.structures) {
+            console.error("[BuildingModeManager] initializeStructureListeners called before room/state/structures were ready!");
+            return;
         }
+
+        console.log("[BuildingModeManager] Initializing structure listeners for room:", room.id);
         
-        // Wait for room and state to be available
-        const checkForRoom = () => {
-            if (!window.room || !window.room.state) {
-                console.log("Room or state not ready, waiting...");
-                setTimeout(checkForRoom, 500);
-                return;
-            }
-            
-            // Check for structures schema
-            const checkForStructures = () => {
-                if (!window.room.state.structures) {
-                    console.log("Structures not available in state, waiting...");
-                    setTimeout(checkForStructures, 500);
-                    return;
-                }
-                
-                console.log("Setting up structure listeners for room:", window.room.id);
-                
-                // Handler for new structures added by the server
-                window.room.state.structures.onAdd = (structure, key) => {
-                    console.log("New structure from server:", key, structure);
-                    this.createStructureInWorld(structure, key);
-                };
-                
-                // Handler for structures removed from the server
-                window.room.state.structures.onRemove = (structure, key) => {
-                    console.log("Server removed structure:", key);
-                    this.removeStructureFromWorld(key);
-                };
-                
-                // Handler for structures modified on the server
-                window.room.state.structures.onChange = (structure, key) => {
-                    console.log("Server updated structure:", key, structure);
-                    this.updateStructureInWorld(structure, key);
-                };
-                
-                // Check for existing structures
-                if (window.room.state.structures.size > 0) {
-                    console.log("Processing existing structures:", window.room.state.structures.size);
-                    window.room.state.structures.forEach((structure, key) => {
-                        console.log("Processing existing structure:", key);
-                        this.createStructureInWorld(structure, key);
-                    });
-                }
-                
-                console.log("Structure listeners setup complete");
-            };
-            
-            checkForStructures();
+        // Handler for new structures added by the server
+        room.state.structures.onAdd = (structure, key) => {
+            console.log("[BuildingModeManager] structures.onAdd triggered:", key, structure);
+            this.createStructureInWorld(structure, key);
         };
         
-        // Start the listener setup when ready
-        if (document.readyState === 'complete') {
-            checkForRoom();
-        } else {
-            // Register with InputManager for the load event
-            window.inputManager.dispatchEvent('loadstructures', {
-                callback: checkForRoom
+        // Handler for structures removed from the server
+        room.state.structures.onRemove = (structure, key) => {
+            console.log("[BuildingModeManager] structures.onRemove triggered:", key);
+            this.removeStructureFromWorld(key);
+        };
+        
+        // Handler for structures modified on the server
+        room.state.structures.onChange = (structure, key) => {
+            console.log("[BuildingModeManager] structures.onChange triggered:", key);
+            this.updateStructureInWorld(structure, key);
+        };
+        
+        // Process any structures that might have already been added before listeners were attached
+        if (room.state.structures.size > 0) {
+            console.log("[BuildingModeManager] Processing existing structures (", room.state.structures.size, ")");
+            room.state.structures.forEach((structure, key) => {
+                // Use createStructureInWorld which handles updates if already exists
+                this.createStructureInWorld(structure, key);
             });
-            
-            // We'll need a global handler since InputManager doesn't directly support load events
-            window.loadStructuresHandler = checkForRoom;
         }
         
-        // Also register for avatarReady custom event
-        window.inputManager.on('avatarReady', () => {
-            console.log("'avatarReady' event received via InputManager, setting up structure listeners.");
-            checkForRoom();
-        });
+        console.log("[BuildingModeManager] Structure listeners setup complete.");
     }
     
     exposeGlobalFunctions() {
@@ -1096,6 +1033,21 @@ class BuildingModeManager {
     }
 }
 
-// Initialize the building mode manager when the script loads
-window.BuildingModeManager = BuildingModeManager;
-const buildingModeManager = new BuildingModeManager();
+// Wait for managers before initializing
+if (typeof window !== 'undefined') {
+    document.addEventListener('managersReady', () => {
+        console.log("[BuildingModeManager] Managers ready event received.");
+        if (window.buildingModeManager) {
+            window.buildingModeManager.init();
+        }
+    });
+}
+
+// Create and expose instance (still needs to exist for the event listener)
+if (typeof window !== 'undefined') {
+    window.buildingModeManager = new BuildingModeManager();
+    console.log("Building mode manager instance created, waiting for managersReady event.");
+} else if (typeof module !== 'undefined') {
+    // Basic export for potential Node.js usage (though unlikely for this manager)
+    module.exports = BuildingModeManager;
+}

@@ -348,5 +348,5 @@ class ActionManager {
     }
 }
 
-// Create instance
-window.actionManager = new ActionManager(); 
+// Create instance - REMOVED
+// window.actionManager = new ActionManager(); 

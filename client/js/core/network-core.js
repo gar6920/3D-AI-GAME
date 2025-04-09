@@ -347,9 +347,18 @@ async function initNetworking() {
                     id: window.room.sessionId, 
                     isLocalPlayer: true,
                     value: 1, 
-                    color: "#FFFF00"
+                    color: "#FFFF00",
+                    scene: window.scene
                 });
                 console.log("Local player created and linked to existing entity mesh:", window.myPlayer);
+                
+                // Initialize BuildingModeManager structure listeners
+                if (window.buildingModeManager && typeof window.buildingModeManager.initializeStructureListeners === 'function') {
+                    console.log("[network-core] Initial state received, calling initializeStructureListeners...");
+                    window.buildingModeManager.initializeStructureListeners(room);
+                } else {
+                    console.warn("[network-core] BuildingModeManager or initializeStructureListeners not found!");
+                }
                 
                 if (typeof animate === 'function') {
                     animate();
@@ -390,6 +399,11 @@ function setupMessageHandlers() {
     room.onMessage("server-event", (message) => {
         console.log("Server event received:", message);
         // Process server events if needed
+    });
+
+    // Add dummy handler for structurePlaced to prevent warnings (rely on state sync)
+    room.onMessage("structurePlaced", (message) => {
+        // console.log("Ignoring direct structurePlaced message:", message);
     });
 }
 
@@ -631,7 +645,7 @@ window.updateRemotePlayers = function(deltaTime) { // Added deltaTime parameter
             }
 
             // Update animation based on server state
-            if (typeof remotePlayer.playAnimation === 'function' && player.currentAnimation) {
+            if (typeof remotePlayer.playAnimation === 'function' && player.currentAnimation && remotePlayer.animationsLoaded) {
                 // Only play if the animation name is different from the currently active one
                 if (remotePlayer.activeAction?.getClip().name !== player.currentAnimation) {
                      if (remotePlayer.animations.has(player.currentAnimation)) {
@@ -639,6 +653,14 @@ window.updateRemotePlayers = function(deltaTime) { // Added deltaTime parameter
                     } else {
                         // Optional: Log a warning if the animation is missing
                         // console.warn(`[updateRemotePlayers] Remote player ${sessionId} missing animation: ${player.currentAnimation}`);
+                        
+                        // <<< Log available animations on first failure >>>
+                        if (!remotePlayer.loggedMissingIdle) { 
+                            console.warn(`[Player ${sessionId}] Fallback animation 'Idle.002' not found. Available animations:`, Array.from(remotePlayer.animations.keys()));
+                            remotePlayer.loggedMissingIdle = true; // Log only once per player
+                        }
+                        // <<< END LOG >>>
+
                         remotePlayer.playAnimation('Idle.002'); // Fallback to idle
                     }
                 }

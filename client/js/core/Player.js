@@ -30,6 +30,7 @@ class Player extends Entity {
         this.animations = new Map(); // Store animations by name
         this.activeAction = null;
         this.controls = null;
+        this.animationsLoaded = false;
         
         // Model properties
         this.modelPath = params.modelPath || 'assets/models/human_man.glb'; // Default or provided model
@@ -132,6 +133,7 @@ class Player extends Entity {
             this.mesh = modelContainer;
             this.modelMesh = newMesh; // Store reference to actual model for animation
             this.modelLoaded = true;
+            this.animationsLoaded = true;
             
             // Set visibility based on player type and view mode
             this.updateVisibility();
