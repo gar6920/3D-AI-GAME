@@ -2,134 +2,116 @@
 
 **Introduction:**
 
-The primary goal of this refactoring is to solve a critical input handling bug: currently, keyboard and mouse actions (like moving, toggling views, or building) can still occur even when the browser's pointer lock is disengaged (e.g., after pressing 'Esc'). This breaks immersion and causes unintended behavior.
+The primary goal of this refactoring is to solve a critical input handling bug: currently, Mouse & Keyboard (M+KB) actions (like moving, toggling views, or building) and camera look can still occur even when the browser's pointer lock is disengaged (e.g., after pressing 'Esc'). This breaks immersion and causes unintended behavior. **Crucially, gamepad input should remain functional regardless of the pointer lock state.**
 
-The root cause is fragmented input handling across multiple JavaScript modules. Input events are being processed in parallel paths, and not all paths correctly check the pointer lock state.
+A secondary, but equally important, goal is to **abstract input handling**, ensuring core game logic modules (`controls.js`, `game-engine.js`, `BuildingModeManager.js`, etc.) react only to abstract *actions* (e.g., `'start_moving_forward'`, `'look_delta'`) emitted via `ActionManager`, making them independent of the specific input modality (M+KB, Gamepad). **This abstraction improves code maintainability, testability, and simplifies adding future input methods.**
 
-**Core Principle: Abstraction via Global State**
+The root cause is fragmented input handling across multiple JavaScript modules. Input events are being processed in parallel paths, not all paths correctly check the pointer lock state, and core logic often depends directly on input events or intermediate state flags rather than abstract actions.
 
-1.  **Single Source of Truth (for M+KB Active State):** A global variable, `window.isMouseKeyboardActive`, will represent whether Mouse & Keyboard (M+KB) input intended for game control should be processed. It defaults to `false`.
+**Core Principle: Abstraction via Global State, Single Gatekeeper, and ActionManager**
 
-2.  **Environment-Specific Control:**
-    *   **Browser (Single Player):** An inline `<script>` within `index.html` directly listens to native browser pointer lock events (`pointerlockchange`, `pointerlockerror`). It sets `window.isMouseKeyboardActive` to `true` on successful lock and `false` on unlock or error. It also initiates the lock request via the native `element.requestPointerLock()` API when the user clicks the game container.
-    *   **Electron (Multiplayer):** The Electron main process determines which game instance (webview) has M+KB focus. It sends IPC messages (`set-mkb-active`, `true`/`false`) to the relevant webview. A preload script (`game-preload.js`) in the webview receives the message and sets `window.isMouseKeyboardActive` accordingly.
+1.  **Single Source of Truth (for M+KB Active State):** A global variable, `window.isMouseKeyboardActive`, will represent whether Mouse & Keyboard (M+KB) input intended for game control (actions *and* camera look) should be processed. It defaults to `false`. **Gamepad input processing remains independent of this flag.**
 
-3.  **Agnostic Core Logic:** All deeper game modules (`InputManager.js`, `ActionManager.js`, `controls.js`, `BuildingModeManager.js`, etc.) **do not know or care *why*** `window.isMouseKeyboardActive` is true or false. They **only check its current value**. `InputManager.js` specifically acts as the central gate: if the flag is `false`, it ignores incoming M+KB events; if `true`, it processes them.
+2.  **Environment-Specific Control (Flag Setting):**
+    *   **Browser (Single Player - This Refactor's Focus):** An inline `<script>` within `index.html` directly listens to native browser pointer lock events (`pointerlockchange`, `pointerlockerror`). It sets `window.isMouseKeyboardActive` to `true` on successful lock and `false` on unlock or error. It also initiates the lock request via the native `element.requestPointerLock()` API when the user clicks the game container.
+    *   **Electron (Multiplayer - Deferred):** *(Implementation deferred to a subsequent task)* The Electron main process will determine M+KB focus and send IPC messages (`set-mkb-active`, `true`/`false`) to the relevant webview. A preload script (`game-preload.js`) will receive the message and set `window.isMouseKeyboardActive`.
 
-**This approach ensures the core game logic remains identical and adaptable for both browser and Electron environments, controlled solely by the state of the `window.isMouseKeyboardActive` flag.**
+3.  **Agnostic Core Logic & The Gatekeeper (`InputManager.js`):**
+    *   `InputManager.js` acts as the **sole gatekeeper** for *all* game-related M+KB input. It is the *only* module that needs to check `window.isMouseKeyboardActive`.
+    *   If the flag is `false`, `InputManager` ignores incoming M+KB events (keys, buttons, mouse movement, wheel) and **does not process them further**.
+    *   If the flag is `true`, `InputManager` processes the M+KB events, **translating them into abstract actions** emitted via `ActionManager` (e.g., `'start_moving_forward'`, `'stop_moving_forward'`, `'jump_press'`, `'look_delta'`, `'rotate_build_item_left'`). It should **avoid** setting intermediate global state flags like `window.moveForward` directly.
+    *   All downstream modules (`ActionManager.js` subscribers like `controls.js`, `BuildingModeManager.js`, `game-engine.js`) receive input *only* as abstract actions via `ActionManager`. They **do not need to know or check** `window.isMouseKeyboardActive` themselves and should **not** rely on raw input events or intermediate state flags.
+    *   Gamepad processing paths within `InputManager` also translate input into the same abstract `ActionManager` events, achieving modality independence.
+
+**This approach ensures the core game logic remains identical and adaptable for both browser and Electron environments, controlled solely by the state of the `window.isMouseKeyboardActive` flag (gated exclusively by `InputManager.js` for M+KB input), and driven purely by abstract actions via `ActionManager`.**
 
 **Refactoring Strategy Summary:**
 
 1.  **Define Global Flag:** Initialize `window.isMouseKeyboardActive = false;`.
-2.  **Implement Top-Level Listeners (`index.html` inline script):** Handle `pointerlockchange`, `pointerlockerror`, and the click-to-lock (using `requestPointerLock()`) to set the global flag.
-3.  **Implement Central Input Gate (`InputManager.js`):** Add checks at the start of M+KB handlers to only proceed if `window.isMouseKeyboardActive` is `true`.
-4.  **Consolidate M+KB Listeners:** Remove all other raw M+KB event listeners for game controls from other modules (e.g., `BuildingModeManager`, `controls.js`), ensuring `InputManager` is the sole entry point.
-5.  **Refine `InputManager`/`ActionManager`:** Remove now-redundant internal checks within these modules.
-6.  **Reconnect Logic:** Update modules (e.g., `BuildingModeManager`) to subscribe to actions from `ActionManager` instead of listening for raw input.
+2.  **Implement Top-Level Listeners (`index.html` inline script):** Handle browser pointer lock events/requests to set the global flag. Perform initial listener cleanup in `controls.js` (removing listeners that *managed* lock state).
+3.  **Implement Central Input Gate (`InputManager.js`):** Add checks to M+KB handlers to gate processing based on `window.isMouseKeyboardActive`.
+4.  **Consolidate & Abstract Input (`InputManager.js`):** Ensure `InputManager` handles *all* raw input (M+KB gated, Gamepad always active), translating everything into abstract `ActionManager` events. Remove external listeners *for game controls*.
+5.  **Refine `ActionManager`:** Ensure `ActionManager` defines all necessary abstract actions.
+6.  **Refactor Core Logic (`controls.js`, etc.) & Test:** Update core modules to subscribe *only* to `ActionManager` events, removing dependencies on raw input/flags. Perform comprehensive testing.
 
 ---
 
 **Detailed Steps:**
 
-**Step 1: Establish Core Pointer Lock State & Re-lock (Top-Level via `index.html` Inline Script)**
+**(Matches the 6-point Summary Above)**
 
-*   **Goal:** Create the global state flag and link it reliably to pointer lock events handled *directly* within `<script>` tags in `index.html`, enabling easy re-locking via native API calls, independent of any game logic modules.
-*   **Files Involved:**
-    *   `index.html` (adding inline script logic)
-    *   `client/js/core/controls.js` (to *remove* listeners)
+**Step 1: Define Global Flag**
+
+*   **Goal:** Establish the single source of truth for M+KB active state.
+*   **Files Involved:** `index.html`
 *   **Actions:**
-    1.  In `index.html` (inside a `<script>` tag, placed before other game scripts load, e.g., in `<head>` or early `<body>`): Define `window.isMouseKeyboardActive = false;`.
-    2.  In the *same* `index.html` `<script>` tag: Add event listeners directly to the `document` for pointer lock changes:
+    1.  In `index.html` (inside a `<script>` tag, placed before other game scripts load), define the global flag:
         ```javascript
-        // --- Pointer Lock State Management (index.html) ---
-        document.addEventListener('pointerlockchange', () => {
-          const hasLock = !!document.pointerLockElement;
-          console.log(`[IndexContext] pointerlockchange: Lock ${hasLock ? 'acquired' : 'released'}. Setting isMouseKeyboardActive = ${hasLock}`);
-          window.isMouseKeyboardActive = hasLock;
-
-          // Optional: UI updates based on lock state
-          const instructions = document.getElementById('lock-instructions');
-          if (instructions) {
-              instructions.style.display = hasLock ? 'none' : 'block';
-          }
-          // Always show OS cursor when unlocked
-          if (!hasLock) {
-              document.body.style.cursor = 'auto';
-          }
-        }, false);
-
-        document.addEventListener('pointerlockerror', (error) => {
-          console.error('[IndexContext] Pointer Lock Error:', error);
-          window.isMouseKeyboardActive = false; // Ensure flag is false on error
-        }, false);
-        // --- End Pointer Lock State Management ---
+        // --- Global M+KB Active State Flag ---
+        window.isMouseKeyboardActive = false;
+        // ---
         ```
-    3.  In the *same* `index.html` `<script>` tag: Add the click-to-relock listener, using the native `requestPointerLock()` API:
-        ```javascript
-        // --- Click-to-(Re)Lock Logic (index.html) ---
-        function attemptBrowserLock() {
-           if (!document.pointerLockElement) {
-             console.log("[IndexContext Click] Attempting pointer lock via requestPointerLock().");
-             // Get the element the game runs in (adjust selector as needed)
-             const gameContainer = document.getElementById('gameContainer') || document.body;
-             try {
-               gameContainer.requestPointerLock();
-             } catch (err) {
-               console.error("[IndexContext Click] Error requesting pointer lock:", err);
-             }
-           } else {
-             console.log("[IndexContext Click] Cannot request lock: Pointer already locked.");
-           }
-        }
+*   **Test:** Verify the variable is accessible.
 
-        // Add listener once the DOM is ready
-        document.addEventListener('DOMContentLoaded', () => {
-            const gameContainer = document.getElementById('gameContainer') || document.body; // Adjust selector
-            if (gameContainer) {
-                console.log("[IndexContext] Adding click listener for pointer lock to:", gameContainer);
-                gameContainer.addEventListener('click', attemptBrowserLock);
-            } else {
-                console.error("[IndexContext] Game container not found for click-to-lock listener.");
-            }
-        });
-        // --- End Click-to-(Re)Lock Logic ---
-        ```
-    4.  **Crucially:** In `client/js/core/controls.js`, inside the `initControls` function, **REMOVE** any lines that add event listeners for `'lock'`, `'unlock'`, or `'click'` *related to managing the pointer lock state or initiating the lock*. The `PointerLockControls` library will still internally react to the `pointerlockchange` event for camera movement, which is fine.
-*   **Test:** Load game. Open console. Click screen -> check for "[IndexContext Click] Attempting..." log, then "[IndexContext] pointerlockchange: Lock acquired..." log and `true` flag. Press ESC -> check for "[IndexContext] pointerlockchange: Lock released..." log and `false` flag. Click back into window -> check lock attempts and acquires again. Ensure instructions/cursor display correctly.
+**Step 2: Implement Top-Level Listeners & Initial Cleanup**
 
-**Step 2: Implement Primary Input Gate in `InputManager`**
+*   **Goal:** Link the global flag to native browser pointer lock events, provide click-to-lock, and remove conflicting listeners from `controls.js`.
+*   **Files Involved:** `index.html`, `client/js/core/controls.js`
+*   **Actions:**
+    1.  In the `index.html` `<script>`: Add listeners for `pointerlockchange`, `pointerlockerror` to set `window.isMouseKeyboardActive` and update basic UI (instructions, cursor).
+        ```javascript // [Code as previously defined] ```
+    2.  In the `index.html` `<script>`: Add the `click` listener to `gameContainer` to call `attemptBrowserLock()` (which uses `requestPointerLock()`).
+        ```javascript // [Code as previously defined] ```
+    3.  In `client/js/core/controls.js` (`initControls`): **REMOVE** listeners for `'lock'`, `'unlock'`, `'click'` related to pointer lock management/UI. These are now handled in `index.html`.
+*   **Test:** Browser pointer lock engages/disengages correctly on click/ESC, `window.isMouseKeyboardActive` flag updates, UI updates. Gamepad works. M+KB might still be wrong.
 
-*   **Goal:** Make `InputManager` block *all* M+KB processing when `window.isMouseKeyboardActive` is `false`.
+**Step 3: Implement Central Input Gate (`InputManager.js`)**
+
+*   **Goal:** Make `InputManager` gate M+KB event processing based on `window.isMouseKeyboardActive`.
 *   **Files Involved:** `client/js/core/InputManager.js`
-*   **Actions:** Add `if (!window.isMouseKeyboardActive) { /* log optional */ return; }` check at the start of relevant M+KB handlers (`onKeyDown`, `onKeyUp`, `onMouseMove`, `onMouseDown`, `onMouseUp`, `onWheel`).
-*   **Test:** Load game. Use gamepad (ok). Click to lock. Press ESC. **Verify strictly:** *All* M+KB input (keys, clicks, movement, wheel) produces *no* game effect and ideally only minimal/optional "ignored" logs. Gamepad remains functional.
+*   **Actions:** Add `if (!window.isMouseKeyboardActive) { return; }` check at the start of **all** relevant M+KB handlers (`onKeyDown`, `onKeyUp`, `onMouseMove`, `onMouseDown`, `onMouseUp`, `onWheel`) *before* any further processing or action emission occurs.
+*   **Test:** Load game. Use gamepad (ok). Click to lock (M+KB works). Press ESC. **Verify strictly:** *All* M+KB input produces *no* game effect. Gamepad remains functional. Click to re-lock, M+KB works again.
 
-**Step 3: Audit and Eliminate External M+KB Game Control Listeners**
+**Step 4: Consolidate & Abstract Input (`InputManager.js`)**
 
-*   **Goal:** Force all M+KB game control input through the gated `InputManager`.
-*   **Files Involved:** `BuildingModeManager.js`, `controls.js`, others via search.
-*   **Actions:** Remove `addEventListener` or `.on('key...')`/`.on('mouse...')` calls for M+KB *game controls* from all modules *except* `InputManager`. Keep UI-related listeners if necessary, but verify they don't trigger game actions.
-*   **Test:** Repeat Step 2 test. Lock inactive: M+KB still fully blocked. Lock active: M+KB behavior should become more consistent and correct as duplicate handlers are removed.
-
-**Step 4: Complete `InputManager` & `ActionManager` Refinement**
-
-*   **Goal:** Clean up redundant internal checks now that the top-level gate and listener consolidation are done.
-*   **Files Involved:** `InputManager.js`, `ActionManager.js`.
+*   **Goal:** Ensure `InputManager` is the sole handler for raw game input (M+KB gated, Gamepad always active), translating everything into abstract `ActionManager` events. Remove external listeners *for game controls*.
+*   **Files Involved:** `InputManager.js`, `BuildingModeManager.js`, `controls.js`, others via search.
 *   **Actions:**
-    1.  Remove now-redundant internal `if (document.pointerLockElement)` or `if (window.isMouseKeyboardActive)` checks from methods within `InputManager` and `ActionManager`.
-    2.  Ensure `ActionManager` has bindings for all actions previously triggered by removed listeners (e.g., Q/E rotate, B/V toggles).
-*   **Test:** Gameplay should function correctly when pointer lock is active, relying solely on the `InputManager` -> `ActionManager` flow.
+    1.  **Remove External Game Control Listeners:** Search the codebase and remove `addEventListener` calls (or similar) for M+KB/Gamepad events intended to trigger *game controls* from all modules *except* `InputManager.js`. UI-specific listeners that don't directly trigger game actions can remain, but should be reviewed.
+    2.  **Implement Action Emitters:** Modify `InputManager`'s handlers (keydown, keyup, mousedown, mouseup, mousemove, wheel, gamepadbutton, gamepadaxis) to emit corresponding abstract actions via `window.actionManager.emit(...)`. Examples:
+        *   W key down (if M+KB active): `emit('start_moving_forward')`
+        *   W key up (if M+KB active): `emit('stop_moving_forward')`
+        *   Mouse move (if M+KB active): `emit('look_delta', { x: deltaX, y: deltaY })`
+        *   Gamepad Left Stick Y > threshold: `emit('start_moving_forward')`
+        *   Gamepad Left Stick Y ~ 0: `emit('stop_moving_forward')`
+        *   Gamepad Right Stick X: `emit('look_delta', { x: deltaX_gp, y: 0 })`
+    3.  **Remove Intermediate State:** Stop setting global flags like `window.moveForward` within `InputManager`.
+*   **Test:** Lock inactive: M+KB blocked. Lock active: M+KB and Gamepad should *attempt* to trigger actions (verify via `ActionManager` logs or basic tests). Core logic won't react correctly yet.
 
-**Step 5: Final Integration and Comprehensive Testing**
+**Step 5: Refine `ActionManager`**
 
-*   **Goal:** Re-connect logic (e.g., `BuildingModeManager` rotation) via `ActionManager` subscriptions and perform full testing.
-*   **Files Involved:** `BuildingModeManager.js`, etc.
-*   **Actions:** Add `window.actionManager.on(...)` subscriptions where needed in modules like `BuildingModeManager` to react to actions (e.g., `'rotate_left'`, `'toggle_building'`).
+*   **Goal:** Ensure `ActionManager` defines all necessary abstract actions identified in Step 4.
+*   **Files Involved:** `ActionManager.js`.
+*   **Actions:**
+    1.  Review `ActionManager.js` and add definitions/constants for any missing actions (`'start_moving_forward'`, `'stop_moving_forward'`, `'look_delta'`, `'toggle_build_mode'`, `'rotate_build_item_left'`, `'jump_press'`, etc.).
+    2.  Ensure `InputManager` uses the correct action names when emitting.
+*   **Test:** Verify `ActionManager` recognizes and can dispatch all required actions.
+
+**Step 6: Refactor Core Logic (`controls.js`, etc.) & Test**
+
+*   **Goal:** Make core game logic modules subscribe *only* to `ActionManager` events, removing dependencies on direct input or intermediate flags. Perform comprehensive testing.
+*   **Files Involved:** `controls.js` (esp. `updateControls`, camera handling), `BuildingModeManager.js`, `game-engine.js`, etc.
+*   **Actions:**
+    1.  **Subscribe to Actions:** Modify modules like `controls.js` and `BuildingModeManager.js` to subscribe (`window.actionManager.on(...)`) to the relevant actions defined in Step 5.
+    2.  **Replace Direct Logic:** Remove code that checks raw input or intermediate flags (e.g., `if (window.moveForward)`). Instead, use the action handlers to set internal component state (e.g., a `this.isMovingForward` flag within the relevant class/module upon receiving `'start_moving_forward'`). The main `updateControls` loop (or similar update functions) will need refactoring to react to this internal state rather than global flags.
+    3.  **Handle `look_delta`:** Update camera logic (likely in `controls.js`) to react to the `'look_delta'` action, applying the provided deltas based on the current view mode.
 *   **Full Test Plan:**
-    *   **Gamepad:** Verify independent functionality.
-    *   **Lock Active:** M+KB movement, camera look, actions (toggles, build, jump, etc.), building rotation (Q/E *only* in build mode) work correctly.
-    *   **Lock Inactive (ESC):** *All* M+KB game input is strictly ignored.
+    *   **Gamepad:** Verify independent functionality for movement, actions, camera look via `ActionManager`.
+    *   **Lock Active:** Verify M+KB functionality for movement, actions, camera look via `ActionManager`.
+    *   **Lock Inactive (ESC):** *All* M+KB game input is strictly ignored. Gamepad still works.
     *   **Re-engaging Lock:** Click window after ESC -> lock re-acquires correctly, M+KB controls resume.
-    *   **Input Fields:** Ensure game input is ignored when typing in UI elements (if any).
+    *   **Input Modality Independence:** Confirm actions behave identically whether triggered by M+KB or Gamepad.
+    *   **Input Fields/UI:** Ensure game input is ignored when interacting with UI elements.
+    *   **(Deferred) Electron Test:** Future testing for IPC mechanism.
 
 ---
