@@ -297,16 +297,10 @@ class BuildingModeManager {
         this.buildingMenu.style.display = this.active ? 'block' : 'none';
         this.placementPreview.style.display = this.active ? 'block' : 'none';
         
-        // Always hide lock instructions in building mode, but only show
-        // when exiting if user hasn't interacted yet
+        // Always hide lock instructions in building mode
         const lockInstructions = document.getElementById('lock-instructions');
         if (lockInstructions) {
-            if (this.active) {
-                lockInstructions.style.display = 'none';
-            } else if (!window.hasInteracted) {
-                // Only show instructions if user hasn't interacted yet
-                lockInstructions.style.display = 'flex';
-            }
+            lockInstructions.style.display = 'none';
         }
         
         // Initialize 3D preview if needed
@@ -431,6 +425,28 @@ class BuildingModeManager {
                 button.style.pointerEvents = 'auto'; // Force clickable
             });
         } else {
+            // Exiting Building Mode
+            console.log('[BuildingModeManager] Exiting building mode.');
+            // Hide UI elements
+            if (this.buildingModeIndicator) this.buildingModeIndicator.style.display = 'none';
+            if (this.buildingMenu) this.buildingMenu.style.display = 'none';
+            if (this.placementPreview) this.placementPreview.style.display = 'none';
+            
+            // --- Attempt to re-lock pointer if returning to a suitable view ---
+            if (!window.isRTSMode && !window.isFreeCameraMode) { // Only lock if returning to FPS/TPS
+                console.log('[BuildingModeManager] Attempting to re-acquire pointer lock after exiting build mode.');
+                // Use a small delay to ensure the UI is hidden before lock attempt
+                setTimeout(() => {
+                    // Double-check conditions right before locking, in case state changed during delay
+                    if (!this.active && !window.isRTSMode && !window.isFreeCameraMode && !document.pointerLockElement && !window.controls.isLocked) {
+                         window.controls.lock();
+                    }
+                }, 50); // 50ms delay
+            } else {
+                 console.log('[BuildingModeManager] Not re-locking pointer (in RTS or FreeCam mode).');
+            }
+            // --- End re-lock logic ---
+            
             // Remove cursor-hiding class
             document.documentElement.classList.remove('hide-cursor');
             
@@ -462,14 +478,6 @@ class BuildingModeManager {
         // Select default structure if activating
         if (this.active && !this.currentStructure) {
             this.selectStructureType('building');
-        }
-
-        // Ensure lock instructions stay hidden after exiting building mode
-        if (!this.active) {
-            const lockInstructions = document.getElementById('lock-instructions');
-            if (lockInstructions) {
-                lockInstructions.style.display = 'none';
-            }
         }
     }
     

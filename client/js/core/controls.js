@@ -77,21 +77,18 @@ window.initControls = function(camera, domElement) {
     // We don't need a click listener here anymore - it's handled in game-engine.js
 
     controls.addEventListener('lock', () => {
-        const instructions = document.getElementById('lock-instructions');
-        if (instructions) {
-            instructions.style.display = 'none';
-        }
-        
-        // Update mouse sensitivity based on current view mode
-        updateMouseSensitivity();
+        console.log("Pointer locked");
+        window.isControlsEnabled = true;
+        window.canJump = true;
+        document.body.classList.add('controls-enabled');
     });
     
     controls.addEventListener('unlock', () => {
-        const instructions = document.getElementById('lock-instructions');
-        if (instructions) {
-            instructions.style.display = 'block';
-        }
+        console.log("Pointer unlocked");
+        window.isControlsEnabled = false;
+        document.body.classList.remove('controls-enabled');
         
+        // When pointer unlocks, if not in RTS or Free Cam, reset view to first person
         if (window.isFirstPerson) {
             const controlsInfo = document.getElementById('controls-info');
             if (controlsInfo) {
@@ -669,7 +666,7 @@ window.toggleCameraView = function() {
         window.isRTSMode = false;
         try {
             if (typeof window.switchToFirstPersonView === 'function') {
-                window.switchToFirstPersonView();
+                window.switchToFirstPersonView(previousViewMode); // Pass previous mode
                 console.log("[DEBUG] Switched back to first-person view");
             } else {
                 console.error("[ERROR] switchToFirstPersonView function not found");

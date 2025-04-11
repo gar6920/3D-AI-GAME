@@ -250,7 +250,8 @@ function addViewToggleButton() {
 // Toggle between first-person, third-person and free camera view functions have been moved to controls.js
 
 // First-person setup
-window.switchToFirstPersonView = function() {
+// Add 'previousViewMode' parameter to handle delayed locking if needed
+window.switchToFirstPersonView = function(previousViewMode) {
     // Hide player's mesh in first-person
     if (window.playerEntity && window.playerEntity.mesh) {
         window.playerEntity.mesh.visible = false;
@@ -275,11 +276,26 @@ window.switchToFirstPersonView = function() {
     // Reset cursor styles that might have been set in RTS mode
     document.body.style.cursor = 'default';
     document.documentElement.style.cursor = 'default';
-    renderer.domElement.style.cursor = 'default';
+    renderer.domElement.style.cursor = 'none'; // Hide cursor immediately for FPS feel
     
-    // Then relock pointer for first-person view
-    if (controls && !controls.isLocked) {
-        controls.lock();
+    // Define the lock function
+    const attemptLock = () => {
+        if (controls && !controls.isLocked) {
+            console.log('[GameEngine] Attempting to lock controls in switchToFirstPersonView');
+            controls.lock();
+        } else if (controls && controls.isLocked) {
+             console.log('[GameEngine] Controls already locked in switchToFirstPersonView');
+        }
+    };
+
+    // Delay lock if coming from a mode that explicitly exits lock (RTS/FreeCam)
+    if (previousViewMode === 'rtsView' || previousViewMode === 'freeCamera') {
+        console.log('[GameEngine] Delaying lock attempt (100ms) after switching from RTS/FreeCam.');
+        setTimeout(attemptLock, 100); // Delay 100ms
+    } else {
+        // If coming from third-person (or initial load), lock immediately
+        console.log('[GameEngine] Locking immediately after switching from', previousViewMode);
+        attemptLock(); // Lock immediately
     }
     
     // Set camera position based on the available player information
@@ -999,39 +1015,59 @@ function setupPointerLockControls() {
 
         // Handle pointer lock change explicitly
         function onPointerLockChange() {
-            if (document.pointerLockElement === renderer.domElement || 
-                document.mozPointerLockElement === renderer.domElement ||
-                document.webkitPointerLockElement === renderer.domElement) {
-                
+            const isLocked = document.pointerLockElement === renderer.domElement || 
+                           document.mozPointerLockElement === renderer.domElement ||
+                           document.webkitPointerLockElement === renderer.domElement;
+
+            // Ensure instructions element exists
+            const instructions = document.getElementById('lock-instructions');
+            if (!instructions) {
+                console.error("#lock-instructions element not found in onPointerLockChange");
+                return; 
+            }
+            
+            // Always hide the instructions overlay itself
+            instructions.style.display = 'none';
+
+            // Define the function to attempt locking
+            const attemptLockOnClick = () => {
+                console.log('[GameEngine] Canvas clicked, attempting to lock pointer...'); // DEBUG LOG
+                // Don't lock if in RTS or Free Camera mode
+                if (!window.isRTSMode && !window.isFreeCameraMode) {
+                    controls.lock();
+                } else {
+                    console.log('[GameEngine] Canvas clicked, but in RTS/FreeCam mode, not locking.'); // DEBUG LOG
+                }
+                // Listener is automatically removed because we use { once: true }
+            };
+
+            if (isLocked) {
                 debug('Pointer is now locked');
-                instructions.style.display = 'none';
-                document.body.classList.add('controls-enabled');
-                window.canJump = true;
-                window.isControlsEnabled = true;
+                console.log('[GameEngine] Pointer is now locked'); // DEBUG LOG
+                // No need to hide instructions here, done above
                 
-                // Create the player's entity if not already created
+                // Remove the canvas click listener if it somehow persisted (belt-and-suspenders)
+                // Note: {once: true} should handle this, but explicit removal is safer 
+                // if the lock attempt failed and unlock event didn't fire cleanly.
+                // renderer.domElement.removeEventListener('click', attemptLockOnClick);
+                // Let's rely on { once: true } for now to keep it simpler.
+
+                // Original logic for player creation, networking, view switch, animation start
                 if (!window.playerLoaded) {
                     debug('Creating player entity after click to play');
-                    // Initialize the player
                     window.playerEntity = window.createPlayerEntity(scene);
                     window.player = window.playerEntity;
                     window.playerLoaded = true;
                     
-                    // Make sure player mesh is invisible in first-person view
                     if (window.playerEntity && window.playerEntity.mesh) {
                         window.playerEntity.mesh.visible = false;
                     }
                     
-                    // Initialize networking if not already done
                     if (!window.room) {
                         window.initNetworking().then((roomInstance) => {
                             window.gameRoom = roomInstance;
                             window.room = roomInstance;
-                            
-                            // Start getting updates from the server
                             setInterval(sendInputUpdate, 1000 / 30);
-                            
-                            // Apply the first-person view once the room is joined
                             if (window.switchToFirstPersonView) {
                                 window.switchToFirstPersonView();
                             }
@@ -1039,7 +1075,6 @@ function setupPointerLockControls() {
                             debug(`Networking error: ${error.message}`, true);
                         });
                     } else {
-                        // Apply the first-person view if we already have a room
                         if (window.switchToFirstPersonView) {
                             window.switchToFirstPersonView();
                         }
@@ -1050,24 +1085,15 @@ function setupPointerLockControls() {
                     window.isAnimating = true;
                     animate();
                 }
+                // End of original lock logic
+
             } else {
-                // If we were in RTS mode, don't show instructions on unlock
-                if (window.isRTSMode) {
-                    instructions.style.display = 'none';
-                    
-                    // Make sure RTS cursor is still visible
-                    if (document.getElementById('rts-cursor')) {
-                        document.getElementById('rts-cursor').style.display = 'block';
-                    }
-                } else {
-                    // Only show instructions if we're not in free camera mode AND not already playing
-                    if (!window.isFreeCameraMode && !window.playerLoaded) {
-                        instructions.style.display = 'block';
-                    } else {
-                        instructions.style.display = 'none';
-                    }
-                }
-                debug('Pointer is unlocked');
+                debug('Pointer is unlocked - Hiding instructions overlay and adding canvas click listener');
+                console.log('[GameEngine] Pointer is unlocked - Adding one-time click listener to renderer.domElement.'); // DEBUG LOG
+                // No need to show instructions here, done above (set to none)
+                
+                // Add a one-time click listener to the canvas to re-acquire lock
+                renderer.domElement.addEventListener('click', attemptLockOnClick, { once: true });
             }
         }
 
@@ -1400,7 +1426,7 @@ window.updateFirstPersonCamera = function() {
     const playerState = window.room.state.players.get(window.room.sessionId);
     if (!playerState) return;
     
-    // Update camera position to be exactly at player's position (with head height)
+    // Update camera position to be exactly at player position with head height
     if (window.camera && controls) {
         // Position camera exactly at player position with head height
         window.camera.position.set(
@@ -1411,8 +1437,8 @@ window.updateFirstPersonCamera = function() {
         
         // Apply proper rotation using player's server-side rotation values
         // and any local camera pitch changes for immediate feedback
-        const pitch = typeof window.firstPersonCameraPitch !== 'undefined' 
-            ? window.firstPersonCameraPitch 
+        const pitch = typeof window.firstPersonCameraPitch !== 'undefined'
+            ? window.firstPersonCameraPitch
             : (playerState.pitch || 0);
             
         const rotationY = typeof window.playerRotationY !== 'undefined'
@@ -1427,7 +1453,7 @@ window.updateFirstPersonCamera = function() {
             'YXZ' // Important for proper FPS rotation order
         ));
         
-        // Update the controls object to match camera position
+        // Update controls position if available
         if (controls.getObject) {
             controls.getObject().position.copy(window.camera.position);
         }
@@ -1471,8 +1497,8 @@ function updateThirdPersonCamera() {
     
     // Target position (slightly above player's head)
     const lookAtPosition = new THREE.Vector3(
-        playerState.x,
-        playerState.y + window.playerHeight * 0.7, // Look at player's upper body
+        playerState.x, 
+        playerState.y + window.thirdPersonCameraHeight * 0.8, // Look at upper body
         playerState.z
     );
     
