@@ -1026,33 +1026,13 @@ function setupPointerLockControls() {
                 return; 
             }
             
-            // Always hide the instructions overlay itself
+            // Hide instructions overlay completely regardless of mode
             instructions.style.display = 'none';
 
-            // Define the function to attempt locking
-            const attemptLockOnClick = () => {
-                console.log('[GameEngine] Canvas clicked, attempting to lock pointer...'); // DEBUG LOG
-                // Don't lock if in RTS or Free Camera mode
-                if (!window.isRTSMode && !window.isFreeCameraMode) {
-                    controls.lock();
-                } else {
-                    console.log('[GameEngine] Canvas clicked, but in RTS/FreeCam mode, not locking.'); // DEBUG LOG
-                }
-                // Listener is automatically removed because we use { once: true }
-            };
-
             if (isLocked) {
-                debug('Pointer is now locked');
-                console.log('[GameEngine] Pointer is now locked'); // DEBUG LOG
-                // No need to hide instructions here, done above
-                
-                // Remove the canvas click listener if it somehow persisted (belt-and-suspenders)
-                // Note: {once: true} should handle this, but explicit removal is safer 
-                // if the lock attempt failed and unlock event didn't fire cleanly.
-                // renderer.domElement.removeEventListener('click', attemptLockOnClick);
-                // Let's rely on { once: true } for now to keep it simpler.
-
-                // Original logic for player creation, networking, view switch, animation start
+                debug('Pointer is locked - Hiding instructions overlay');
+                console.log('[GameEngine] Pointer locked - Controls enabled.'); // DEBUG LOG
+                // Original lock logic
                 if (!window.playerLoaded) {
                     debug('Creating player entity after click to play');
                     window.playerEntity = window.createPlayerEntity(scene);
@@ -1088,10 +1068,10 @@ function setupPointerLockControls() {
                 // End of original lock logic
 
             } else {
-                debug('Pointer is unlocked - Hiding instructions overlay and adding canvas click listener');
+                debug('Pointer is unlocked - Adding canvas click listener but not showing instructions');
                 console.log('[GameEngine] Pointer is unlocked - Adding one-time click listener to renderer.domElement.'); // DEBUG LOG
-                // No need to show instructions here, done above (set to none)
-                
+                // Do not show instructions overlay at all
+                instructions.style.display = 'none';
                 // Add a one-time click listener to the canvas to re-acquire lock
                 renderer.domElement.addEventListener('click', attemptLockOnClick, { once: true });
             }
@@ -1602,10 +1582,7 @@ function onMouseUp(event) {
             document.getElementById('rts-cursor').style.display = 'block';
             
             // Update cursor position for consistency
-            updateRTSCursorPosition({
-                clientX: event.clientX,
-                clientY: event.clientY
-            });
+            updateRTSCursorPosition(event);
         }
         return;
     }
@@ -2284,3 +2261,19 @@ function setThirdPersonCameraOrientation(camera, lookAtPosition, playerState) {
     // Apply rotation to camera immediately for responsive look
     camera.quaternion.copy(quaternion);
 }
+
+// Define the function to attempt locking
+const attemptLockOnClick = () => {
+    console.log('[GameEngine] Canvas clicked, attempting to lock pointer...'); // DEBUG LOG
+    // Don't lock if in RTS mode or if pointer lock is prevented
+    if (!window.isRTSMode && !window.preventPointerLock) {
+        controls.lock();
+        const instructions = document.getElementById('lock-instructions');
+        if (instructions) {
+            instructions.style.display = 'none';
+        }
+    } else {
+        console.log('[GameEngine] Canvas clicked, but in RTS mode or pointer lock prevented, not locking.'); // DEBUG LOG
+    }
+    // Listener is automatically removed because we use { once: true }
+};

@@ -705,11 +705,13 @@ window.toggleCameraView = function() {
 // Function to update the UI based on view mode
 function updateViewModeUI() {
     // Do NOT show click instructions/overlay when switching views
-    const instructions = document.getElementById('lock-instructions');
-    if (instructions) {
-        instructions.style.display = 'none';
-    }
+    // Removed direct manipulation to centralize control in game-engine.js
+    // const instructions = document.getElementById('lock-instructions');
+    // if (instructions) {
+    //     instructions.style.display = 'none';
+    // }
 }
+
 // Check if this controller should be processed by this client
 function shouldProcessController(gamepadIndex) {
     // Get client ID from URL if in local multiplayer mode
