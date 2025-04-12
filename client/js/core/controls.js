@@ -450,9 +450,13 @@ window.updateControls = function(controls, delta) {
         return;
     }
 
+    // Determine active input type
+    const activeInputType = window.inputManager ? window.inputManager.getActiveInputType() : 'keyboardMouse';
+    
     // Handle gamepad input independently of pointer lock
-    if (window.inputManager && window.inputManager.lastActiveInputType === 'gamepad') {
-        // Gamepad movement
+    if (activeInputType === 'gamepad') {
+        // Gamepad movement - Use global movement flags set by InputManager
+        // These actions should work regardless of pointer lock state
         if (window.moveForward) {
             controls.moveForward(window.moveSpeed * delta);
         }
@@ -466,14 +470,14 @@ window.updateControls = function(controls, delta) {
             controls.moveRight(window.moveSpeed * delta);
         }
         if (window.turnLeft) {
-            // Move diagonally forward-left
-            const diagonalSpeed = window.moveSpeed * 0.7 * delta; // Scale down for diagonal
+            // Move diagonally forward-left (if needed, typically handled by stick)
+            const diagonalSpeed = window.moveSpeed * 0.7 * delta;
             controls.moveForward(diagonalSpeed);
             controls.moveRight(-diagonalSpeed);
         }
         if (window.turnRight) {
-            // Move diagonally forward-right
-            const diagonalSpeed = window.moveSpeed * 0.7 * delta; // Scale down for diagonal
+            // Move diagonally forward-right (if needed, typically handled by stick)
+            const diagonalSpeed = window.moveSpeed * 0.7 * delta;
             controls.moveForward(diagonalSpeed);
             controls.moveRight(diagonalSpeed);
         }
@@ -488,50 +492,56 @@ window.updateControls = function(controls, delta) {
             controls.getObject().position.y = window.playerHeight;
             window.canJump = true;
         }
-        return; // Exit early for gamepad to avoid pointer lock checks
+        
+        // IMPORTANT: Explicitly exit pointer lock if gamepad is active
+        if (document.pointerLockElement) {
+            console.log("[Controls] Exiting pointer lock because gamepad is active.");
+            document.exitPointerLock();
+        }
+        
+        return; // Exit early for gamepad to avoid keyboard/mouse logic
     }
 
-    // For mouse/keyboard, require pointer lock
-    if (!controls.isLocked) return;
-    
-    // If we're in free camera mode, handle movement without updating the server
-    if (window.isFreeCameraMode) {
-        updateFreeCameraMovement(delta);
-        return;
-    }
+    // Keyboard/Mouse input - requires pointer lock
+    if (document.pointerLockElement === document.body) {
+        // Only perform client-side movement prediction 
+        // Actual position updates will be driven by the server
+        
+        // Handle directional movement - scaled by delta for consistent speed
+        if (window.moveForward) controls.moveForward(window.moveSpeed * delta);
+        if (window.moveBackward) controls.moveForward(-window.moveSpeed * delta);
+        if (window.moveLeft) controls.moveRight(-window.moveSpeed * delta);
+        if (window.moveRight) controls.moveRight(window.moveSpeed * delta);
+        
+        // Handle Q/E keys for diagonal movement (forward + turning)
+        if (window.turnLeft) {
+            // Move diagonally forward-left
+            const diagonalSpeed = window.moveSpeed * 0.7 * delta; // Scale down for diagonal
+            controls.moveForward(diagonalSpeed);
+            controls.moveRight(-diagonalSpeed);
+        }
+        if (window.turnRight) {
+            // Move diagonally forward-right
+            const diagonalSpeed = window.moveSpeed * 0.7 * delta; // Scale down for diagonal
+            controls.moveForward(diagonalSpeed);
+            controls.moveRight(diagonalSpeed);
+        }
 
-    // Only perform client-side movement prediction 
-    // Actual position updates will be driven by the server
-    
-    // Handle directional movement - scaled by delta for consistent speed
-    if (window.moveForward) controls.moveForward(window.moveSpeed * delta);
-    if (window.moveBackward) controls.moveForward(-window.moveSpeed * delta);
-    if (window.moveLeft) controls.moveRight(-window.moveSpeed * delta);
-    if (window.moveRight) controls.moveRight(window.moveSpeed * delta);
-    
-    // Handle Q/E keys for diagonal movement (forward + turning)
-    if (window.turnLeft) {
-        // Move diagonally forward-left
-        const diagonalSpeed = window.moveSpeed * 0.7 * delta; // Scale down for diagonal
-        controls.moveForward(diagonalSpeed);
-        controls.moveRight(-diagonalSpeed);
-    }
-    if (window.turnRight) {
-        // Move diagonally forward-right
-        const diagonalSpeed = window.moveSpeed * 0.7 * delta; // Scale down for diagonal
-        controls.moveForward(diagonalSpeed);
-        controls.moveRight(diagonalSpeed);
-    }
+        // Apply gravity
+        window.velocity.y -= 9.8 * delta;
+        controls.getObject().position.y += window.velocity.y * delta;
 
-    // Apply gravity
-    window.velocity.y -= 9.8 * delta;
-    controls.getObject().position.y += window.velocity.y * delta;
-
-    // Ground collision
-    if (controls.getObject().position.y < window.playerHeight) {
-        window.velocity.y = 0;
-        controls.getObject().position.y = window.playerHeight;
-        window.canJump = true;
+        // Ground collision
+        if (controls.getObject().position.y < window.playerHeight) {
+            window.velocity.y = 0;
+            controls.getObject().position.y = window.playerHeight;
+            window.canJump = true;
+        }
+    } else {
+        // If pointer isn't locked and using keyboard/mouse, reset velocity
+        // This prevents drifting when focus is lost
+        window.velocity.x = 0;
+        window.velocity.z = 0;
     }
 }
 

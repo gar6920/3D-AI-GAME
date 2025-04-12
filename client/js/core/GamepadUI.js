@@ -4,95 +4,130 @@ class GamepadUI {
     constructor() {
         this.isVisible = false;
         this.controlsContainer = null;
+        this.activeInputDisplay = null;
         
-        // Create the UI element
+        // Create the UI elements (safe to do early)
         this.initUI();
         
-        // Set up event listeners for gamepad connections
+        // Defer listener setup until managers are ready
+        document.addEventListener('managersReady', this.setupListeners.bind(this));
+        
+        // Register button handler for gamepad help toggle (also deferred)
+        // this.registerButtonHandler(); // Moved to setupListeners
+        
+        // Initialize active input display (will be updated once managers are ready)
+        // this.updateActiveInputDisplay(); // Moved to setupListeners
+    }
+
+    setupListeners() {
+        console.log("[GamepadUI] managersReady event received. Setting up listeners.");
         if (window.inputManager) {
             window.inputManager.on('gamepadconnected', this.onGamepadConnected.bind(this));
             window.inputManager.on('gamepaddisconnected', this.onGamepadDisconnected.bind(this));
+            window.inputManager.on('inputtypechange', this.onInputTypeChange.bind(this));
+            
+            // Register button handler now that InputManager is ready
+            this.registerButtonHandler();
+            
+            // Update display now that InputManager is ready
+            this.updateActiveInputDisplay();
+        } else {
+            console.error("[GamepadUI] InputManager not found even after managersReady event!");
         }
-        
-        // Register button handler for gamepad help toggle
-        this.registerButtonHandler();
     }
-    
+
     initUI() {
-        // Create container for controls overlay
+        // Create the main container
         this.controlsContainer = document.createElement('div');
-        this.controlsContainer.id = 'gamepad-controls-overlay';
-        this.controlsContainer.style.position = 'absolute';
-        this.controlsContainer.style.top = '80px';
+        this.controlsContainer.id = 'gamepad-controls-popup';
+        this.controlsContainer.style.position = 'fixed';
+        this.controlsContainer.style.bottom = '60px';
         this.controlsContainer.style.right = '20px';
-        this.controlsContainer.style.padding = '15px';
-        this.controlsContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+        this.controlsContainer.style.width = '300px';
+        this.controlsContainer.style.maxHeight = '400px';
+        this.controlsContainer.style.overflowY = 'auto';
+        this.controlsContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
         this.controlsContainer.style.color = 'white';
+        this.controlsContainer.style.padding = '15px';
         this.controlsContainer.style.borderRadius = '8px';
+        this.controlsContainer.style.border = '1px solid #555';
+        this.controlsContainer.style.zIndex = '1010';
         this.controlsContainer.style.fontFamily = 'Arial, sans-serif';
-        this.controlsContainer.style.zIndex = '1000';
-        this.controlsContainer.style.maxWidth = '350px';
-        this.controlsContainer.style.display = 'none'; // Hidden by default
-        this.controlsContainer.style.boxShadow = '0 0 10px rgba(0, 0, 0, 0.5)';
+        this.controlsContainer.style.fontSize = '14px';
+        this.controlsContainer.style.display = 'none'; // Initially hidden
+        this.controlsContainer.style.boxShadow = '0 4px 15px rgba(0,0,0,0.5)';
         
-        // Create the header with close button
-        const header = document.createElement('div');
-        header.style.display = 'flex';
-        header.style.justifyContent = 'space-between';
-        header.style.alignItems = 'center';
-        header.style.marginBottom = '10px';
-        header.style.borderBottom = '1px solid rgba(255, 255, 255, 0.3)';
-        header.style.paddingBottom = '5px';
-        
+        // Title
         const title = document.createElement('h3');
         title.textContent = 'Gamepad Controls';
-        title.style.margin = '0';
-        title.style.fontSize = '16px';
+        title.style.marginTop = '0';
+        title.style.marginBottom = '15px';
+        title.style.borderBottom = '1px solid #444';
+        title.style.paddingBottom = '10px';
+        this.controlsContainer.appendChild(title);
         
+        // Bindings list
+        this.bindingsList = document.createElement('ul');
+        this.bindingsList.style.listStyle = 'none';
+        this.bindingsList.style.padding = '0';
+        this.bindingsList.style.margin = '0';
+        this.controlsContainer.appendChild(this.bindingsList);
+        
+        // Close button
         const closeButton = document.createElement('button');
-        closeButton.textContent = '×';
-        closeButton.style.background = 'none';
-        closeButton.style.border = 'none';
+        closeButton.textContent = 'Close';
+        closeButton.style.marginTop = '15px';
+        closeButton.style.padding = '8px 15px';
+        closeButton.style.backgroundColor = '#555';
         closeButton.style.color = 'white';
-        closeButton.style.fontSize = '20px';
+        closeButton.style.border = 'none';
+        closeButton.style.borderRadius = '4px';
         closeButton.style.cursor = 'pointer';
-        closeButton.style.padding = '0 5px';
-        closeButton.onclick = () => this.toggleVisibility(false);
+        closeButton.addEventListener('click', () => this.toggleVisibility(false));
+        this.controlsContainer.appendChild(closeButton);
         
-        header.appendChild(title);
-        header.appendChild(closeButton);
-        this.controlsContainer.appendChild(header);
-        
-        // Create content area with bindings info
-        this.updateBindingsDisplay();
-        
-        // Add to document
+        // Append to body
         document.body.appendChild(this.controlsContainer);
         
-        // Create toggle button
-        this.createToggleButton();
+        // Also initialize the active input display element here
+        this.createActiveInputDisplayElement();
     }
-    
-    createToggleButton() {
-        const toggleButton = document.createElement('button');
-        toggleButton.id = 'gamepad-controls-toggle';
-        toggleButton.textContent = 'Controls';
-        toggleButton.style.position = 'absolute';
-        toggleButton.style.bottom = '60px';
-        toggleButton.style.right = '20px';
-        toggleButton.style.padding = '8px 12px';
-        toggleButton.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
-        toggleButton.style.color = 'white';
-        toggleButton.style.border = 'none';
-        toggleButton.style.borderRadius = '4px';
-        toggleButton.style.cursor = 'pointer';
-        toggleButton.style.fontFamily = 'Arial, sans-serif';
-        toggleButton.style.zIndex = '100';
-        toggleButton.onclick = () => this.toggleVisibility();
-        
-        document.body.appendChild(toggleButton);
+
+    // New function to just create the element, not update text
+    createActiveInputDisplayElement() {
+         if (!this.activeInputDisplay) {
+            this.activeInputDisplay = document.createElement('div');
+            this.activeInputDisplay.id = 'active-input-display'; // Give it an ID
+            this.activeInputDisplay.style.position = 'absolute';
+            this.activeInputDisplay.style.top = '10px'; // Adjust position as needed
+            this.activeInputDisplay.style.left = 'calc(50% - 100px)'; // Center it roughly
+            this.activeInputDisplay.style.width = '200px';
+            this.activeInputDisplay.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+            this.activeInputDisplay.style.color = 'white';
+            this.activeInputDisplay.style.padding = '5px 10px';
+            this.activeInputDisplay.style.borderRadius = '5px';
+            this.activeInputDisplay.style.fontFamily = 'Arial, sans-serif';
+            this.activeInputDisplay.style.fontSize = '12px';
+            this.activeInputDisplay.style.zIndex = '1001'; 
+            this.activeInputDisplay.style.textAlign = 'center';
+            this.activeInputDisplay.style.cursor = 'pointer';
+            this.activeInputDisplay.style.userSelect = 'none';
+            this.activeInputDisplay.title = 'Click to toggle input method';
+            this.activeInputDisplay.textContent = 'Input: ...'; // Initial placeholder
+            
+            // Add click event to toggle input type
+            this.activeInputDisplay.addEventListener('click', () => {
+                if (window.inputManager) {
+                    window.inputManager.toggleActiveInputType();
+                }
+            });
+            
+            // Append to body
+            document.body.appendChild(this.activeInputDisplay);
+            console.log("[GamepadUI] Created active input display element.");
+        }
     }
-    
+
     updateBindingsDisplay() {
         // Get config from input manager if available
         const config = window.inputManager ? window.inputManager.gamepadConfig : {
@@ -221,6 +256,36 @@ class GamepadUI {
         this.controlsContainer.appendChild(this.bindingsContent);
     }
     
+    updateActiveInputDisplay() {
+        // Ensure the element exists
+        if (!this.activeInputDisplay) {
+            console.warn("[GamepadUI] Trying to update active input display, but element doesn't exist.");
+            this.createActiveInputDisplayElement(); // Attempt to create if missing
+            if (!this.activeInputDisplay) return; // Exit if creation failed
+        }
+        
+        // Ensure InputManager exists before trying to get type
+        if (!window.inputManager) {
+            console.warn("[GamepadUI] InputManager not ready, cannot update active input display text.");
+            this.activeInputDisplay.textContent = 'Input: Waiting...'; // Show waiting state
+            return;
+        }
+        
+        // Update the text based on current input type
+        const inputType = window.inputManager.getActiveInputType();
+        this.activeInputDisplay.textContent = `Input: ${inputType === 'keyboardMouse' ? 'Keyboard/Mouse' : 'Gamepad'}`;
+        
+        // Add a visual indicator if gamepad is active
+        if (inputType === 'gamepad') {
+            this.activeInputDisplay.style.border = '1px solid #00dd00'; // Use a subtle border
+            this.activeInputDisplay.style.boxShadow = '0 0 5px #00dd00';
+        } else {
+            this.activeInputDisplay.style.border = 'none';
+            this.activeInputDisplay.style.boxShadow = 'none';
+        }
+        console.log(`[GamepadUI] Updated active input display to: ${this.activeInputDisplay.textContent}`);
+    }
+    
     toggleVisibility(forcedState) {
         // If forcedState is provided, use it; otherwise toggle
         this.isVisible = forcedState !== undefined ? forcedState : !this.isVisible;
@@ -233,10 +298,10 @@ class GamepadUI {
     }
     
     onGamepadConnected(event) {
-        // Update bindings display if visible
-        if (this.isVisible) {
-            this.updateBindingsDisplay();
-        }
+        console.log(`[GamepadUI] Gamepad connected: ${event.gamepad.id}`);
+        // Show a notification or update UI when a gamepad is connected
+        this.updateBindingsDisplay();
+        this.updateActiveInputDisplay();
     }
     
     onGamepadDisconnected(event) {
@@ -244,6 +309,11 @@ class GamepadUI {
         if (this.isVisible) {
             this.updateBindingsDisplay();
         }
+    }
+    
+    onInputTypeChange(data) {
+        console.log(`[GamepadUI] Input type changed to: ${data.type}`);
+        this.updateActiveInputDisplay();
     }
     
     registerButtonHandler() {

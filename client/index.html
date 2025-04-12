@@ -242,8 +242,11 @@
     <script>
     function setupGamepadStartSupport() {
         console.log("Setting up gamepad start support...");
+        let gameStarted = false; // Prevent multiple starts from rapid button presses
         
         function checkGamepads() {
+            if (gameStarted) return; // Don't poll if already started
+
             const gamepads = navigator.getGamepads();
             for (let i = 0; i < gamepads.length; i++) {
                 const gp = gamepads[i];
@@ -252,20 +255,64 @@
                     if (gp.buttons && gp.buttons.length > 0) {
                         for (let b = 0; b < gp.buttons.length; b++) {
                             if (gp.buttons[b] && gp.buttons[b].pressed) {
-                                console.log("Gamepad button pressed, starting game!");
+                                console.log("Gamepad button pressed, initiating game start...");
+                                gameStarted = true; // Set flag
+                                
+                                // Set the input type to gamepad explicitly
+                                if (window.inputManager) {
+                                    window.inputManager.setActiveInputType('gamepad');
+                                } else {
+                                    console.warn("InputManager not ready when starting via gamepad");
+                                }
+                                
+                                // Hide the instructions immediately
                                 const instructions = document.getElementById('lock-instructions');
                                 if (instructions) {
-                                    instructions.click();
+                                    instructions.style.display = 'none';
                                 }
-                                // Stop polling aggressively to save resources
-                                return;
+
+                                // Call init() first, then trigger startGameLogic once engine is ready
+                                if (typeof window.init === 'function') {
+                                    if (!window.gameInitialized) { // Prevent re-init
+                                       window.gameInitialized = true;
+                                       
+                                       // Listen for the game engine ready event
+                                       window.addEventListener('gameEngineReady', function handleGameReady() {
+                                            console.log("gameEngineReady event received, calling startGameLogic for gamepad.");
+                                            if (typeof window.startGameLogic === 'function') {
+                                                window.startGameLogic();
+                                            } else {
+                                                console.error("startGameLogic function not found after gameEngineReady.");
+                                            }
+                                            // Remove listener after use
+                                            window.removeEventListener('gameEngineReady', handleGameReady);
+                                        }, { once: true }); // Ensure listener runs only once
+                                       
+                                       // Now call init
+                                       window.init();
+                                       console.log("Game init() called via gamepad button press.");
+                                    } else {
+                                        console.log("Game already initialized, skipping init() call.");
+                                        // If already initialized but logic didn't run (edge case?), try calling startGameLogic directly
+                                        if (typeof window.startGameLogic === 'function' && !window.gameLogicStarted) {
+                                            console.log("Calling startGameLogic directly as game was already initialized.");
+                                            window.startGameLogic();
+                                        }
+                                    }
+                                } else {
+                                    console.error("window.init not found, cannot start game via gamepad.");
+                                }
+                                
+                                return; // Stop checking once we start the game
                             }
                         }
                     }
                 }
             }
-            // Continue polling if no button press detected
-            setTimeout(checkGamepads, 100);
+            // Continue polling if no button press detected and game hasn't started
+             if (!gameStarted) {
+                 setTimeout(checkGamepads, 100);
+             }
         }
         
         // Start polling for gamepad input
@@ -274,8 +321,10 @@
         // Also listen for gamepad connection
         window.addEventListener("gamepadconnected", function(e) {
             console.log("Gamepad connected:", e.gamepad.id);
-            // Start polling if not already started
-            setTimeout(checkGamepads, 100);
+            // Start polling if not already started and game not started
+            if (!gameStarted) {
+                 setTimeout(checkGamepads, 100);
+            }
         });
     }
 
@@ -295,12 +344,55 @@
             return;
         }
         
-        if (document.pointerLockElement) {
+        const isLocked = !!document.pointerLockElement;
+        const activeInputType = window.inputManager ? window.inputManager.getActiveInputType() : 'keyboardMouse';
+
+        if (isLocked) {
             console.log("[Index] Pointer locked - Hiding instructions");
             instructions.style.display = 'none';
+            document.body.style.cursor = 'none';
         } else {
-            console.log("[Index] Pointer unlocked - Showing instructions");
-            instructions.style.display = 'flex';
+             document.body.style.cursor = 'default';
+            // Only show instructions if not locked AND using keyboard/mouse
+            if (activeInputType === 'keyboardMouse') {
+                console.log("[Index] Pointer unlocked and using keyboard/mouse - Showing instructions");
+                instructions.style.display = 'flex';
+            } else {
+                console.log("[Index] Pointer unlocked but using gamepad - Keeping instructions hidden");
+                 instructions.style.display = 'none';
+            }
+        }
+    });
+    
+    // Add a click handler to the lock instructions
+    document.addEventListener('DOMContentLoaded', function() {
+        const instructions = document.getElementById('lock-instructions');
+        if (instructions) {
+            instructions.addEventListener('click', function() {
+                console.log("Lock instructions clicked.");
+                // Set the input type to keyboard/mouse explicitly
+                if (window.inputManager) {
+                    window.inputManager.setActiveInputType('keyboardMouse');
+                } else {
+                    console.warn("InputManager not available on lock instructions click");
+                }
+                
+                // Hide instructions immediately on click
+                instructions.style.display = 'none';
+                
+                // Use the dedicated attemptLockOnClick from game-engine.js if available
+                if (typeof window.attemptLockOnClick === 'function') {
+                    window.attemptLockOnClick(); 
+                } else {
+                     // Fallback: Directly try locking if the function isn't found (should be rare)
+                    console.warn("attemptLockOnClick not found, attempting direct lock.");
+                    if (window.controls && window.controls.lock) {
+                        window.controls.lock();
+                    } else {
+                         console.error("Cannot lock controls.");
+                    }
+                }
+            });
         }
     });
     </script>

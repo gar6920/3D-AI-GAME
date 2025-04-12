@@ -273,18 +273,30 @@ window.switchToFirstPersonView = function(previousViewMode) {
         document.getElementById('rts-cursor').style.display = 'none';
     }
     
-    // Reset cursor styles that might have been set in RTS mode
-    document.body.style.cursor = 'default';
-    document.documentElement.style.cursor = 'default';
-    renderer.domElement.style.cursor = 'none'; // Hide cursor immediately for FPS feel
+    // Get active input type
+    const activeInputType = window.inputManager ? window.inputManager.getActiveInputType() : 'keyboardMouse';
+
+    // Reset cursor styles based on input type
+    if (activeInputType === 'keyboardMouse') {
+        document.body.style.cursor = 'none'; 
+        renderer.domElement.style.cursor = 'none'; // Hide cursor immediately for FPS feel
+    } else { // Gamepad
+        document.body.style.cursor = 'default';
+        renderer.domElement.style.cursor = 'default';
+    }
+    document.documentElement.style.cursor = document.body.style.cursor; // Sync with body
     
-    // Define the lock function
+    // Define the lock function - only locks if keyboard/mouse is active
     const attemptLock = () => {
-        if (controls && !controls.isLocked) {
-            console.log('[GameEngine] Attempting to lock controls in switchToFirstPersonView');
-            controls.lock();
-        } else if (controls && controls.isLocked) {
-             console.log('[GameEngine] Controls already locked in switchToFirstPersonView');
+        if (activeInputType === 'keyboardMouse') {
+            if (controls && !controls.isLocked) {
+                console.log('[GameEngine] Attempting to lock controls in switchToFirstPersonView (Keyboard/Mouse)');
+                controls.lock();
+            } else if (controls && controls.isLocked) {
+                console.log('[GameEngine] Controls already locked in switchToFirstPersonView');
+            }
+        } else {
+            console.log('[GameEngine] Not locking controls in switchToFirstPersonView (Gamepad)');
         }
     };
 
@@ -293,9 +305,9 @@ window.switchToFirstPersonView = function(previousViewMode) {
         console.log('[GameEngine] Delaying lock attempt (100ms) after switching from RTS/FreeCam.');
         setTimeout(attemptLock, 100); // Delay 100ms
     } else {
-        // If coming from third-person (or initial load), lock immediately
-        console.log('[GameEngine] Locking immediately after switching from', previousViewMode);
-        attemptLock(); // Lock immediately
+        // If coming from third-person (or initial load), attempt lock immediately
+        console.log('[GameEngine] Attempting lock immediately after switching from', previousViewMode);
+        attemptLock(); 
     }
     
     // Set camera position based on the available player information
@@ -330,7 +342,6 @@ window.switchToFirstPersonView = function(previousViewMode) {
         );
         
         // Set camera rotation using quaternions to prevent gimbal lock
-        // We no longer need to add Math.PI to match the model since the model is already rotated
         window.camera.quaternion.setFromEuler(new THREE.Euler(
             pitch,
             rotationY,
@@ -379,14 +390,24 @@ window.switchToThirdPersonView = function() {
         document.getElementById('rts-cursor').style.display = 'none';
     }
     
-    // Reset cursor styles that might have been set in RTS mode
+    // Always show cursor in third person (even if using keyboard/mouse for orbit)
     document.body.style.cursor = 'default';
     document.documentElement.style.cursor = 'default';
     renderer.domElement.style.cursor = 'default';
     
-    // Relock pointer for third-person view
-    if (controls && !controls.isLocked) {
-        controls.lock();
+    // Check input type before locking pointer
+    const activeInputType = window.inputManager ? window.inputManager.getActiveInputType() : 'keyboardMouse';
+    if (activeInputType === 'keyboardMouse') {
+        if (controls && !controls.isLocked) {
+            console.log("[GameEngine] Locking pointer for third-person view (Keyboard/Mouse)");
+            controls.lock();
+        }
+    } else {
+        console.log("[GameEngine] Not locking pointer for third-person view (Gamepad)");
+        // Ensure pointer is unlocked if switching to third-person with gamepad
+        if (document.pointerLockElement) {
+            document.exitPointerLock();
+        }
     }
     
     // Reset orbit angles if they don't exist
@@ -459,18 +480,28 @@ window.switchToFreeCameraView = function() {
         document.getElementById('rts-cursor').style.display = 'none';
     }
     
-    // Reset cursor styles that might have been set in RTS mode
+    // Always show cursor in free camera mode
     document.body.style.cursor = 'default';
     document.documentElement.style.cursor = 'default';
     renderer.domElement.style.cursor = 'default';
     
-    // Relock pointer for free camera view
-    if (controls && !controls.isLocked) {
-        controls.lock();
+    // Check input type before locking pointer
+    const activeInputType = window.inputManager ? window.inputManager.getActiveInputType() : 'keyboardMouse';
+    if (activeInputType === 'keyboardMouse') {
+        if (controls && !controls.isLocked) {
+            console.log("[GameEngine] Locking pointer for free camera view (Keyboard/Mouse)");
+            controls.lock();
+        }
+    } else {
+        console.log("[GameEngine] Not locking pointer for free camera view (Gamepad)");
+        // Ensure pointer is unlocked if switching to free camera with gamepad
+        if (document.pointerLockElement) {
+            document.exitPointerLock();
+        }
     }
     
-    // Keep pointer lock active but disable normal controls
-    controls.enabled = false;
+    // Disable normal player controls but keep pointer lock active if needed for mouse look
+    controls.enabled = false; // May need adjustment if lock isn't used
     
     // Initialize free camera movement speed
     window.freeCameraSpeed = 0.5;
@@ -1026,54 +1057,34 @@ function setupPointerLockControls() {
                 return; 
             }
             
-            // Hide instructions overlay completely regardless of mode
+            // Get active input type for logic below
+            const activeInputType = window.inputManager ? window.inputManager.getActiveInputType() : 'keyboardMouse';
+
             if (isLocked) {
                 debug('Pointer is locked - Hiding instructions');
-                console.log('[GameEngine] Pointer is locked - Hiding instructions overlay.'); // DEBUG LOG
-                instructions.style.display = 'none';
+                console.log('[GameEngine] Pointer is locked - Hiding instructions overlay.'); 
+                instructions.style.display = 'none'; // Always hide when locked
+                document.body.style.cursor = 'none'; // Hide system cursor when locked
                 
-                // Rest of logic remains unchanged
-                if (!window.playerLoaded) {
-                    debug('Creating player entity after click to play');
-                    window.playerEntity = window.createPlayerEntity(scene);
-                    window.player = window.playerEntity;
-                    window.playerLoaded = true;
-                    
-                    if (window.playerEntity && window.playerEntity.mesh) {
-                        window.playerEntity.mesh.visible = false;
-                    }
-                    
-                    if (!window.room) {
-                        window.initNetworking().then((roomInstance) => {
-                            window.gameRoom = roomInstance;
-                            window.room = roomInstance;
-                            setInterval(sendInputUpdate, 1000 / 30);
-                            if (window.switchToFirstPersonView) {
-                                window.switchToFirstPersonView();
-                            }
-                        }).catch((error) => {
-                            debug(`Networking error: ${error.message}`, true);
-                        });
-                    } else {
-                        if (window.switchToFirstPersonView) {
-                            window.switchToFirstPersonView();
-                        }
-                    }
+                // ** Call startGameLogic here instead of direct initialization **
+                startGameLogic(); 
+                
+            } else { // Pointer is unlocked
+                debug('Pointer is unlocked');
+                document.body.style.cursor = 'default'; // Always show system cursor when unlocked
+                
+                // Only show instructions overlay if using keyboard/mouse
+                if (activeInputType === 'keyboardMouse') {
+                    console.log('[GameEngine] Pointer unlocked & Keyboard/Mouse active - Showing instructions and adding listener.');
+                    instructions.style.display = 'flex';
+                    // Add a one-time click listener to the canvas to re-acquire lock
+                    // Ensure listener isn't added multiple times if already present
+                    renderer.domElement.removeEventListener('click', attemptLockOnClick);
+                    renderer.domElement.addEventListener('click', attemptLockOnClick, { once: true });
+                } else { // Gamepad is active
+                    console.log('[GameEngine] Pointer unlocked & Gamepad active - Hiding instructions.');
+                    instructions.style.display = 'none'; // Keep instructions hidden if gamepad is active
                 }
-
-                if (!window.isAnimating) {
-                    window.isAnimating = true;
-                    animate();
-                }
-                // End of original lock logic
-
-            } else {
-                debug('Pointer is unlocked - Adding canvas click listener but not showing instructions');
-                console.log('[GameEngine] Pointer is unlocked - Adding one-time click listener to renderer.domElement.'); // DEBUG LOG
-                // Show instructions overlay to allow re-locking
-                instructions.style.display = 'flex';
-                // Add a one-time click listener to the canvas to re-acquire lock
-                renderer.domElement.addEventListener('click', attemptLockOnClick, { once: true });
             }
         }
 
@@ -2264,16 +2275,113 @@ function setThirdPersonCameraOrientation(camera, lookAtPosition, playerState) {
 
 // Define the function to attempt locking
 const attemptLockOnClick = () => {
-    console.log('[GameEngine] Canvas clicked, attempting to lock pointer...'); // DEBUG LOG
-    // Don't lock if in RTS mode or if pointer lock is prevented
-    if (!window.isRTSMode && !window.preventPointerLock) {
-        controls.lock();
-        const instructions = document.getElementById('lock-instructions');
-        if (instructions) {
-            instructions.style.display = 'none';
+    console.log('[GameEngine] Lock instructions clicked, attempting to lock pointer...'); 
+    
+    // Ensure input type is set to keyboard/mouse because the user clicked
+    if (window.inputManager) {
+        window.inputManager.setActiveInputType('keyboardMouse');
+    }
+    
+    // Check if we should lock (not in RTS mode, not using gamepad)
+    if (!window.isRTSMode) {
+        if (window.inputManager && window.inputManager.getActiveInputType() === 'keyboardMouse') {
+            if (controls && !controls.isLocked) {
+                controls.lock();
+                const instructions = document.getElementById('lock-instructions');
+                if (instructions) {
+                    instructions.style.display = 'none'; // Hide instructions after successful lock
+                }
+            }
+        } else {
+            console.log('[GameEngine] Lock attempt skipped: Gamepad is active or InputManager not ready.');
         }
     } else {
-        console.log('[GameEngine] Canvas clicked, but in RTS mode or pointer lock prevented, not locking.'); // DEBUG LOG
+        console.log('[GameEngine] Lock attempt skipped: Currently in RTS mode.');
     }
+    
     // Listener is automatically removed because we use { once: true }
 };
+
+// Flag to ensure core game logic runs only once
+window.gameLogicStarted = false;
+
+// Function to create the local player entity
+function createLocalPlayer() {
+    if (window.playerLoaded) {
+        console.log("Local player already created.");
+        return;
+    }
+    
+    try {
+        console.log("Creating local player entity...");
+        // Use the globally defined factory function from main.js
+        if (typeof window.createPlayerEntity === 'function') {
+            window.playerEntity = window.createPlayerEntity(scene, true); // true for local player
+            window.player = window.playerEntity; // Maintain compatibility
+            window.playerLoaded = true;
+            
+            // Set initial visibility based on the STARTING view mode
+            // Important: window.viewMode should be set before this runs (usually 'firstPerson' by default)
+            if (window.playerEntity && window.playerEntity.mesh) {
+                 window.playerEntity.mesh.visible = (window.viewMode !== 'firstPerson');
+                 console.log(`Set initial player mesh visibility based on viewMode ('${window.viewMode}'): ${window.playerEntity.mesh.visible}`);
+            }
+            console.log("Local player entity created successfully.", window.playerEntity);
+        } else {
+            console.error("createPlayerEntity function not found! Cannot create player.");
+        }
+    } catch (error) {
+        console.error("Error creating local player entity:", error);
+    }
+}
+
+// Function to initialize networking and start core game logic
+function startGameLogic() {
+    if (window.gameLogicStarted) {
+        console.log("Core game logic already started.");
+        return;
+    }
+    window.gameLogicStarted = true;
+    console.log("Starting core game logic (Player Creation & Networking)...");
+
+    // 1. Create the Local Player
+    createLocalPlayer();
+
+    // 2. Initialize Networking
+    if (typeof initNetworking === 'function') {
+        console.log("Initializing networking...");
+        initNetworking().then((roomInstance) => {
+            if (roomInstance) {
+                window.gameRoom = roomInstance;
+                window.room = roomInstance;
+                console.log("Networking initialized successfully, room joined.");
+                // Start sending updates only after networking is ready
+                // Consider starting interval here or after a confirmation from server
+                // setInterval(sendInputUpdate, 1000 / 30); 
+            } else {
+                 console.error("Networking initialization failed to return a room instance.");
+            }
+            // Set initial view after networking (may depend on server state)
+            if (window.switchToFirstPersonView) {
+                window.switchToFirstPersonView(); // Default to first person
+            }
+        }).catch((error) => {
+            debug(`Networking initialization error: ${error.message}`, true);
+            console.error("Networking initialization error:", error);
+        });
+    } else {
+        debug('initNetworking function not found. Local play only.', true);
+        console.warn('initNetworking function not found. Local play only.');
+        // Still need to set the view even for local play
+         if (window.switchToFirstPersonView) {
+            window.switchToFirstPersonView(); // Default to first person
+        }
+    }
+    
+    // 3. Start animation loop if not already running
+    if (!window.isAnimating) {
+        window.isAnimating = true;
+        console.log("Starting animation loop from startGameLogic.");
+        animate(performance.now()); // Pass initial timestamp
+    }
+}

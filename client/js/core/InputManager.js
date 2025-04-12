@@ -144,6 +144,8 @@ class InputManager {
         
         if (foundGamepads > 0) {
             console.log(`Found ${foundGamepads} already connected gamepad(s)`);
+            // Set gamepad as the active input type if available at startup
+            this.setActiveInputType('gamepad');
         }
     }
     
@@ -282,17 +284,13 @@ class InputManager {
     // Handle gamepad button event
     _handleGamepadButton(gamepadIndex, buttonIndex, isPressed) {
         // Mark gamepad as the last active input if a button was pressed
-        if (isPressed && this.lastActiveInputType !== 'gamepad') {
-            this.lastActiveInputType = 'gamepad';
-            this.dispatchEvent('inputtypechange', { type: 'gamepad' });
-            console.log(`[InputManager] Input type changed to gamepad due to button ${buttonIndex} press`);
-        }
-        
-        // Only update game state if this is the active gamepad or newly active
         if (isPressed) {
+            this.setActiveInputType('gamepad');
+            console.log(`[InputManager] Input type changed to gamepad due to button ${buttonIndex} press`);
             this.activeGamepadIndex = gamepadIndex;
         }
         
+        // Only update game state if this is the active gamepad
         if (gamepadIndex !== this.activeGamepadIndex) return;
         
         // Trigger event callbacks
@@ -355,22 +353,22 @@ class InputManager {
     
     // Handle gamepad axis event
     _handleGamepadAxis(gamepadIndex, axisIndex, value) {
+        // Apply deadzone
+        const deadzone = this.gamepadConfig.deadzone; 
+        const processedValue = Math.abs(value) < deadzone ? 0 : value;
+
+        // If any axis has a significant movement, mark gamepad as active input
+        if (processedValue !== 0) {
+            this.setActiveInputType('gamepad');
+            console.log(`[InputManager] Input type potentially changed to gamepad due to axis ${axisIndex} movement (value: ${processedValue.toFixed(3)})`);
+            this.activeGamepadIndex = gamepadIndex;
+        }
+        
         // Only update game state if this is the active gamepad
         if (gamepadIndex !== this.activeGamepadIndex) return;
         
-        // Apply deadzone
-        const deadzone = this.gamepadConfig.deadzone; // Reverted to 0.15
-        const processedValue = Math.abs(value) < deadzone ? 0 : value;
-        
         // Debug log for all axis movements
         console.log(`[Gamepad] Axis ${axisIndex} value: ${processedValue.toFixed(3)}`);
-        
-        // If any axis has a significant movement, mark gamepad as active input
-        if (Math.abs(processedValue) > deadzone && this.lastActiveInputType !== 'gamepad') {
-            this.lastActiveInputType = 'gamepad';
-            this.dispatchEvent('inputtypechange', { type: 'gamepad' });
-            console.log(`[InputManager] Input type changed to gamepad due to axis ${axisIndex} movement`);
-        }
         
         // Trigger axis movement callbacks
         this.callbacks.gamepadaxismove.forEach(callback => 
@@ -501,16 +499,13 @@ class InputManager {
     
     // Event handlers
     onKeyDown(event) {
-        // Skip if we're in an input field
+        // Skip if we're in an input field or textarea
         if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
             return;
         }
         
         // Set keyboard/mouse as the active input type
-        if (this.lastActiveInputType !== 'keyboardMouse') {
-            this.lastActiveInputType = 'keyboardMouse';
-            this.dispatchEvent('inputtypechange', { type: 'keyboardMouse' });
-        }
+        this.setActiveInputType('keyboardMouse');
         
         // Update internal state based on key
         switch (event.code) {
@@ -615,11 +610,18 @@ class InputManager {
     }
     
     onMouseDown(event) {
-        // Set keyboard/mouse as the active input type
-        if (this.lastActiveInputType !== 'keyboardMouse') {
-            this.lastActiveInputType = 'keyboardMouse';
-            this.dispatchEvent('inputtypechange', { type: 'keyboardMouse' });
+        // Skip if the click is on a known UI element handled elsewhere
+        let targetElement = event.target;
+        while (targetElement) {
+            if (targetElement.id && this.uiElementCallbacks[targetElement.id] && this.uiElementCallbacks[targetElement.id]['click']) {
+                // Let the UI handler manage this click
+                return; 
+            }
+            targetElement = targetElement.parentElement;
         }
+
+        // Set keyboard/mouse as the active input type
+        this.setActiveInputType('keyboardMouse');
         
         // Update mouse button state
         switch (event.button) {
@@ -662,10 +664,7 @@ class InputManager {
     
     onMouseMove(event) {
         // Set keyboard/mouse as the active input type
-        if (this.lastActiveInputType !== 'keyboardMouse') {
-            this.lastActiveInputType = 'keyboardMouse';
-            this.dispatchEvent('inputtypechange', { type: 'keyboardMouse' });
-        }
+        this.setActiveInputType('keyboardMouse');
         
         // Store current position
         this.mousePosition.x = event.clientX;
@@ -812,7 +811,7 @@ class InputManager {
         }
         
         // Process gamepad input independently of pointer lock
-        if (this.isGamepadAvailable && this.activeGamepadIndex >= 0) {
+        if (this.isGamepadAvailable && this.lastActiveInputType === 'gamepad') {
             const gamepad = this.gamepads[this.activeGamepadIndex];
             if (gamepad) {
                 // Set gamepad as active input type if there's significant input
@@ -1060,10 +1059,40 @@ class InputManager {
     
     // Method to explicitly set the active input type
     setActiveInputType(type) {
-        if (type === 'keyboardMouse' || type === 'gamepad') {
+        if ((type === 'keyboardMouse' || type === 'gamepad') && this.lastActiveInputType !== type) {
+            console.log(`[InputManager] Setting active input type from ${this.lastActiveInputType} to: ${type}`);
             this.lastActiveInputType = type;
             this.dispatchEvent('inputtypechange', { type });
+
+            // Manage cursor and pointer lock based on the new type
+            if (type === 'gamepad') {
+                // If gamepad becomes active, ensure pointer lock is released and cursor is visible
+                if (document.pointerLockElement) {
+                    console.log("[InputManager] Gamepad activated, exiting pointer lock.");
+                    document.exitPointerLock();
+                }
+                document.body.style.cursor = 'default'; // Show cursor
+                // Hide lock instructions if they exist
+                const instructions = document.getElementById('lock-instructions');
+                if (instructions) {
+                    instructions.style.display = 'none';
+                }
+            } else { // keyboardMouse
+                // If keyboard/mouse becomes active, allow pointer lock and hide cursor if locked
+                if (document.pointerLockElement) {
+                    document.body.style.cursor = 'none'; // Hide cursor if already locked
+                } else {
+                    document.body.style.cursor = 'default'; // Show cursor if not locked
+                     // Show lock instructions if they exist and we are not locked
+                    const instructions = document.getElementById('lock-instructions');
+                    if (instructions) {
+                        instructions.style.display = 'flex';
+                    }
+                }
+            }
             return true;
+        } else if (this.lastActiveInputType === type) {
+             console.log(`[InputManager] Input type already set to: ${type}`);
         }
         return false;
     }
@@ -1113,6 +1142,19 @@ class InputManager {
         } else {
             // This error now indicates a problem in the calling code (main.js)
             console.error('[InputManager] registerAnimationCallback not found when attempting to register update.');
+        }
+    }
+    
+    // Toggle active input type between keyboard/mouse and gamepad
+    toggleActiveInputType() {
+        if (this.lastActiveInputType === 'keyboardMouse') {
+            if (this.isGamepadAvailable) {
+                this.setActiveInputType('gamepad');
+            } else {
+                console.log('[InputManager] Cannot switch to gamepad: no gamepad available');
+            }
+        } else {
+            this.setActiveInputType('keyboardMouse');
         }
     }
 }
