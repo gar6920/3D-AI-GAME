@@ -297,10 +297,6 @@ class BuildingModeManager {
         this.buildingMenu.style.display = this.active ? 'block' : 'none';
         this.placementPreview.style.display = this.active ? 'block' : 'none';
         
-        // Always hide lock instructions in building mode
-        // Removed direct manipulation to centralize control in game-engine.js
-        // lockInstructions.style.display = 'none';
-        
         // Initialize 3D preview if needed
         if (this.active && !this.buildingPreview && window.scene) {
             this.createPreviewModels();

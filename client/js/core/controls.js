@@ -450,7 +450,48 @@ window.updateControls = function(controls, delta) {
         return;
     }
 
-    // For other modes, require pointer lock
+    // Handle gamepad input independently of pointer lock
+    if (window.inputManager && window.inputManager.lastActiveInputType === 'gamepad') {
+        // Gamepad movement
+        if (window.moveForward) {
+            controls.moveForward(window.moveSpeed * delta);
+        }
+        if (window.moveBackward) {
+            controls.moveForward(-window.moveSpeed * delta);
+        }
+        if (window.moveLeft) {
+            controls.moveRight(-window.moveSpeed * delta);
+        }
+        if (window.moveRight) {
+            controls.moveRight(window.moveSpeed * delta);
+        }
+        if (window.turnLeft) {
+            // Move diagonally forward-left
+            const diagonalSpeed = window.moveSpeed * 0.7 * delta; // Scale down for diagonal
+            controls.moveForward(diagonalSpeed);
+            controls.moveRight(-diagonalSpeed);
+        }
+        if (window.turnRight) {
+            // Move diagonally forward-right
+            const diagonalSpeed = window.moveSpeed * 0.7 * delta; // Scale down for diagonal
+            controls.moveForward(diagonalSpeed);
+            controls.moveRight(diagonalSpeed);
+        }
+
+        // Apply gravity for gamepad control
+        window.velocity.y -= 9.8 * delta;
+        controls.getObject().position.y += window.velocity.y * delta;
+
+        // Ground collision for gamepad
+        if (controls.getObject().position.y < window.playerHeight) {
+            window.velocity.y = 0;
+            controls.getObject().position.y = window.playerHeight;
+            window.canJump = true;
+        }
+        return; // Exit early for gamepad to avoid pointer lock checks
+    }
+
+    // For mouse/keyboard, require pointer lock
     if (!controls.isLocked) return;
     
     // If we're in free camera mode, handle movement without updating the server

@@ -1027,12 +1027,12 @@ function setupPointerLockControls() {
             }
             
             // Hide instructions overlay completely regardless of mode
-            instructions.style.display = 'none';
-
             if (isLocked) {
-                debug('Pointer is locked - Hiding instructions overlay');
-                console.log('[GameEngine] Pointer locked - Controls enabled.'); // DEBUG LOG
-                // Original lock logic
+                debug('Pointer is locked - Hiding instructions');
+                console.log('[GameEngine] Pointer is locked - Hiding instructions overlay.'); // DEBUG LOG
+                instructions.style.display = 'none';
+                
+                // Rest of logic remains unchanged
                 if (!window.playerLoaded) {
                     debug('Creating player entity after click to play');
                     window.playerEntity = window.createPlayerEntity(scene);
@@ -1070,8 +1070,8 @@ function setupPointerLockControls() {
             } else {
                 debug('Pointer is unlocked - Adding canvas click listener but not showing instructions');
                 console.log('[GameEngine] Pointer is unlocked - Adding one-time click listener to renderer.domElement.'); // DEBUG LOG
-                // Do not show instructions overlay at all
-                instructions.style.display = 'none';
+                // Show instructions overlay to allow re-locking
+                instructions.style.display = 'flex';
                 // Add a one-time click listener to the canvas to re-acquire lock
                 renderer.domElement.addEventListener('click', attemptLockOnClick, { once: true });
             }

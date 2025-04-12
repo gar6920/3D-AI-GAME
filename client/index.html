@@ -238,63 +238,71 @@
     });
     </script>
     
-    <!-- Game Startup Script -->
+    <!-- Function to start the game when a controller button is pressed -->
     <script>
-    // Function to start the game when a controller button is pressed
     function setupGamepadStartSupport() {
-        let gamepadInterval;
-        let isGameStarted = false;
+        console.log("Setting up gamepad start support...");
         
-        // Function to check for gamepad button presses
-        function checkGamepadStart() {
-            if (isGameStarted) {
-                clearInterval(gamepadInterval);
-                return;
-            }
-            
-            const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        function checkGamepads() {
+            const gamepads = navigator.getGamepads();
             for (let i = 0; i < gamepads.length; i++) {
-                const gamepad = gamepads[i];
-                if (!gamepad) continue;
-                
-                // Check if any button is pressed on the gamepad
-                const anyButtonPressed = gamepad.buttons.some(button => button.pressed);
-                if (anyButtonPressed) {
-                    console.log("Gamepad button pressed, starting game!");
-                    
-                    // Check if we're on the click-to-play screen
-                    const instructions = document.getElementById('lock-instructions');
-                    if (instructions && instructions.style.display !== 'none') {
-                        // Simulate a click on the instructions to start the game
-                        instructions.click();
-                        isGameStarted = true;
-                        
-                        // Clean up interval
-                        clearInterval(gamepadInterval);
+                const gp = gamepads[i];
+                if (gp && gp.connected) {
+                    // Check for any button press
+                    if (gp.buttons && gp.buttons.length > 0) {
+                        for (let b = 0; b < gp.buttons.length; b++) {
+                            if (gp.buttons[b] && gp.buttons[b].pressed) {
+                                console.log("Gamepad button pressed, starting game!");
+                                const instructions = document.getElementById('lock-instructions');
+                                if (instructions) {
+                                    instructions.click();
+                                }
+                                // Stop polling aggressively to save resources
+                                return;
+                            }
+                        }
                     }
                 }
             }
+            // Continue polling if no button press detected
+            setTimeout(checkGamepads, 100);
         }
         
-        // Start polling for gamepad buttons
-        gamepadInterval = setInterval(checkGamepadStart, 100);
+        // Start polling for gamepad input
+        setTimeout(checkGamepads, 100);
         
-        // Stop polling when the game starts
-        document.addEventListener('pointerlockchange', function() {
-            if (document.pointerLockElement) {
-                isGameStarted = true;
-                clearInterval(gamepadInterval);
-            }
+        // Also listen for gamepad connection
+        window.addEventListener("gamepadconnected", function(e) {
+            console.log("Gamepad connected:", e.gamepad.id);
+            // Start polling if not already started
+            setTimeout(checkGamepads, 100);
         });
     }
-    
+
     // Start gamepad support when the page loads
     document.addEventListener('DOMContentLoaded', setupGamepadStartSupport);
     </script>
     
     <!-- Gamepad UI -->
     <script src="js/core/GamepadUI.js" defer></script>
-</body>
-</html>
+    
+    <script>
+    // Handle pointer lock change to show/hide instructions
+    document.addEventListener('pointerlockchange', function(event) {
+        const instructions = document.getElementById('lock-instructions');
+        if (!instructions) {
+            console.error("#lock-instructions element not found in pointerlockchange event");
+            return;
+        }
+        
+        if (document.pointerLockElement) {
+            console.log("[Index] Pointer locked - Hiding instructions");
+            instructions.style.display = 'none';
+        } else {
+            console.log("[Index] Pointer unlocked - Showing instructions");
+            instructions.style.display = 'flex';
+        }
+    });
+    </script>
 </body>
 </html>

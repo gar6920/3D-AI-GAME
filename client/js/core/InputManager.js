@@ -88,6 +88,9 @@ class InputManager {
         
         // Initialize
         this.init();
+        
+        // Initialize prevGamepadState
+        this.prevGamepadState = {};
     }
     
     init() {
@@ -808,76 +811,108 @@ class InputManager {
             this.serverInputState.mouseDelta.y = 0;
         }
         
-        // Handle right stick camera movement in update loop for smooth motion
-        if (this.lastActiveInputType === 'gamepad' && this.isGamepadAvailable) {
-            const deadzone = this.gamepadConfig.deadzone; // Reverted to 0.15
-            const lookSensitivity = 200.0; // Increased sensitivity for camera
-            
-            const rawStickX = this.rightStickPosition.x.toFixed(3);
-            const rawStickY = this.rightStickPosition.y.toFixed(3);
-
-            if (Math.abs(this.rightStickPosition.x) > deadzone || Math.abs(this.rightStickPosition.y) > deadzone) {
-                // Apply smoothing to the stick values
-                const smoothingFactor = 0.8; // Higher = smoother but more latency
-                this._smoothedRightX = this._smoothedRightX || 0;
-                this._smoothedRightY = this._smoothedRightY || 0;
+        // Process gamepad input independently of pointer lock
+        if (this.isGamepadAvailable && this.activeGamepadIndex >= 0) {
+            const gamepad = this.gamepads[this.activeGamepadIndex];
+            if (gamepad) {
+                // Set gamepad as active input type if there's significant input
+                const stickThreshold = 0.2;
+                let hasStickInput = false;
+                let hasButtonInput = false;
                 
-                this._smoothedRightX = (this._smoothedRightX * smoothingFactor) + (this.rightStickPosition.x * (1 - smoothingFactor));
-                this._smoothedRightY = (this._smoothedRightY * smoothingFactor) + (this.rightStickPosition.y * (1 - smoothingFactor));
-                
-                // Scale movement by delta time for consistent speed
-                const deltaScale = (deltaTime || (1/60)) * 60; // Normalize to 60fps if no delta provided
-                const movementX = this._smoothedRightX * lookSensitivity * deltaScale;
-                const movementY = this._smoothedRightY * lookSensitivity * deltaScale;
-                
-                // Update mouseDelta ONLY when stick is active and pointer is NOT locked
-                if (!document.pointerLockElement) {
-                    this.mouseDelta.x = movementX;
-                    this.mouseDelta.y = movementY;
-                    this.serverInputState.mouseDelta.x = movementX;
-                    this.serverInputState.mouseDelta.y = movementY;
-                } else {
-                    // If pointer IS locked, mouse input takes precedence, clear any gamepad delta contribution
-                    // (onMouseMove handles the actual delta when locked)
-                    // We might not strictly need this else block if the initial reset covers it,
-                    // but it makes the intent clearer.
-                    this.mouseDelta.x = 0; 
-                    this.mouseDelta.y = 0;
-                    this.serverInputState.mouseDelta.x = 0;
-                    this.serverInputState.mouseDelta.y = 0;
+                try {
+                    hasStickInput = gamepad.axes && (
+                        (gamepad.axes[0] !== undefined && Math.abs(gamepad.axes[0]) > stickThreshold) || 
+                        (gamepad.axes[1] !== undefined && Math.abs(gamepad.axes[1]) > stickThreshold) || 
+                        (gamepad.axes[2] !== undefined && Math.abs(gamepad.axes[2]) > stickThreshold) || 
+                        (gamepad.axes[3] !== undefined && Math.abs(gamepad.axes[3]) > stickThreshold)
+                    );
+                    hasButtonInput = gamepad.buttons && Array.isArray(gamepad.buttons) && gamepad.buttons.some(btn => btn && typeof btn === 'object' && btn.pressed);
+                } catch (e) {
+                    console.error("[InputManager] Error checking gamepad input state:", e);
                 }
-
-                // Create and dispatch a synthetic mouse movement event
-                const mouseData = {
-                    position: this.mousePosition,
-                    movement: { x: movementX, y: movementY },
-                    movementX: movementX,
-                    movementY: movementY,
-                    clientX: this.mousePosition.x,
-                    clientY: this.mousePosition.y
-                };
                 
-                // Trigger mousemove callbacks for camera update
-                this.callbacks.mousemove.forEach(callback => callback(mouseData));
+                if ((hasStickInput || hasButtonInput) && this.lastActiveInputType !== 'gamepad') {
+                    this.lastActiveInputType = 'gamepad';
+                    this.dispatchEvent('inputtypechange', { type: 'gamepad' });
+                }
                 
-                console.log(`[Gamepad] Camera movement:`, {
-                    sensitivity: lookSensitivity,
-                    stickX: this._smoothedRightX.toFixed(3),
-                    stickY: this._smoothedRightY.toFixed(3),
-                    movementX: movementX.toFixed(2),
-                    movementY: movementY.toFixed(2),
-                    deltaTime: deltaScale.toFixed(2)
-                });
-            } else {
-                // Reset smoothing values (mouseDelta already reset above unless pointer locked)
-                this._smoothedRightX = 0;
-                this._smoothedRightY = 0;
-                // Explicitly reset delta here too if pointer isn't locked, just to be safe
-                if (!document.pointerLockElement) {
-                    this.mouseDelta.x = 0;
-                    this.mouseDelta.y = 0;
-                    this.serverInputState.mouseDelta.x = 0;
-                    this.serverInputState.mouseDelta.y = 0;
+                // Movement (left stick)
+                let moveX = 0;
+                let moveY = 0;
+                try {
+                    moveX = gamepad.axes && gamepad.axes[0] !== undefined && Math.abs(gamepad.axes[0]) > stickThreshold ? gamepad.axes[0] : 0;
+                    moveY = gamepad.axes && gamepad.axes[1] !== undefined && Math.abs(gamepad.axes[1]) > stickThreshold ? gamepad.axes[1] : 0;
+                } catch (e) {
+                    console.error("[InputManager] Error reading gamepad movement axes:", e);
+                }
+                
+                if (moveX || moveY) {
+                    // Dispatch movement event
+                    this.dispatchEvent('gamepadmove', {
+                        x: moveX,
+                        y: moveY
+                    });
+                    
+                    // Update global state for movement
+                    window.moveForward = moveY < -0.3;
+                    window.moveBackward = moveY > 0.3;
+                    window.moveLeft = moveX < -0.3;
+                    window.moveRight = moveX > 0.3;
+                    
+                    // Update server input state
+                    this.serverInputState.keys.w = window.moveForward;
+                    this.serverInputState.keys.s = window.moveBackward;
+                    this.serverInputState.keys.a = window.moveLeft;
+                    this.serverInputState.keys.d = window.moveRight;
+                }
+                
+                // Look (right stick) - Simulate mouse delta for camera control
+                let lookX = 0;
+                let lookY = 0;
+                try {
+                    lookX = gamepad.axes && gamepad.axes[2] !== undefined && Math.abs(gamepad.axes[2]) > stickThreshold ? gamepad.axes[2] * 10 : 0;
+                    lookY = gamepad.axes && gamepad.axes[3] !== undefined && Math.abs(gamepad.axes[3]) > stickThreshold ? gamepad.axes[3] * 10 : 0;
+                } catch (e) {
+                    console.error("[InputManager] Error reading gamepad look axes:", e);
+                }
+                
+                if (lookX || lookY) {
+                    this.mouseDelta.x += lookX;
+                    this.mouseDelta.y += lookY;
+                    this.serverInputState.mouseDelta.x += lookX;
+                    this.serverInputState.mouseDelta.y += lookY;
+                    
+                    // Dispatch look event
+                    this.dispatchEvent('gamepadlook', {
+                        x: lookX,
+                        y: lookY
+                    });
+                }
+                
+                // Buttons
+                try {
+                    if (gamepad.buttons && Array.isArray(gamepad.buttons)) {
+                        // Ensure prevGamepadState is initialized for this index
+                        if (!this.prevGamepadState[this.activeGamepadIndex]) {
+                            this.prevGamepadState[this.activeGamepadIndex] = { buttons: [], axes: [] };
+                        }
+                        for (let i = 0; i < gamepad.buttons.length; i++) {
+                            const button = gamepad.buttons[i];
+                            const prevState = this.prevGamepadState[this.activeGamepadIndex];
+                            const wasPressed = prevState && prevState.buttons && Array.isArray(prevState.buttons) && i < prevState.buttons.length && prevState.buttons[i] ? prevState.buttons[i].pressed : false;
+                            
+                            if (button && typeof button === 'object' && button.pressed && !wasPressed) {
+                                // Button down
+                                this.dispatchEvent(`gamepadbuttondown${i}`, { index: i });
+                            } else if (button && typeof button === 'object' && !button.pressed && wasPressed) {
+                                // Button up
+                                this.dispatchEvent(`gamepadbuttonup${i}`, { index: i });
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error("[InputManager] Error processing gamepad buttons:", e);
                 }
             }
         } else {
