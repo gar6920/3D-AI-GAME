@@ -1,76 +1,3 @@
-/**
- * Electron Launcher
- * This script launches the Electron application
- * It is designed to be called from the server when a browser connects
- */
-
-const { spawn } = require('child_process');
-const path = require('path');
-const fs = require('fs');
-
-/**
- * Check if Electron is already running
- * @returns {Promise<boolean>} True if Electron is running
- */
-async function isElectronRunning() {
-    return new Promise((resolve) => {
-        // On Windows, use tasklist to check for electron processes
-        const proc = spawn('tasklist', ['/fi', 'imagename eq electron.exe', '/fo', 'csv', '/nh'], {
-            windowsHide: true,
-            shell: true
-        });
-        
-        let output = '';
-        proc.stdout.on('data', (data) => {
-            output += data.toString();
-        });
-        
-        proc.on('close', () => {
-            // If we find an Electron process, it's running
-            resolve(output.toLowerCase().includes('electron.exe'));
-        });
-    });
-}
-
-/**
- * Launch the Electron application
- */
-async function launchElectron() {
-    // Check if Electron is already running
-    const isRunning = await isElectronRunning();
-    if (isRunning) {
-        console.log('Electron is already running. Skipping launch.');
-        return;
-    }
-    
-    console.log('Launching Electron application...');
-    
-    // Path to project root (parent of electron folder)
-    const projectRoot = path.join(__dirname, '..');
-    
-    // Launch Electron
-    const electronProc = spawn('npx', ['electron', '.'], {
-        cwd: projectRoot,
-        detached: true, // Run in background
-        stdio: 'ignore', // Don't pipe IO
-        shell: true,
-        windowsHide: false // Show the window
-    });
-    
-    // Detach the process so it runs independently
-    electronProc.unref();
-    
-    console.log('Electron application launched.');
-}
-
-// Export the launcher function
-module.exports = { launchElectron };
-
-// If this script is run directly, launch Electron
-if (require.main === module) {
-    launchElectron();
-}
-
 // Launcher script for 3D AI Game
 document.addEventListener('DOMContentLoaded', function() {
     // Initialize UI
@@ -198,19 +125,25 @@ document.addEventListener('DOMContentLoaded', function() {
             noGamepadsEl.className = 'no-gamepads';
             noGamepadsEl.textContent = 'No controllers detected. Connect a controller before starting or use keyboard/mouse.';
             gamepadList.appendChild(noGamepadsEl);
-            return;
+        } else {
+            // Add each gamepad to the list
+            Object.values(connectedGamepads).forEach(gamepad => {
+                const gamepadItem = document.createElement('div');
+                gamepadItem.className = 'gamepad-item';
+                
+                const nameEl = document.createElement('div');
+                nameEl.className = 'gamepad-name';
+                nameEl.textContent = gamepad.id || 'Unknown Controller';
+                gamepadItem.appendChild(nameEl);
+                
+                const indexEl = document.createElement('div');
+                indexEl.className = 'gamepad-index';
+                indexEl.textContent = `Index: ${gamepad.index}`;
+                gamepadItem.appendChild(indexEl);
+                
+                gamepadList.appendChild(gamepadItem);
+            });
         }
-        
-        // Add each gamepad to the list
-        Object.values(connectedGamepads).forEach(gamepad => {
-            const gamepadEl = document.createElement('div');
-            gamepadEl.className = 'gamepad-item';
-            gamepadEl.innerHTML = `
-                <div class="gamepad-name">${gamepad.id}</div>
-                <div class="gamepad-index">Controller #${gamepad.index + 1}</div>
-            `;
-            gamepadList.appendChild(gamepadEl);
-        });
         
         // Update player count options based on connected gamepads
         updatePlayerCountOptions(gamepadCount);
@@ -218,30 +151,26 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Update player count options based on connected gamepads
     function updatePlayerCountOptions(gamepadCount) {
-        // We always support at least 1 player (keyboard/mouse)
-        // and up to gamepadCount + 1 (keyboard plus gamepads)
-        const maxPlayers = Math.min(4, gamepadCount + 1);
-        
-        // Save current selection if possible
-        const currentSelection = playerCountSelect.value;
+        if (!playerCountSelect) return;
         
         // Clear existing options
         playerCountSelect.innerHTML = '';
         
-        // Add options from 1 to maxPlayers
-        for (let i = 1; i <= maxPlayers; i++) {
+        // Always allow 1-4 players
+        const option1 = document.createElement('option');
+        option1.value = '1';
+        option1.textContent = '1 Player';
+        playerCountSelect.appendChild(option1);
+        
+        for (let i = 2; i <= 4; i++) {
             const option = document.createElement('option');
-            option.value = i;
-            option.textContent = `${i} Player${i > 1 ? 's' : ''}`;
+            option.value = i.toString();
+            option.textContent = `${i} Players`;
             playerCountSelect.appendChild(option);
         }
         
-        // Restore selection if valid, otherwise select the maximum
-        if (currentSelection && parseInt(currentSelection) <= maxPlayers) {
-            playerCountSelect.value = currentSelection;
-        } else {
-            playerCountSelect.value = maxPlayers;
-        }
+        // Select the highest number by default or based on gamepad count
+        playerCountSelect.value = Math.min(4, gamepadCount + 1).toString();
     }
     
     // Start button click handler
@@ -249,17 +178,15 @@ document.addEventListener('DOMContentLoaded', function() {
         const playerCount = parseInt(playerCountSelect.value);
         const implementation = implementationSelect.value;
         
-        console.log(`Starting game with ${playerCount} players, implementation: ${implementation}`);
-        
         if (window.api) {
             window.api.startGame(playerCount, implementation);
         } else {
-            alert('Cannot start game - Electron API not available');
+            console.error('API not available');
         }
     });
     
-    // Quit button click handler
-    const quitButton = document.getElementById('quit-game');
+    // Quit button
+    const quitButton = document.getElementById('quit-app');
     if (quitButton) {
         quitButton.addEventListener('click', function() {
             if (window.api) {

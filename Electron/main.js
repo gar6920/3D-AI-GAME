@@ -20,7 +20,7 @@ const GAMEPAD_POLL_RATE = 16; // ~60fps
 function parseCommandLineArgs() {
   const args = process.argv.slice(1);
   let environment = 'production';
-  let serverUrl = 'https://3d-ai-game.com';
+  let serverUrl = 'http://localhost:3000';
   
   args.forEach(arg => {
     if (arg.startsWith('--env=')) {
@@ -78,8 +78,8 @@ function createMainWindow() {
     height: 600,
     title: '3D AI Game - Launcher',
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
     }
   });
@@ -105,23 +105,51 @@ function createMainWindow() {
 // Check if server is available
 async function checkServerAvailability() {
   return new Promise((resolve, reject) => {
-    const http = require('http');
-    const req = http.get(`${SERVER_URL}/health`, (res) => {
-      if (res.statusCode === 200) {
-        resolve(true);
-      } else {
-        reject(new Error(`Server returned status code ${res.statusCode}`));
+    const url = require('url');
+    const parsedUrl = url.parse(SERVER_URL);
+    const protocol = parsedUrl.protocol === 'https:' ? require('https') : require('http');
+    let retries = 3;
+    let lastError = null;
+    
+    function attemptConnection() {
+      console.log(`Attempting to connect to server at ${SERVER_URL}/health (Attempt ${4 - retries} of 3)`);
+      const req = protocol.get(`${SERVER_URL}/health`, (res) => {
+        console.log(`Server response status code: ${res.statusCode}`);
+        if (res.statusCode === 200) {
+          console.log('Server connection successful.');
+          resolve(true);
+        } else {
+          lastError = new Error(`Server returned status code ${res.statusCode}`);
+          console.log(lastError.message);
+          retryOrReject();
+        }
+      });
+      
+      req.on('error', (err) => {
+        lastError = new Error(`Server is not available: ${err.message}`);
+        console.log(lastError.message);
+        retryOrReject();
+      });
+      
+      req.setTimeout(5000, () => {
+        req.abort();
+        lastError = new Error('Server connection timed out');
+        console.log(lastError.message);
+        retryOrReject();
+      });
+      
+      function retryOrReject() {
+        retries--;
+        if (retries > 0) {
+          console.log(`Retrying connection... (${retries} attempts left)`);
+          setTimeout(attemptConnection, 2000);
+        } else {
+          reject(lastError);
+        }
       }
-    });
+    }
     
-    req.on('error', (err) => {
-      reject(new Error(`Server is not available: ${err.message}`));
-    });
-    
-    req.setTimeout(5000, () => {
-      req.abort();
-      reject(new Error('Server connection timed out'));
-    });
+    attemptConnection();
   });
 }
 
@@ -307,8 +335,8 @@ function launchGame(playerCount, implementation = 'default') {
     height: 720,
     title: `3D AI Game - ${playerCount} Players - ${implementation}`,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
+      nodeIntegration: false,
+      contextIsolation: true,
       preload: path.join(__dirname, 'multiplayer-preload.js')
     }
   });
@@ -344,8 +372,9 @@ function launchGame(playerCount, implementation = 'default') {
 
 // Create a game window for a specific player with appropriate input device
 function createPlayerGameWindow(playerIndex, inputType, options = {}) {
-  console.log(`Creating game window for Player ${playerIndex + 1} with input type: ${inputType}`);
+  console.log(`Creating game window for player ${playerIndex} with input ${inputType}`);
   
+  // Create window with player-specific settings
   const gameWindow = new BrowserWindow({
     width: options.width || 800,
     height: options.height || 600,
@@ -353,10 +382,11 @@ function createPlayerGameWindow(playerIndex, inputType, options = {}) {
     y: options.y,
     title: `3D AI Game - Player ${playerIndex + 1}`,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      preload: path.join(__dirname, 'game-preload.js')
-    }
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, inputType === 'gamepad' ? 'game-preload.js' : 'preload.js')
+    },
+    fullscreen: options.fullscreen || false
   });
   
   // Load the game URL with player-specific parameters
