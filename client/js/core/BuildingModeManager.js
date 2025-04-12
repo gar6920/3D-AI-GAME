@@ -7,6 +7,9 @@ class BuildingModeManager {
         this.rotationInterval = null;
         this.lastMousePosition = null;
         
+        // Store previous view mode when entering building mode
+        this.previousViewMode = null;
+        
         // UI elements
         this.buildingModeIndicator = null;
         this.buildingMenu = null;
@@ -286,63 +289,65 @@ class BuildingModeManager {
     
     toggle() {
         console.log('[BuildingModeManager] toggle() called.');
+        // Toggle active state
         this.active = !this.active;
         console.log(`[BuildingModeManager] Toggled state. Active: ${this.active}`);
+        
+        // IMPORTANT: Set the global flag that other components check
+        window.isBuildingMode = this.active;
+        console.log(`[BuildingModeManager] Set global flag window.isBuildingMode = ${this.active}`);
         
         // Update prevention flag
         window.preventPointerLock = this.active;
         
-        // Show/hide UI elements
-        this.buildingModeIndicator.style.display = this.active ? 'block' : 'none';
-        this.buildingMenu.style.display = this.active ? 'block' : 'none';
-        this.placementPreview.style.display = this.active ? 'block' : 'none';
-        
-        // Initialize 3D preview if needed
-        if (this.active && !this.buildingPreview && window.scene) {
-            this.createPreviewModels();
-        }
-        
-        // Show/hide 3D preview and grid
-        if (this.buildingPreview) {
-            this.buildingPreview.group.visible = this.active;
-            this.buildingPreview.grid.visible = this.active;
-            
-            // Set current type if activating
-            if (this.active && this.currentStructure) {
-                this.buildingPreview.currentType = this.currentStructure;
-            }
-        }
-        
-        // Unlock/lock pointer
         if (this.active) {
-            console.log('[BuildingModeManager] Activating - Checking element status:');
-            console.log(`  - this.buildingMenu: ${this.buildingMenu ? 'Exists' : 'NULL'}`);
-            console.log(`  - this.placementPreview: ${this.placementPreview ? 'Exists' : 'NULL'}`);
-            console.log(`  - this.buildingPreview: ${this.buildingPreview ? 'Exists' : 'NULL'}`);
-            console.log(`  - window.controls: ${window.controls ? 'Exists' : 'NULL'}`);
-
+            // Entering Building Mode
+            console.log('[BuildingModeManager] Entering building mode.');
+            
+            // Store the current view mode to restore later
+            this.previousViewMode = window.viewMode;
+            console.log(`[BuildingModeManager] Stored previous view mode: ${this.previousViewMode}`);
+            
+            // Show UI elements
+            this.buildingModeIndicator.style.display = 'block';
+            this.buildingMenu.style.display = 'block';
+            this.placementPreview.style.display = 'block';
+            
+            // Initialize 3D preview if needed
+            if (!this.buildingPreview && window.scene) {
+                this.createPreviewModels();
+            }
+            
+            // Show 3D preview and grid
+            if (this.buildingPreview) {
+                this.buildingPreview.group.visible = true;
+                this.buildingPreview.grid.visible = true;
+                
+                // Set current type if activating
+                if (this.currentStructure) {
+                    this.buildingPreview.currentType = this.currentStructure;
+                }
+            }
+            
             // Unlock the pointer to show cursor
             if (window.controls) {
-                console.log(`[BuildingModeManager] Controls state before unlock: isLocked=${window.controls.isLocked}, enabled=${window.controls.enabled}`);
+                console.log('[BuildingModeManager] Activating - Checking element status:');
+                console.log(`  - this.buildingMenu: ${this.buildingMenu ? 'Exists' : 'NULL'}`);
+            
                 if (window.controls.isLocked) {
                     window.controls.unlock();
                 }
                 // Disable pointer lock controls to prevent auto-locking
                 window.controls.enabled = false;
-                console.log(`[BuildingModeManager] Controls state after changes: enabled=${window.controls.enabled}`);
             }
             
             // Most aggressive approach - add class to html element
             document.documentElement.classList.add('hide-cursor');
             
-            // Create and use a completely transparent cursor as fallback
-            const transparentCursor = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-            document.body.style.cursor = `url(${transparentCursor}), none`;
-            document.documentElement.style.cursor = `url(${transparentCursor}), none`;
-            
-            if (window.renderer && window.renderer.domElement) {
-                window.renderer.domElement.style.cursor = `url(${transparentCursor}), none`;
-            }
+            // System cursor show (always visible in building mode)
+            document.body.style.cursor = 'default';
+            document.documentElement.style.cursor = 'default';
+            window.renderer.domElement.style.cursor = 'default';
             
             console.log(`[BuildingModeManager] Building Menu display style: ${this.buildingMenu.style.display}`);
             console.log(`[BuildingModeManager] Body cursor style: ${document.body.style.cursor}`);
@@ -360,7 +365,7 @@ class BuildingModeManager {
 
             // Add to DOM first so it can be registered
             document.body.appendChild(this.clickInterceptor);
-
+            
             // Register with InputManager
             window.inputManager.registerUIElement('build-click-interceptor', 'click', (event) => {
                 // Only handle LEFT CLICKS (button 0)
@@ -421,25 +426,33 @@ class BuildingModeManager {
         } else {
             // Exiting Building Mode
             console.log('[BuildingModeManager] Exiting building mode.');
+            
+            // Set transition flag to prevent overlay flashing during exit
+            window.inViewTransition = true;
+            console.log('[BuildingModeManager] Set inViewTransition flag to prevent overlay flashing');
+            
+            // Reset the flag after a delay (matching other transitions)
+            setTimeout(() => {
+                window.inViewTransition = false;
+                console.log('[BuildingModeManager] Reset inViewTransition flag');
+            }, 300);
+            
             // Hide UI elements
             if (this.buildingModeIndicator) this.buildingModeIndicator.style.display = 'none';
             if (this.buildingMenu) this.buildingMenu.style.display = 'none';
             if (this.placementPreview) this.placementPreview.style.display = 'none';
             
-            // --- Attempt to re-lock pointer if returning to a suitable view ---
-            if (!window.isRTSMode && !window.isFreeCameraMode) { // Only lock if returning to FPS/TPS
-                console.log('[BuildingModeManager] Attempting to re-acquire pointer lock after exiting build mode.');
-                // Use a small delay to ensure the UI is hidden before lock attempt
-                setTimeout(() => {
-                    // Double-check conditions right before locking, in case state changed during delay
-                    if (!this.active && !window.isRTSMode && !window.isFreeCameraMode && !document.pointerLockElement && !window.controls.isLocked) {
-                         window.controls.lock();
-                    }
-                }, 50); // 50ms delay
-            } else {
-                 console.log('[BuildingModeManager] Not re-locking pointer (in RTS or FreeCam mode).');
+            // Get input type to determine if we should re-lock
+            const activeInputType = window.inputManager ? window.inputManager.getActiveInputType() : 'keyboardMouse';
+            
+            // Clear building mode flag
+            window.preventPointerLock = false;
+            
+            // Hide 3D preview and grid
+            if (this.buildingPreview) {
+                this.buildingPreview.group.visible = false;
+                this.buildingPreview.grid.visible = false;
             }
-            // --- End re-lock logic ---
             
             // Remove cursor-hiding class
             document.documentElement.classList.remove('hide-cursor');
@@ -464,6 +477,33 @@ class BuildingModeManager {
             if (this.clickInterceptor) {
                 this.clickInterceptor.remove();
                 this.clickInterceptor = null;
+            }
+            
+            // --- Restore the previous view mode and attempt to re-lock pointer if appropriate ---
+            if (activeInputType === 'keyboardMouse' && !window.isRTSMode) {
+                console.log(`[BuildingModeManager] Restoring previous view mode: ${this.previousViewMode}`);
+                
+                // Use a longer delay to ensure all transitions complete
+                setTimeout(() => {
+                    // Double-check conditions right before locking
+                    if (activeInputType === 'keyboardMouse' && !window.isBuildingMode && !window.isRTSMode && !document.pointerLockElement) {
+                        console.log('[BuildingModeManager] Re-acquiring pointer lock for keyboard/mouse input');
+                        // Re-enable controls first
+                        if (window.controls) {
+                            window.controls.enabled = true;
+                            window.controls.lock();
+                        }
+                    } else {
+                        console.log('[BuildingModeManager] Not re-locking pointer', {
+                            inputType: activeInputType,
+                            isBuildingMode: window.isBuildingMode,
+                            isRTSMode: window.isRTSMode,
+                            pointerLocked: !!document.pointerLockElement
+                        });
+                    }
+                }, 100); // 100ms delay to ensure transitions complete
+            } else {
+                console.log(`[BuildingModeManager] Not re-locking - using gamepad or in RTS mode: ${activeInputType}`);
             }
         }
         

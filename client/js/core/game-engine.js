@@ -252,6 +252,16 @@ function addViewToggleButton() {
 // First-person setup
 // Add 'previousViewMode' parameter to handle delayed locking if needed
 window.switchToFirstPersonView = function(previousViewMode) {
+    // Set transition flag to prevent overlay flashing during view change
+    window.inViewTransition = true;
+    console.log('[GameEngine] Set inViewTransition flag to prevent overlay flashing in FPS transition');
+    
+    // Reset the flag after a delay (matching other transitions)
+    setTimeout(() => {
+        window.inViewTransition = false;
+        console.log('[GameEngine] Reset inViewTransition flag');
+    }, 300);
+    
     // Hide player's mesh in first-person
     if (window.playerEntity && window.playerEntity.mesh) {
         window.playerEntity.mesh.visible = false;
@@ -1073,10 +1083,42 @@ function setupPointerLockControls() {
                 debug('Pointer is unlocked');
                 document.body.style.cursor = 'default'; // Always show system cursor when unlocked
                 
-                // Only show instructions overlay if using keyboard/mouse
+                // Log current state to debug overlay visibility issues
+                console.log('[GameEngine] Pointer unlock state:', {
+                    activeInputType,
+                    isRTSMode: window.isRTSMode,
+                    isBuildingMode: window.isBuildingMode,
+                    shouldShowLockOverlay: window.shouldShowLockOverlay
+                });
+                
+                // Only show instructions overlay if:
+                // 1. Using keyboard/mouse AND
+                // 2. Not in RTS or Building mode AND
+                // 3. Either shouldShowLockOverlay is true (set by ESC) OR we're not in special view modes AND
+                // 4. Not currently in a view transition
                 if (activeInputType === 'keyboardMouse') {
-                    console.log('[GameEngine] Pointer unlocked & Keyboard/Mouse active - Showing instructions and adding listener.');
-                    instructions.style.display = 'flex';
+                    if (window.shouldShowLockOverlay) {
+                        // ESC was pressed - show overlay regardless of mode
+                        console.log('[GameEngine] Showing instructions due to ESC key (shouldShowLockOverlay=true)');
+                        instructions.style.display = 'flex';
+                        // Reset the flag after use
+                        window.shouldShowLockOverlay = false;
+                    } 
+                    else if (!window.isRTSMode && !window.isBuildingMode && !window.inViewTransition) {
+                        // Standard case - not in a special mode, not in transition, show overlay
+                        console.log('[GameEngine] Showing instructions - normal unlock, not in special mode');
+                        instructions.style.display = 'flex';
+                    }
+                    else {
+                        // In a special mode or during transition, don't show overlay
+                        if (window.inViewTransition) {
+                            console.log('[GameEngine] Not showing instructions - in view transition');
+                        } else {
+                            console.log('[GameEngine] Not showing instructions - in special mode');
+                        }
+                        instructions.style.display = 'none';
+                    }
+                    
                     // Add a one-time click listener to the canvas to re-acquire lock
                     // Ensure listener isn't added multiple times if already present
                     renderer.domElement.removeEventListener('click', attemptLockOnClick);

@@ -337,32 +337,7 @@
     
     <script>
     // Handle pointer lock change to show/hide instructions
-    document.addEventListener('pointerlockchange', function(event) {
-        const instructions = document.getElementById('lock-instructions');
-        if (!instructions) {
-            console.error("#lock-instructions element not found in pointerlockchange event");
-            return;
-        }
-        
-        const isLocked = !!document.pointerLockElement;
-        const activeInputType = window.inputManager ? window.inputManager.getActiveInputType() : 'keyboardMouse';
-
-        if (isLocked) {
-            console.log("[Index] Pointer locked - Hiding instructions");
-            instructions.style.display = 'none';
-            document.body.style.cursor = 'none';
-        } else {
-             document.body.style.cursor = 'default';
-            // Only show instructions if not locked AND using keyboard/mouse
-            if (activeInputType === 'keyboardMouse') {
-                console.log("[Index] Pointer unlocked and using keyboard/mouse - Showing instructions");
-                instructions.style.display = 'flex';
-            } else {
-                console.log("[Index] Pointer unlocked but using gamepad - Keeping instructions hidden");
-                 instructions.style.display = 'none';
-            }
-        }
-    });
+    // REMOVED THIS REDUNDANT EVENT LISTENER THAT WAS CAUSING OVERLAY FLASHING
     
     // Add a click handler to the lock instructions
     document.addEventListener('DOMContentLoaded', function() {

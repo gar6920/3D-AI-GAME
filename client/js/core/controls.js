@@ -369,6 +369,15 @@ function onKeyDown(event) {
             window.shiftPressed = true;
             window.inputState.keys.shift = true;
             break;
+        
+        // Add Escape key handler to exit gameplay
+        case 'Escape':
+            console.log("[ESC KEY] Setting shouldShowLockOverlay flag and exiting pointer lock");
+            window.shouldShowLockOverlay = true;
+            if (document.pointerLockElement) {
+                document.exitPointerLock();
+            }
+            break;
     }
     
     // Force an immediate input update to minimize latency
@@ -639,6 +648,16 @@ window.toggleCameraView = function() {
     
     // Set the guard to block duplicate calls
     window.isViewToggleActive = true;
+    
+    // Set a flag to prevent overlay display during transition
+    window.inViewTransition = true;
+    console.log("[TOGGLE] Set inViewTransition flag to prevent overlay flashing");
+    
+    // Reset view transition flag after delay (should match our other timeouts)
+    setTimeout(() => {
+        window.inViewTransition = false;
+        console.log("[TOGGLE] Reset inViewTransition flag");
+    }, 300);
     
     // Reset the guard after a short delay
     setTimeout(() => {

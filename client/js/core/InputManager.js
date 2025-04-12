@@ -301,6 +301,26 @@ class InputManager {
             callback({ gamepadIndex, buttonIndex, isPressed })
         );
         
+        // Handle Start button (9) for exiting gamepad mode completely
+        if (buttonIndex === 9 && isPressed) {
+            console.log(`[Gamepad] Start button pressed - exiting gamepad mode completely`);
+            
+            // Set flag to show overlay on unlock
+            window.shouldShowLockOverlay = true;
+            
+            // Exit pointer lock if locked
+            if (document.pointerLockElement) {
+                document.exitPointerLock();
+            }
+            
+            // IMPORTANT: Switch input type to keyboard/mouse
+            this.setActiveInputType('keyboardMouse');
+            console.log(`[Gamepad] Switched to keyboard/mouse input mode via Start button`);
+            
+            // Return early to avoid processing this as a mapped button
+            return;
+        }
+        
         // Map button to keyboard key if defined in mapping
         const mappedKey = this.gamepadConfig.buttonMapping[buttonIndex];
         if (mappedKey && this.keys[mappedKey] !== undefined) {
@@ -1085,8 +1105,18 @@ class InputManager {
             } else {
                 document.body.style.cursor = 'default';
                 const instructions = document.getElementById('lock-instructions');
-                 // Show instructions ONLY if not locked AND type is keyboardMouse
-                 if (instructions) instructions.style.display = 'flex'; 
+                 
+                // Show instructions ONLY if:
+                // 1. Not locked AND 
+                // 2. Type is keyboardMouse AND
+                // 3. Not in RTS or Building mode
+                if (instructions && !window.isRTSMode && !window.isBuildingMode) {
+                    console.log("[InputManager] Showing instructions overlay (not in RTS/Building mode)");
+                    instructions.style.display = 'flex';
+                } else if (instructions) {
+                    console.log("[InputManager] Not showing instructions overlay (in RTS/Building mode)");
+                    instructions.style.display = 'none';
+                }
             }
         }
 
