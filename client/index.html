@@ -369,28 +369,47 @@
         const instructions = document.getElementById('lock-instructions');
         if (instructions) {
             instructions.addEventListener('click', function() {
-                console.log("Lock instructions clicked.");
-                // Set the input type to keyboard/mouse explicitly
-                if (window.inputManager) {
-                    window.inputManager.setActiveInputType('keyboardMouse');
-                } else {
-                    console.warn("InputManager not available on lock instructions click");
-                }
-                
-                // Hide instructions immediately on click
-                instructions.style.display = 'none';
-                
-                // Use the dedicated attemptLockOnClick from game-engine.js if available
-                if (typeof window.attemptLockOnClick === 'function') {
-                    window.attemptLockOnClick(); 
-                } else {
-                     // Fallback: Directly try locking if the function isn't found (should be rare)
-                    console.warn("attemptLockOnClick not found, attempting direct lock.");
-                    if (window.controls && window.controls.lock) {
-                        window.controls.lock();
+                // Only proceed if interaction hasn't already started via gamepad
+                if (!window.gameInteractionStarted) {
+                    console.log("Lock instructions clicked, requesting game start via keyboard/mouse...");
+                    window.gameInteractionStarted = true; // Stop polling
+                    window.startInitiatedBy = 'keyboardMouse'; // Record initiator
+
+                    // Hide instructions immediately
+                    instructions.style.display = 'none';
+
+                    // Trigger game initialization (init will handle setting type, logic, and lock)
+                    if (typeof window.init === 'function') {
+                        if (!window.gameInitialized) {
+                           window.gameInitialized = true;
+                           window.init(); // Let init handle the rest
+                            console.log("Game init() called via click request.");
+                        } else {
+                             console.log("Game already initialized, skipping init() call from click.");
+                             // If already init, maybe just try to lock?
+                             if (typeof window.attemptLockOnClick === 'function') {
+                                 window.attemptLockOnClick(); 
+                             }
+                        }
                     } else {
-                         console.error("Cannot lock controls.");
+                         console.error("window.init not found, cannot start game via click.");
                     }
+                } else if (window.startInitiatedBy === 'gamepad') {
+                    // If interaction WAS already started by gamepad, this click is just to take over controls
+                    console.log("Lock instructions clicked for KB/M takeover...");
+                    // Explicitly set KB/M and attempt lock (don't re-call init)
+                    if (window.inputManager) {
+                        window.inputManager.setActiveInputType('keyboardMouse');
+                    }
+                    if (typeof window.attemptLockOnClick === 'function') {
+                        window.attemptLockOnClick(); 
+                    }
+                } else {
+                     // Click occurred after KB/M start, likely to re-acquire lock
+                     console.log("Lock instructions clicked after KB/M start (re-acquire lock?)");
+                     if (typeof window.attemptLockOnClick === 'function') {
+                         window.attemptLockOnClick(); 
+                     }
                 }
             });
         }

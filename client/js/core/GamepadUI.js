@@ -24,13 +24,22 @@ class GamepadUI {
         if (window.inputManager) {
             window.inputManager.on('gamepadconnected', this.onGamepadConnected.bind(this));
             window.inputManager.on('gamepaddisconnected', this.onGamepadDisconnected.bind(this));
+            // This listener handles subsequent changes
             window.inputManager.on('inputtypechange', this.onInputTypeChange.bind(this));
             
             // Register button handler now that InputManager is ready
             this.registerButtonHandler();
             
-            // Update display now that InputManager is ready
-            this.updateActiveInputDisplay();
+            // Update display initially now that InputManager is ready
+            // This might show default before init finishes setting the type
+            this.updateActiveInputDisplay(); 
+
+            // Add listener for gameEngineReady to ensure final initial state is shown
+            window.addEventListener('gameEngineReady', () => {
+                console.log("[GamepadUI] gameEngineReady event received. Updating display.");
+                this.updateActiveInputDisplay();
+            }, { once: true });
+
         } else {
             console.error("[GamepadUI] InputManager not found even after managersReady event!");
         }
@@ -312,8 +321,29 @@ class GamepadUI {
     }
     
     onInputTypeChange(data) {
-        console.log(`[GamepadUI] Input type changed to: ${data.type}`);
-        this.updateActiveInputDisplay();
+        console.log(`[GamepadUI] Input type change event received: ${data.type}`);
+        // Directly update the UI text and style based on the event data
+        if (!this.activeInputDisplay) {
+            console.warn("[GamepadUI] activeInputDisplay element not found during input type change.");
+            this.createActiveInputDisplayElement(); // Attempt to create if missing
+            if (!this.activeInputDisplay) return; 
+        }
+        
+        const inputType = data.type; // Use the type directly from the event data
+        this.activeInputDisplay.textContent = `Input: ${inputType === 'keyboardMouse' ? 'Keyboard/Mouse' : 'Gamepad'}`;
+        
+        // Add/remove visual indicator based on the event type
+        if (inputType === 'gamepad') {
+            this.activeInputDisplay.style.border = '1px solid #00dd00';
+            this.activeInputDisplay.style.boxShadow = '0 0 5px #00dd00';
+        } else {
+            this.activeInputDisplay.style.border = 'none';
+            this.activeInputDisplay.style.boxShadow = 'none';
+        }
+        console.log(`[GamepadUI] Directly updated active input display to: ${this.activeInputDisplay.textContent}`);
+        
+        // We no longer need to call this if we update directly
+        // this.updateActiveInputDisplay(); 
     }
     
     registerButtonHandler() {

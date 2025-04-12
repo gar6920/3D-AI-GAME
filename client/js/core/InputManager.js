@@ -663,8 +663,8 @@ class InputManager {
     }
     
     onMouseMove(event) {
-        // Set keyboard/mouse as the active input type
-        this.setActiveInputType('keyboardMouse');
+        // Set keyboard/mouse as the active input type -- REMOVED TO PREVENT HOVER SWITCHING
+        // this.setActiveInputType('keyboardMouse'); 
         
         // Store current position
         this.mousePosition.x = event.clientX;
@@ -1059,42 +1059,49 @@ class InputManager {
     
     // Method to explicitly set the active input type
     setActiveInputType(type) {
-        if ((type === 'keyboardMouse' || type === 'gamepad') && this.lastActiveInputType !== type) {
-            console.log(`[InputManager] Setting active input type from ${this.lastActiveInputType} to: ${type}`);
-            this.lastActiveInputType = type;
-            this.dispatchEvent('inputtypechange', { type });
-
-            // Manage cursor and pointer lock based on the new type
-            if (type === 'gamepad') {
-                // If gamepad becomes active, ensure pointer lock is released and cursor is visible
-                if (document.pointerLockElement) {
-                    console.log("[InputManager] Gamepad activated, exiting pointer lock.");
-                    document.exitPointerLock();
-                }
-                document.body.style.cursor = 'default'; // Show cursor
-                // Hide lock instructions if they exist
-                const instructions = document.getElementById('lock-instructions');
-                if (instructions) {
-                    instructions.style.display = 'none';
-                }
-            } else { // keyboardMouse
-                // If keyboard/mouse becomes active, allow pointer lock and hide cursor if locked
-                if (document.pointerLockElement) {
-                    document.body.style.cursor = 'none'; // Hide cursor if already locked
-                } else {
-                    document.body.style.cursor = 'default'; // Show cursor if not locked
-                     // Show lock instructions if they exist and we are not locked
-                    const instructions = document.getElementById('lock-instructions');
-                    if (instructions) {
-                        instructions.style.display = 'flex';
-                    }
-                }
-            }
-            return true;
-        } else if (this.lastActiveInputType === type) {
-             console.log(`[InputManager] Input type already set to: ${type}`);
+        const previousType = this.lastActiveInputType;
+        // Only proceed if type is valid
+        if (type !== 'keyboardMouse' && type !== 'gamepad') {
+            console.warn(`[InputManager] Invalid type provided to setActiveInputType: ${type}`);
+            return false;
         }
-        return false;
+        
+        // Update the internal state
+        this.lastActiveInputType = type;
+        console.log(`[InputManager] Active input type set to: ${type} (Previous: ${previousType})`);
+
+        // Manage cursor and pointer lock based on the new type
+        if (type === 'gamepad') {
+            if (document.pointerLockElement) {
+                console.log("[InputManager] Gamepad activated, exiting pointer lock.");
+                document.exitPointerLock();
+            }
+            document.body.style.cursor = 'default';
+            const instructions = document.getElementById('lock-instructions');
+            if (instructions) instructions.style.display = 'none';
+        } else { // keyboardMouse
+            if (document.pointerLockElement) {
+                document.body.style.cursor = 'none';
+            } else {
+                document.body.style.cursor = 'default';
+                const instructions = document.getElementById('lock-instructions');
+                 // Show instructions ONLY if not locked AND type is keyboardMouse
+                 if (instructions) instructions.style.display = 'flex'; 
+            }
+        }
+
+        // CRITICAL: Always dispatch the event to ensure UI listeners update,
+        // even if the type string hasn't changed (e.g., confirming KB/M on click)
+        this.dispatchEvent('inputtypechange', { type });
+        console.log(`[InputManager] Dispatched inputtypechange event with type: ${type}`);
+        
+        // DIAGNOSTIC: Directly trigger UI update after setting type
+        if (window.gamepadUI && typeof window.gamepadUI.updateActiveInputDisplay === 'function') {
+            window.gamepadUI.updateActiveInputDisplay();
+            console.log('[InputManager] Directly triggered GamepadUI update after setting type.');
+        }
+
+        return true; // Indicate success
     }
     
     // Get the current active input type
