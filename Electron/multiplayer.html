@@ -247,7 +247,6 @@
         }));
         
         // Track controllers and assignments
-        const controllerStates = {};
         let gameRunning = false;
         
         // Set title and container class
@@ -312,7 +311,7 @@
             const controllerListEl = document.getElementById(`controller-list-${playerIndex}`);
             if (!controllerListEl) return;
             
-            const connectedGamepads = Object.values(controllerStates).filter(c => !c.assigned);
+            const connectedGamepads = Object.values(window.connectedGamepads || {}).filter(c => !c.assigned && c.id && !c.id.includes('Unknown'));
             
             if (connectedGamepads.length === 0) {
                 controllerListEl.innerHTML = '<div class="no-controllers">No available controllers</div>';
@@ -320,22 +319,17 @@
             }
             
             controllerListEl.innerHTML = '';
-            connectedGamepads.forEach((controller, index) => {
-                const controllerEl = document.createElement('div');
-                controllerEl.className = 'controller-item';
-                controllerEl.dataset.gamepadIndex = controller.index;
-                controllerEl.innerHTML = `
-                    <div class="controller-name">
-                        ${controller.id.substring(0, 20)}${controller.id.length > 20 ? '...' : ''}
-                    </div>
-                    <div class="controller-status">Ready</div>
+            connectedGamepads.forEach(gamepad => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'controller-item';
+                itemEl.innerHTML = `
+                    <div class="controller-name">${gamepad.id || 'Controller'}</div>
+                    <div class="controller-status">Index: ${gamepad.index}</div>
                 `;
-                
-                controllerEl.addEventListener('click', () => {
-                    assignGamepadToPlayer(parseInt(controller.index), playerIndex);
+                itemEl.addEventListener('click', () => {
+                    assignGamepadToPlayer(gamepad.index, playerIndex);
                 });
-                
-                controllerListEl.appendChild(controllerEl);
+                controllerListEl.appendChild(itemEl);
             });
         }
         
@@ -388,141 +382,163 @@
         // Setup gamepad detection
         function setupGamepadDetection() {
             // Track connected gamepads
+            window.connectedGamepads = {};
+            
+            // Handle gamepad connections from browser events
             window.addEventListener('gamepadconnected', (e) => {
                 console.log(`Gamepad connected: ${e.gamepad.id} (index: ${e.gamepad.index})`);
+                // Only add if not already tracked by main process update
+                if (!window.connectedGamepads[e.gamepad.index]) {
+                    window.connectedGamepads[e.gamepad.index] = e.gamepad;
+                    updateAllControllerLists();
+                }
                 
-                // Store in local state
-                controllerStates[e.gamepad.index] = {
-                    id: e.gamepad.id,
-                    index: e.gamepad.index,
-                    timestamp: e.gamepad.timestamp,
-                    assigned: false
-                };
-                
-                // Also inform main process
-                if (window.api) {
+                // Inform main process
+                if (window.api && window.api.sendGamepadDetected) {
                     window.api.sendGamepadDetected({
                         connected: true,
                         id: e.gamepad.id,
                         index: e.gamepad.index
                     });
                 }
-                
-                // Update controller lists
-                updateAllControllerLists();
             });
             
+            // Handle gamepad disconnections from browser events
             window.addEventListener('gamepaddisconnected', (e) => {
                 console.log(`Gamepad disconnected: ${e.gamepad.id} (index: ${e.gamepad.index})`);
+                delete window.connectedGamepads[e.gamepad.index];
+                updateAllControllerLists();
                 
-                // Check if this gamepad was assigned to a player
-                if (controllerStates[e.gamepad.index]) {
-                    const assignedPlayerIndex = playerAssignments.findIndex(p => 
-                        p.type === 'gamepad' && p.controllerIndex === e.gamepad.index);
-                    
-                    if (assignedPlayerIndex !== -1) {
-                        // Unassign this controller
-                        removeAssignment(assignedPlayerIndex);
-                    }
-                    
-                    // Remove from our local tracking
-                    delete controllerStates[e.gamepad.index];
-                    
-                    // Inform main process
-                    if (window.api) {
-                        window.api.sendGamepadDetected({
-                            connected: false,
-                            index: e.gamepad.index
-                        });
-                    }
-                    
-                    // Update controller lists
-                    updateAllControllerLists();
+                // Inform main process
+                if (window.api && window.api.sendGamepadDetected) {
+                    window.api.sendGamepadDetected({
+                        connected: false,
+                        index: e.gamepad.index
+                    });
                 }
             });
             
-            // Setup polling for gamepad button presses
-            if (window.api) {
-                window.api.onPollGamepads(() => {
-                    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+            // Check for gamepads that are already connected
+            const initialGamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+            for (let i = 0; i < initialGamepads.length; i++) {
+                const gamepad = initialGamepads[i];
+                if (gamepad && !window.connectedGamepads[gamepad.index]) {
+                    console.log(`Found already connected gamepad: ${gamepad.id} (index: ${gamepad.index})`);
+                    window.connectedGamepads[gamepad.index] = gamepad;
                     
+                    // Inform main process
+                    if (window.api && window.api.sendGamepadDetected) {
+                        window.api.sendGamepadDetected({
+                            connected: true,
+                            id: gamepad.id,
+                            index: gamepad.index
+                        });
+                    }
+                }
+            }
+            
+            // Listen for gamepad connection updates from main process (this is the authoritative source)
+            if (window.api) {
+                window.api.onGamepadConnectionUpdate((data) => {
+                    console.log('Gamepad connection update from main:', data);
+                    if (data.connected) {
+                        // Only update if not already in our list to avoid duplicates
+                        if (!window.connectedGamepads[data.index]) {
+                            window.connectedGamepads[data.index] = {
+                                id: data.id,
+                                index: data.index
+                            };
+                        }
+                    } else {
+                        delete window.connectedGamepads[data.index];
+                    }
+                    updateAllControllerLists();
+                });
+                
+                // Listen for poll requests from main process
+                window.api.onPollGamepads(() => {
+                    // Check for gamepads and report any changes
+                    const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
                     for (let i = 0; i < gamepads.length; i++) {
                         const gamepad = gamepads[i];
-                        if (!gamepad) continue; // Skip disconnected
-                        
-                        // Auto-assignment for unassigned controllers with button presses
-                        if (controllerStates[gamepad.index] && !controllerStates[gamepad.index].assigned) {
-                            const anyButtonPressed = gamepad.buttons.some(button => button.pressed);
-                            if (anyButtonPressed) {
+                        if (gamepad && !window.connectedGamepads[gamepad.index]) {
+                            // Found a new gamepad that wasn't tracked
+                            window.connectedGamepads[gamepad.index] = gamepad;
+                            console.log(`Poll detected new gamepad: ${gamepad.id} (index: ${gamepad.index})`);
+                            
+                            // Inform main process
+                            if (window.api && window.api.sendGamepadDetected) {
+                                window.api.sendGamepadDetected({
+                                    connected: true,
+                                    id: gamepad.id,
+                                    index: gamepad.index
+                                });
+                            }
+                            updateAllControllerLists();
+                        }
+                    }
+                });
+            }
+            
+            // Local polling for gamepad input using requestAnimationFrame for responsiveness
+            function pollGamepadInput() {
+                const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+                for (let i = 0; i < gamepads.length; i++) {
+                    const gamepad = gamepads[i];
+                    if (gamepad && window.connectedGamepads[gamepad.index] && !window.connectedGamepads[gamepad.index].assigned) {
+                        // Check for button press to assign to a player slot
+                        for (let j = 0; j < gamepad.buttons.length; j++) {
+                            if (gamepad.buttons[j].pressed) {
+                                console.log(`Button ${j} pressed on gamepad ${gamepad.index} (${gamepad.id})`);
                                 // Find the next available player slot
                                 const nextAvailableSlot = playerAssignments.findIndex(p => !p.assigned);
                                 if (nextAvailableSlot !== -1) {
+                                    console.log(`Assigning gamepad ${gamepad.index} to player slot ${nextAvailableSlot}`);
                                     assignGamepadToPlayer(gamepad.index, nextAvailableSlot);
+                                    // Immediately create game window for this player
+                                    console.log(`Creating game window for player ${nextAvailableSlot}`);
+                                    createGameWindowForPlayer(nextAvailableSlot);
+                                    // Update the start game button visibility
+                                    updateStartGameButton();
+                                    break;
+                                } else {
+                                    console.log(`No available player slots for gamepad ${gamepad.index}`);
                                 }
                             }
                         }
-                        
-                        // For assigned controllers, send inputs to the main process
-                        if (controllerStates[gamepad.index] && controllerStates[gamepad.index].assigned) {
-                            // Process button states
-                            for (let j = 0; j < gamepad.buttons.length; j++) {
-                                const buttonPressed = gamepad.buttons[j].pressed;
-                                
-                                // Send button state to main process
-                                window.api.sendGamepadInput({
-                                    type: 'button',
-                                    gamepadIndex: gamepad.index,
-                                    buttonIndex: j,
-                                    isPressed: buttonPressed
-                                });
-                            }
-                            
-                            // Process axis states
-                            for (let j = 0; j < gamepad.axes.length; j++) {
-                                const axisValue = gamepad.axes[j];
-                                
-                                // Only send if significant value (beyond deadzone)
-                                if (Math.abs(axisValue) > 0.05) {
-                                    window.api.sendGamepadInput({
-                                        type: 'axis',
-                                        gamepadIndex: gamepad.index,
-                                        axisIndex: j,
-                                        value: axisValue
-                                    });
-                                }
-                            }
+                    } else if (gamepad && window.connectedGamepads[gamepad.index] && window.connectedGamepads[gamepad.index].assigned && window.connectedGamepads[gamepad.index].assignedToPlayer !== undefined) {
+                        // Prevent global event propagation
+                        if (event) {
+                            event.stopPropagation();
+                            event.preventDefault();
+                        }
+                        // Send input to the assigned player's iframe
+                        const playerIndex = window.connectedGamepads[gamepad.index].assignedToPlayer;
+                        const iframe = playerAssignments[playerIndex]?.iframe;
+                        if (iframe) {
+                            // Prepare gamepad input data
+                            const inputData = {
+                                type: 'gamepadInput',
+                                gamepadIndex: gamepad.index,
+                                buttons: gamepad.buttons.map(btn => ({ pressed: btn.pressed, value: btn.value })),
+                                axes: gamepad.axes.map(axis => axis)
+                            };
+                            // Log input forwarding for debugging
+                            console.log(`Forwarding input from gamepad ${gamepad.index} to player ${playerIndex}`);
+                            // Send input to iframe using postMessage
+                            iframe.contentWindow.postMessage(inputData, '*');
+                        } else {
+                            console.log(`No iframe found for player ${playerIndex} assigned to gamepad ${gamepad.index}`);
                         }
                     }
-                });
-                
-                // Listen for gamepad connection updates from main process
-                window.api.onGamepadConnectionUpdate((data) => {
-                    console.log('Gamepad connection update from main:', data);
-                    
-                    if (data.connected && data.gamepad) {
-                        controllerStates[data.index] = {
-                            id: data.gamepad.id,
-                            index: data.index,
-                            timestamp: data.gamepad.timestamp,
-                            assigned: data.gamepad.assigned
-                        };
-                        
-                        if (data.gamepad.assigned) {
-                            // Find which player this is assigned to
-                            const assignedPlayer = playerAssignments.findIndex(p => 
-                                p.type === 'gamepad' && p.controllerIndex === data.index);
-                                
-                            if (assignedPlayer !== -1) {
-                                markControllerAssigned(data.index, assignedPlayer);
-                            }
-                        }
-                    } else {
-                        delete controllerStates[data.index];
-                    }
-                    
-                    updateAllControllerLists();
-                });
+                }
+                requestAnimationFrame(pollGamepadInput);
             }
+            // Start local polling
+            requestAnimationFrame(pollGamepadInput);
+            
+            // Initial update
+            updateAllControllerLists();
         }
         
         // Assign keyboard/mouse to a player
@@ -554,8 +570,8 @@
             const assignment = playerAssignments[playerIndex];
             
             // If it was a gamepad, mark it as unassigned
-            if (assignment.type === 'gamepad' && controllerStates[assignment.controllerIndex]) {
-                controllerStates[assignment.controllerIndex].assigned = false;
+            if (assignment.type === 'gamepad' && window.connectedGamepads[assignment.controllerIndex]) {
+                window.connectedGamepads[assignment.controllerIndex].assigned = false;
             }
             
             // Reset the assignment
@@ -591,14 +607,14 @@
             console.log(`Assigning gamepad ${gamepadIndex} to player ${playerIndex}`);
             
             // Mark controller as assigned
-            controllerStates[gamepadIndex].assigned = true;
+            window.connectedGamepads[gamepadIndex].assigned = true;
             
             // Assign controller to slot
             playerAssignments[playerIndex] = {
                 assigned: true,
                 type: 'gamepad',
                 controllerIndex: gamepadIndex,
-                controllerId: controllerStates[gamepadIndex].id,
+                controllerId: window.connectedGamepads[gamepadIndex].id,
                 playerIndex
             };
             
@@ -619,58 +635,59 @@
         
         // Create a game window for a specific player
         function createGameWindowForPlayer(playerIndex) {
-            const assignment = playerAssignments[playerIndex];
-            if (!assignment || !assignment.assigned) return;
+            const quadrant = document.getElementById(`quadrant-${playerIndex}`);
+            if (!quadrant) return;
             
-            const position = getPositionName(playerIndex, playerCount);
+            // Clear any existing content
+            quadrant.innerHTML = '';
             
-            // Get the quadrant for this player
-            const quadrantEl = document.getElementById(`quadrant-${playerIndex}`);
-            if (!quadrantEl) return;
+            // Create a container for the game client
+            const clientBox = document.createElement('div');
+            clientBox.className = 'client-box';
+            quadrant.appendChild(clientBox);
             
-            // Clear any existing content in this quadrant
-            quadrantEl.innerHTML = '';
-            quadrantEl.className = 'quadrant client-box';
-            quadrantEl.style.borderLeft = `4px solid ${CONTROLLER_COLORS[playerIndex]}`;
-            
-            // Add player info
+            // Create player info element
             const playerInfo = document.createElement('div');
             playerInfo.className = 'player-info';
-            playerInfo.textContent = `Player ${playerIndex + 1} (${position})`;
-            quadrantEl.appendChild(playerInfo);
+            playerInfo.textContent = `Player ${playerIndex + 1}`;
+            clientBox.appendChild(playerInfo);
             
-            // Add controller indicator
+            // Create controller indicator
             const controllerIndicator = document.createElement('div');
             controllerIndicator.className = 'controller-indicator';
-            controllerIndicator.textContent = assignment.type === 'keyboard' ? 
-                'Keyboard/Mouse' : `Controller #${assignment.controllerIndex + 1}`;
-            controllerIndicator.style.borderLeft = `4px solid ${CONTROLLER_COLORS[playerIndex]}`;
-            quadrantEl.appendChild(controllerIndicator);
+            controllerIndicator.id = `controller-indicator-${playerIndex}`;
+            if (playerAssignments[playerIndex].type === 'keyboard') {
+                controllerIndicator.textContent = 'Keyboard/Mouse';
+            } else if (playerAssignments[playerIndex].type === 'gamepad') {
+                controllerIndicator.textContent = `Gamepad ${playerAssignments[playerIndex].controllerIndex}`;
+            }
+            clientBox.appendChild(controllerIndicator);
             
-            // Create iframe for game content instead of webview
-            // This ensures compatibility with the browser-based game
+            // Create an iframe to load the game
             const iframe = document.createElement('iframe');
-            
-            // Build URL with all necessary parameters
-            const gameUrl = `${serverUrl}/game?implementation=${implementation}&playerId=${playerIndex}&inputType=${assignment.type}`;
-            console.log(`Creating game for Player ${playerIndex + 1} with URL: ${gameUrl}`);
-            
-            iframe.src = gameUrl;
+            const gamepadIndex = playerAssignments[playerIndex].type === 'gamepad' ? playerAssignments[playerIndex].controllerIndex : -1;
+            iframe.src = `game_wrapper.html?playerId=${playerIndex}&gamepadIndex=${gamepadIndex}&gameUrl=${encodeURIComponent('http://localhost:3000/game?implementation=default')}`;
             iframe.style.width = '100%';
             iframe.style.height = '100%';
             iframe.style.border = 'none';
-            iframe.allowFullscreen = true;
+            iframe.allow = 'camera; microphone; autoplay; display-capture';
+            iframe.title = `Player ${playerIndex + 1} Game Window`;
+            clientBox.appendChild(iframe);
             
-            // Add iframe to quadrant
-            quadrantEl.appendChild(iframe);
+            // Store the iframe for later reference
+            playerAssignments[playerIndex].iframe = iframe;
             
-            // If we're using Electron API, also notify it to create a proper game window
-            if (window.api && window.api.createPlayerWindow) {
-                window.api.createPlayerWindow(playerIndex, assignment.type, {
-                    implementation: implementation,
-                    fullscreen: playerCount === 1
-                });
+            console.log(`Created wrapper for player ${playerIndex} with gamepad index ${gamepadIndex}`);
+            
+            // Send gamepad input to the correct iframe
+            if (playerAssignments[playerIndex].type === 'gamepad') {
+                const gamepadIndex = playerAssignments[playerIndex].controllerIndex;
+                if (window.connectedGamepads[gamepadIndex]) {
+                    window.connectedGamepads[gamepadIndex].assignedToPlayer = playerIndex;
+                }
             }
+            
+            console.log(`Created game window for Player ${playerIndex + 1} with ${playerAssignments[playerIndex].type} input`);
         }
         
         // Start the game after all players are assigned
@@ -722,4 +739,3 @@
     </script>
 </body>
 </html>
-

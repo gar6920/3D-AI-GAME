@@ -16,6 +16,59 @@ class InputManager {
         this.lastActiveInputType = 'none'; // 'keyboardMouse', 'gamepad', or 'none'
         this.activeGamepadIndex = -1;
         
+        // Check URL parameters for a specific gamepad index to filter inputs
+        const urlParams = new URLSearchParams(window.location.search);
+        this.assignedGamepadIndex = parseInt(urlParams.get('gamepadIndex'), 10);
+        if (!isNaN(this.assignedGamepadIndex) && this.assignedGamepadIndex >= 0) {
+            console.log(`[InputManager] Assigned to specific gamepad index: ${this.assignedGamepadIndex}`);
+        } else {
+            this.assignedGamepadIndex = -1; // No specific gamepad assigned, use default behavior
+            console.log('[InputManager] No specific gamepad index assigned, using default behavior');
+        }
+        
+        // Support for custom gamepad input from Electron or wrapper
+        this.customGamepadData = null;
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'gamepadInput') {
+                if (this.assignedGamepadIndex === -1 || event.data.gamepadIndex === this.assignedGamepadIndex) {
+                    console.log(`[InputManager] Received custom gamepad input for index ${event.data.gamepadIndex}`);
+                    this.customGamepadData = {
+                        index: event.data.gamepadIndex,
+                        buttons: event.data.buttons,
+                        axes: event.data.axes,
+                        id: `CustomGamepad_${event.data.gamepadIndex}`,
+                        connected: true,
+                        timestamp: Date.now()
+                    };
+                    this.isGamepadAvailable = true;
+                    this.activeGamepadIndex = event.data.gamepadIndex;
+                    this.setActiveInputType('gamepad');
+                } else {
+                    console.log(`[InputManager] Ignoring custom gamepad input for index ${event.data.gamepadIndex}, not assigned to this instance`);
+                }
+            }
+        });
+        
+        // Also listen for customGamepadInput event if dispatched on window
+        window.addEventListener('customGamepadInput', (event) => {
+            if (event.detail && event.detail.type === 'gamepadInput') {
+                if (this.assignedGamepadIndex === -1 || event.detail.gamepadIndex === this.assignedGamepadIndex) {
+                    console.log(`[InputManager] Received custom gamepad input event for index ${event.detail.gamepadIndex}`);
+                    this.customGamepadData = {
+                        index: event.detail.gamepadIndex,
+                        buttons: event.detail.buttons,
+                        axes: event.detail.axes,
+                        id: `CustomGamepad_${event.detail.gamepadIndex}`,
+                        connected: true,
+                        timestamp: Date.now()
+                    };
+                    this.isGamepadAvailable = true;
+                    this.activeGamepadIndex = event.detail.gamepadIndex;
+                    this.setActiveInputType('gamepad');
+                }
+            }
+        });
+        
         // Track gamepad stick positions for continuous camera control
         this.rightStickPosition = { x: 0, y: 0 };
         this.leftStickPosition = { x: 0, y: 0 };
@@ -130,6 +183,20 @@ class InputManager {
     
     // Check for already connected gamepads
     checkForConnectedGamepads() {
+        // If we have an assigned gamepad index, only check for that one
+        if (this.assignedGamepadIndex !== -1) {
+            const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+            if (gamepads[this.assignedGamepadIndex]) {
+                console.log(`[InputManager] Found assigned gamepad at index ${this.assignedGamepadIndex}`);
+                this.onGamepadConnected({ gamepad: gamepads[this.assignedGamepadIndex] });
+                this.setActiveInputType('gamepad');
+            } else {
+                console.log(`[InputManager] No gamepad found at assigned index ${this.assignedGamepadIndex}`);
+            }
+            return;
+        }
+        
+        // Otherwise, check all gamepads
         const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
         let foundGamepads = 0;
         
@@ -202,82 +269,108 @@ class InputManager {
     }
     
     pollGamepads() {
-        // Skip polling if we're in Electron mode (input comes via IPC)
-        if (this.isElectron) return;
-        
-        // Debug polling frequency - add a timestamp every second
-        const now = performance.now();
-        if (!this._lastPollLog || now - this._lastPollLog > 1000) {
-            this._lastPollLog = now;
-            console.log(`[InputManager] Polling gamepads at ${Math.round(now)}`);
+        // If we have custom gamepad data and it's assigned to this instance, use it
+        if (this.customGamepadData && (this.assignedGamepadIndex === -1 || this.customGamepadData.index === this.assignedGamepadIndex)) {
+            if (!this.prevGamepadState[this.customGamepadData.index]) {
+                this.prevGamepadState[this.customGamepadData.index] = { buttons: [], axes: [] };
+            }
+            // Process button changes
+            for (let i = 0; i < this.customGamepadData.buttons.length; i++) {
+                const currentButton = this.customGamepadData.buttons[i];
+                const prevButtonState = this.prevGamepadState[this.customGamepadData.index].buttons[i];
+                if (currentButton && prevButtonState !== undefined && currentButton.pressed !== prevButtonState) {
+                    console.log(`[InputManager] Custom gamepad button ${i} changed to ${currentButton.pressed}`);
+                    this._handleGamepadButton(this.customGamepadData.index, i, currentButton.pressed);
+                }
+                // Update previous state
+                this.prevGamepadState[this.customGamepadData.index].buttons[i] = currentButton ? currentButton.pressed : false;
+            }
+            // Process axis changes
+            for (let i = 0; i < this.customGamepadData.axes.length; i++) {
+                const currentAxis = this.customGamepadData.axes[i];
+                const prevAxisState = this.prevGamepadState[this.customGamepadData.index].axes[i];
+                if (currentAxis !== undefined && prevAxisState !== undefined && Math.abs(currentAxis - prevAxisState) > 0.1) {
+                    console.log(`[InputManager] Custom gamepad axis ${i} changed to ${currentAxis}`);
+                    this._handleGamepadAxis(this.customGamepadData.index, i, currentAxis);
+                }
+                // Update previous state
+                this.prevGamepadState[this.customGamepadData.index].axes[i] = currentAxis || 0;
+            }
+            return; // Exit early since we handled custom data
         }
         
-        // Get fresh gamepad data
         const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        let foundGamepads = 0;
+        let activeGamepadUpdated = false;
         
-        // Log gamepad status if none are registered but some are found
-        if (Object.keys(this.gamepads).length === 0 && gamepads.some(g => g !== null)) {
-            console.log('[InputManager] Detected gamepads that aren\'t registered:',
-                Array.from(gamepads)
-                    .filter(g => g !== null)
-                    .map(g => `${g.id} (index: ${g.index})`)
-            );
-        }
-        
-        // Process each connected gamepad
         for (let i = 0; i < gamepads.length; i++) {
             const gamepad = gamepads[i];
-            if (!gamepad) continue; // Skip if null (disconnected)
-            
-            // If we haven't seen this gamepad before (missed connection event),
-            // add it now
-            if (!this.gamepads[gamepad.index]) {
-                console.log(`[InputManager] Detected previously unregistered gamepad: ${gamepad.id} (index: ${gamepad.index})`);
-                this.onGamepadConnected({ gamepad });
-                
-                // Force gamepad to be active if none are active
-                if (this.activeGamepadIndex === -1) {
-                    this.activeGamepadIndex = gamepad.index;
-                    this.lastActiveInputType = 'gamepad';
-                    console.log(`[InputManager] Set gamepad ${gamepad.index} as active input device`);
-                }
+            // If we have an assigned gamepad index, skip all others
+            if (this.assignedGamepadIndex !== -1 && i !== this.assignedGamepadIndex) {
                 continue;
             }
-            
-            // Skip if this gamepad hasn't been updated since last poll
-            const storedGamepad = this.gamepads[gamepad.index];
-            if (gamepad.timestamp === storedGamepad.timestamp) continue;
-            
-            // Process buttons
-            for (let j = 0; j < gamepad.buttons.length; j++) {
-                const buttonPressed = gamepad.buttons[j].pressed;
-                const prevPressed = storedGamepad.buttons[j];
-                
-                // Button state has changed
-                if (buttonPressed !== prevPressed) {
-                    storedGamepad.buttons[j] = buttonPressed;
-                    
-                    // Handle the button state change
-                    this._handleGamepadButton(gamepad.index, j, buttonPressed);
+            if (gamepad) {
+                if (!this.gamepads[i]) {
+                    // New gamepad connected
+                    this.onGamepadConnected({ gamepad });
+                }
+                foundGamepads++;
+                if (i === this.activeGamepadIndex) {
+                    activeGamepadUpdated = true;
+                }
+                // Update gamepad data
+                this.gamepads[i] = {
+                    id: gamepad.id,
+                    buttons: gamepad.buttons.map(button => ({
+                        pressed: button.pressed,
+                        value: button.value
+                    })),
+                    axes: gamepad.axes.map(axis => axis),
+                    timestamp: gamepad.timestamp
+                };
+                // Check for button/axis changes since last poll
+                if (!this.prevGamepadState[i]) {
+                    this.prevGamepadState[i] = { buttons: [], axes: [] };
+                }
+                // Check buttons
+                for (let j = 0; j < gamepad.buttons.length; j++) {
+                    const button = gamepad.buttons[j];
+                    const prevState = this.prevGamepadState[i].buttons[j];
+                    if (button && prevState !== undefined && button.pressed !== prevState) {
+                        this._handleGamepadButton(i, j, button.pressed);
+                    }
+                    // Update previous state
+                    this.prevGamepadState[i].buttons[j] = button ? button.pressed : false;
+                }
+                // Check axes
+                for (let j = 0; j < gamepad.axes.length; j++) {
+                    const axis = gamepad.axes[j];
+                    const prevAxis = this.prevGamepadState[i].axes[j];
+                    // Only trigger if the change is significant to avoid noise
+                    if (axis !== undefined && prevAxis !== undefined && Math.abs(axis - prevAxis) > 0.1) {
+                        this._handleGamepadAxis(i, j, axis);
+                    }
+                    // Update previous state
+                    this.prevGamepadState[i].axes[j] = axis || 0;
+                }
+            } else if (this.gamepads[i]) {
+                // Gamepad disconnected
+                this.onGamepadDisconnected({ gamepad: { index: i } });
+            }
+        }
+        
+        this.isGamepadAvailable = foundGamepads > 0;
+        if (this.isGamepadAvailable && !activeGamepadUpdated && this.activeGamepadIndex === -1 && this.assignedGamepadIndex === -1) {
+            // Auto-select the first available gamepad if none is active
+            for (let i = 0; i < gamepads.length; i++) {
+                if (gamepads[i]) {
+                    this.activeGamepadIndex = i;
+                    console.log(`Auto-selected gamepad at index ${i}`);
+                    break;
                 }
             }
-            
-            // Process axes
-            for (let j = 0; j < gamepad.axes.length; j++) {
-                const axisValue = gamepad.axes[j];
-                const prevValue = storedGamepad.axes[j];
-                
-                // Only process if significant change beyond deadzone 
-                if (Math.abs(axisValue - prevValue) > 0.01) {
-                    storedGamepad.axes[j] = axisValue;
-                    
-                    // Handle the axis change
-                    this._handleGamepadAxis(gamepad.index, j, axisValue);
-                }
-            }
-            
-            // Update timestamp
-            storedGamepad.timestamp = gamepad.timestamp;
+        } else if (!this.isGamepadAvailable) {
+            this.activeGamepadIndex = -1;
         }
     }
     
@@ -832,7 +925,7 @@ class InputManager {
         
         // Process gamepad input independently of pointer lock
         if (this.isGamepadAvailable && this.lastActiveInputType === 'gamepad') {
-            const gamepad = this.gamepads[this.activeGamepadIndex];
+            const gamepad = this.getActiveGamepad();
             if (gamepad) {
                 // Set gamepad as active input type if there's significant input
                 const stickThreshold = 0.2;
@@ -1147,7 +1240,26 @@ class InputManager {
     // Gamepad-specific methods
     getActiveGamepad() {
         if (this.activeGamepadIndex === -1) return null;
+        
+        // If we have custom gamepad data, return that instead of polling navigator
+        if (this.customGamepadData && this.customGamepadData.index === this.activeGamepadIndex) {
+            console.log(`[InputManager] Using custom gamepad data for index ${this.activeGamepadIndex}`);
+            return this.customGamepadData;
+        }
+        
         const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        // If we have an assigned gamepad index, only return that one if available
+        if (this.assignedGamepadIndex !== -1) {
+            if (gamepads[this.assignedGamepadIndex]) {
+                console.log(`[InputManager] Using assigned gamepad index ${this.assignedGamepadIndex}`);
+                this.activeGamepadIndex = this.assignedGamepadIndex;
+                return gamepads[this.assignedGamepadIndex];
+            } else {
+                console.log(`[InputManager] Assigned gamepad index ${this.assignedGamepadIndex} not found`);
+                return null;
+            }
+        }
+        // Otherwise, return the active gamepad if any
         return gamepads[this.activeGamepadIndex] || null;
     }
     

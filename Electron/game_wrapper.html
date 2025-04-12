@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Game Wrapper</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <iframe id="gameFrame" allow="camera; microphone; autoplay; display-capture"></iframe>
+    
+    <script>
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const playerId = urlParams.get('playerId');
+        const gamepadIndex = parseInt(urlParams.get('gamepadIndex'), 10);
+        const gameUrl = urlParams.get('gameUrl') || 'http://localhost:3000/game?implementation=default';
+        
+        // Set the game frame source
+        document.getElementById('gameFrame').src = gameUrl;
+        
+        // Override navigator.getGamepads to prevent direct access
+        navigator.getGamepads = function() {
+            console.log('Gamepad API access blocked in wrapper for player ' + playerId);
+            return [];
+        };
+        
+        // Store custom gamepad data
+        window.customGamepads = {};
+        
+        // Listen for gamepad input messages from parent window
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.type === 'gamepadInput') {
+                if (gamepadIndex >= 0 && event.data.gamepadIndex === gamepadIndex) {
+                    console.log('Received gamepad input for player ' + playerId, event.data);
+                    // Store the input data
+                    window.customGamepads[event.data.gamepadIndex] = {
+                        id: event.data.gamepadIndex.toString(),
+                        index: event.data.gamepadIndex,
+                        buttons: event.data.buttons,
+                        axes: event.data.axes,
+                        connected: true,
+                        timestamp: Date.now()
+                    };
+                    // Forward to the game frame
+                    document.getElementById('gameFrame').contentWindow.postMessage(event.data, '*');
+                    // Also trigger a custom event for potential game logic adaptation
+                    const customEvent = new CustomEvent('customGamepadInput', { detail: event.data });
+                    window.dispatchEvent(customEvent);
+                } else {
+                    console.log('Ignoring input from gamepad ' + event.data.gamepadIndex + ' for player ' + playerId);
+                }
+            }
+        });
+        
+        // Override gamepad events to prevent global listeners in the game frame
+        window.addEventListener('gamepadconnected', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+        }, true);
+        
+        window.addEventListener('gamepaddisconnected', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+        }, true);
+    </script>
+</body>
+</html>
