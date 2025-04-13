@@ -414,6 +414,7 @@ window.updateControls = function(controls, delta) {
         // *** END SCALING ***
 
         // IMPORTANT: Reset InputManager's delta immediately after reading
+        // (Moved after potential build mode handling)
         window.inputManager.mouseDelta.x = 0;
         window.inputManager.mouseDelta.y = 0;
         // Sync this cleared delta to serverInputState as well
@@ -490,7 +491,7 @@ window.updateControls = function(controls, delta) {
     }
     
     // --- Movement Handling --- 
-    // Note: Gamepad movement flags (window.moveForward etc.) are set by InputManager._handleGamepadAxis
+    // Note: Gamepad movement flags (window.moveForward etc.) are set by InputManager
     // Keyboard movement flags are set by onKeyDown/Up
 
     // We can use the same movement logic regardless of input type, based on the global flags

@@ -1340,6 +1340,11 @@ function animate(currentTime) {
     }
     // <<< END ADDED >>>
     
+    // ---> ADDED: Update Building Mode Manager <--- 
+    if (window.buildingModeManager && typeof window.buildingModeManager.update === 'function') {
+        window.buildingModeManager.update(delta);
+    }
+    
     renderer.render(scene, camera);
 }
 
@@ -1433,6 +1438,7 @@ window.thirdPersonCameraOrbitY = 0;
 // Update third-person camera position based on orbit angles
 function updateThirdPersonCameraPosition() {
     if (!window.room || !window.room.state || !window.room.state.players) return;
+    
     const playerState = window.room.state.players.get(window.room.sessionId);
     if (!playerState) return;
     
@@ -2246,7 +2252,7 @@ function selectUnitsInBoxRTSMode() {
             // Add to selection
             window.rtsSelectedUnits.push(unit);
             
-            // Apply visual selection to the unit
+            // Apply visual highlight
             highlightSelectedUnit(unit);
             
             console.log("[RTS] Added unit to selection:", unit);

@@ -40,6 +40,8 @@ class BuildingModeManager {
         this.updatePreviewPosition = this.updatePreviewPosition.bind(this);
         this.createPreviewModels = this.createPreviewModels.bind(this);
         this.init = this.init.bind(this);
+        this.update = this.update.bind(this);
+        this.placeCurrentStructure = this.placeCurrentStructure.bind(this);
         
         // Initialize when ready
         // this.initWhenReady();
@@ -363,7 +365,6 @@ class BuildingModeManager {
             this.clickInterceptor.style.zIndex = '900'; // Below our UI but above everything else
             this.clickInterceptor.style.pointerEvents = 'all';
 
-            // Add to DOM first so it can be registered
             document.body.appendChild(this.clickInterceptor);
             
             // Register with InputManager
@@ -371,46 +372,21 @@ class BuildingModeManager {
                 // Only handle LEFT CLICKS (button 0)
                 if (event.button !== 0) return;
                 
-                // Skip if clicking on UI
-                if (event.target.closest('#building-menu')) return;
+                // Determine if the click was on the building menu UI
+                const clickedOnMenu = event.target.closest('#building-menu');
                 
-                event.preventDefault();
-                event.stopPropagation();
-                
-                // Get world position
-                const worldPos = this.screenToWorld(event.clientX, event.clientY);
-                if (!worldPos) return;
-                
-                // Check if valid placement
-                if (!this.buildingPreview || !this.buildingPreview.isValid) return;
-                
-                // Send structure placement request to server - SIMPLE VERSION
-                if (window.room) {
-                    const placementData = {
-                        structureType: this.currentStructure,
-                        x: Math.round(worldPos.x),
-                        y: Math.round(worldPos.y) || 0,
-                        z: Math.round(worldPos.z),
-                        rotation: this.rotation * (Math.PI / 180)
-                    };
-                    console.log('[BuildingModeManager] Sending placeStructure request:', placementData);
-                    window.room.send("placeStructure", placementData);
-                    
-                    // Important: Force refresh preview position after building
-                    setTimeout(() => {
-                        // Force cursor update with current mouse position
-                        if (event) this.updateCursorPosition({
-                            clientX: event.clientX,
-                            clientY: event.clientY
-                        });
-                    }, 50);
+                // Only place structure if the click was NOT on the menu UI
+                if (!clickedOnMenu) {
+                     event.preventDefault();
+                     event.stopPropagation();
+                     console.log('[BuildingModeManager] Click interceptor triggered placement.');
+                     this.placeCurrentStructure(); // ---> Call the new centralized method
+                     
+                     // No need to manually refresh preview, update() handles it
+                } else {
+                     console.log('[BuildingModeManager] Click intercepted but was on menu UI.');
+                     // Allow default behavior for menu buttons (handled by their own listeners)
                 }
-            });
-            
-            // Position cursor at center initially
-            this.updateCursorPosition({
-                clientX: window.innerWidth / 2,
-                clientY: window.innerHeight / 2
             });
             
             // Start tracking mouse movement for placement preview
@@ -527,18 +503,69 @@ class BuildingModeManager {
         this.placementPreview.style.top = clientY + 'px';
         
         // Get 3D world position from screen position
-        const worldPos = this.screenToWorld(clientX, clientY);
-        
-        if (worldPos && this.active) {
-            // Save last position
-            this.lastMousePosition = worldPos;
+        const activeInputType = window.inputManager ? window.inputManager.getActiveInputType() : 'keyboardMouse';
+        if (this.active && activeInputType === 'keyboardMouse') {
+            const worldPos = this.screenToWorld(clientX, clientY);
+            if (worldPos) {
+                // Save last mouse position
+                this.lastMousePosition = worldPos; // Store the valid position for potential placement
             
-            // Check if placement is valid
-            this.buildingPreview.isValid = this.checkPlacementValidity(worldPos);
+                // Check if placement is valid
+                this.buildingPreview.isValid = this.checkPlacementValidity(worldPos);
             
-            // Update 3D preview position
-            this.updatePreviewPosition(worldPos);
+                // Update 3D preview position
+                this.updatePreviewPosition(worldPos);
+            } else {
+                 // Raycast failed, mark as invalid and hide/update preview
+                this.buildingPreview.isValid = false;
+                this.updatePreviewPosition(null); // Pass null to hide the preview model
+            }
         }
+        // Only the 2D placement preview dot follows the actual mouse cursor now.
+        // (This comment is slightly inaccurate now, the 3D preview also follows mouse if active)
+    }
+    
+    update(deltaTime) {
+        // Only run logic if building mode is active and components are ready
+        if (!this.active || !window.camera || !window.scene || !this.buildingPreview) {
+            // Ensure preview is hidden if not active or ready
+            if (this.buildingPreview && this.buildingPreview.group) {
+                 this.buildingPreview.group.visible = false;
+                 this.buildingPreview.grid.visible = false; // Also hide grid
+            }
+            return;
+        }
+        
+        // Ensure the grid is visible when active
+        this.buildingPreview.grid.visible = true;
+        
+        const activeInputType = window.inputManager ? window.inputManager.getActiveInputType() : 'keyboardMouse';
+        
+        // --- GAMEPAD: Update preview based on camera center --- 
+        if (activeInputType === 'gamepad') {
+            // Raycast from the center of the screen
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+            const worldPos = this.screenToWorld(centerX, centerY);
+            
+            if (worldPos) {
+                // Update the last known valid target position for placement
+                this.lastMousePosition = worldPos; // Store the valid position for potential placement
+            
+                // Check placement validity based on raycast position
+                this.buildingPreview.isValid = this.checkPlacementValidity(worldPos);
+            
+                // Update the 3D preview model's position, rotation, and material
+                this.updatePreviewPosition(worldPos);
+            } else {
+                // Raycast failed (e.g., pointing at the sky), mark as invalid and hide/update preview
+                this.buildingPreview.isValid = false;
+                this.updatePreviewPosition(null); // Pass null to hide the preview model
+            }
+        }
+        // --- MOUSE/KEYBOARD: Preview update is handled by updateCursorPosition --- 
+        // No action needed here for mouse/keyboard, as updateCursorPosition handles it via mousemove.
+        // We still need this update loop active for grid visibility etc.
     }
     
     checkPlacementValidity(position) {
@@ -775,6 +802,39 @@ class BuildingModeManager {
         preview.group.visible = true;
     }
     
+    placeCurrentStructure() {
+        // Check if active, a structure is selected, preview exists, placement is valid, and room is available
+        if (!this.active || !this.currentStructure || !this.buildingPreview || !this.buildingPreview.isValid || !window.room) {
+            console.log('[BuildingModeManager] Placement conditions not met:', {
+                active: this.active,
+                currentStructure: this.currentStructure,
+                previewExists: !!this.buildingPreview,
+                isValid: this.buildingPreview ? this.buildingPreview.isValid : 'N/A',
+                roomExists: !!window.room
+            });
+            return; // Cannot place
+        }
+        
+        // Get position and rotation directly from the preview object
+        const position = this.buildingPreview.group.position;
+        const rotationRad = this.rotation * (Math.PI / 180);
+        
+        // Prepare placement data
+        const placementData = {
+            structureType: this.currentStructure,
+            x: Math.round(position.x),
+            y: Math.round(position.y), // Using preview's Y position
+            z: Math.round(position.z),
+            rotation: rotationRad
+        };
+        
+        console.log('[BuildingModeManager] Sending placeStructure request:', placementData);
+        window.room.send("placeStructure", placementData);
+        
+        // Potential: Add a small cooldown here if needed
+        // Example: this.canPlace = false; setTimeout(() => { this.canPlace = true; }, 200);
+    }
+    
     createStructureInWorld(structure, key) {
         console.log("Creating structure in world:", key, structure);
         
@@ -911,7 +971,7 @@ class BuildingModeManager {
         
         // Handler for structures modified on the server
         room.state.structures.onChange = (structure, key) => {
-            console.log("[BuildingModeManager] structures.onChange triggered:", key);
+            // console.log("Updated structure: ", key, structure);
             this.updateStructureInWorld(structure, key);
         };
         
@@ -1021,58 +1081,58 @@ class BuildingModeManager {
                                (event.position ? event.position.y : null);
                                
                 if (clientX !== null && clientY !== null) {
-                    this.placeStructure({
-                        clientX: clientX,
-                        clientY: clientY,
-                        button: button,
-                        originalEvent: event
-                    });
+                    // this.placeStructure({
+                    //     clientX: clientX,
+                    //     clientY: clientY,
+                    //     button: button,
+                    //     originalEvent: event
+                    // });
                 }
             }
         }
     }
     
-    placeStructure(event) {
-        // Get cursor position from normalized event
-        const clientX = event.clientX !== undefined ? event.clientX : 
-                       (event.position ? event.position.x : null);
-        const clientY = event.clientY !== undefined ? event.clientY : 
-                       (event.position ? event.position.y : null);
-                       
-        if (clientX === null || clientY === null) {
-            console.error("[BuildingMode] Missing coordinates in placeStructure event", event);
-            return;
-        }
-        
-        // Get world position
-        const worldPos = this.screenToWorld(clientX, clientY);
-        if (!worldPos) return;
-        
-        // Ensure we have a structure selected
-        if (!this.currentStructure) {
-            console.warn("[BuildingMode] No structure type selected");
-            return;
-        }
-        
-        // Check if position is valid
-        const isValid = this.checkPlacementValidity(worldPos);
-        if (!isValid) {
-            console.warn("[BuildingMode] Cannot place structure here - invalid position");
-            return;
-        }
-        
-        // Send placement request to server
-        if (window.room) {
-            window.room.send("placeStructure", {
-                x: Math.round(worldPos.x),
-                z: Math.round(worldPos.z),
-                type: this.currentStructure,
-                rotation: this.rotation
-            });
-            
-            console.log(`[BuildingMode] Requested to place ${this.currentStructure} at (${Math.round(worldPos.x)}, ${Math.round(worldPos.z)}) with rotation ${this.rotation}°`);
-        }
-    }
+    // placeStructure(event) {
+    //     // Get cursor position from normalized event
+    //     const clientX = event.clientX !== undefined ? event.clientX : 
+    //                    (event.position ? event.position.x : null);
+    //     const clientY = event.clientY !== undefined ? event.clientY : 
+    //                    (event.position ? event.position.y : null);
+    //                    
+    //     if (clientX === null || clientY === null) {
+    //         console.error("[BuildingMode] Missing coordinates in placeStructure event", event);
+    //         return;
+    //     }
+    //     
+    //     // Get world position
+    //     const worldPos = this.screenToWorld(clientX, clientY);
+    //     if (!worldPos) return;
+    //     
+    //     // Ensure we have a structure selected
+    //     if (!this.currentStructure) {
+    //         console.warn("[BuildingMode] No structure type selected");
+    //         return;
+    //     }
+    //     
+    //     // Check if position is valid
+    //     const isValid = this.checkPlacementValidity(worldPos);
+    //     if (!isValid) {
+    //         console.warn("[BuildingMode] Cannot place structure here - invalid position");
+    //         return;
+    //     }
+    //     
+    //     // Send placement request to server
+    //     if (window.room) {
+    //         window.room.send("placeStructure", {
+    //             x: Math.round(worldPos.x),
+    //             z: Math.round(worldPos.z),
+    //             type: this.currentStructure,
+    //             rotation: this.rotation
+    //         });
+    //         
+    //         console.log(`[BuildingMode] Requested to place ${this.currentStructure} at (${Math.round(worldPos.x)}, ${Math.round(worldPos.z)}) with rotation ${this.rotation}°`);
+    //     }
+    // }
 }
 
 // Wait for managers before initializing

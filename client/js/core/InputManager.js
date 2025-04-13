@@ -86,13 +86,17 @@ class InputManager {
                 vertical: 3    // Right stick vertical
             },
             buttonMapping: {
-                // Standard gamepad button mapping (Xbox-like)
-                0: 'space', // A button -> jump
-                1: 'v',     // B button -> toggle view
-                4: 'q',     // LB -> Q
-                5: 'e',     // RB -> E
-                6: 'shift', // LT -> shift
-                7: 'shift'  // RT -> shift (alternative)
+                // Gamepad button mapping based on user's controller layout (REVERSED A/B based on logs)
+                0: 'space',     // B button (Bottom) -> jump (mapped from index 0)
+                1: null,        // A button (Right) -> Build Action (handled specifically for index 1, no fallback)
+                2: 'toggle_building', // Y button (Left) -> toggle build mode action
+                3: 'v',         // X button (Top) -> toggle view
+                4: 'q',         // L1 -> Q
+                5: 'e',         // R1 -> E
+                6: 'shift',     // L2 -> shift
+                7: 'shift',     // R2 -> shift (alternative)
+                8: 'show_gamepad_ui', // Select -> show gamepad UI diagram
+                9: 'exit_gamepad'     // Start -> exit gamepad mode to click-to-play screen
             }
         };
         
@@ -396,23 +400,81 @@ class InputManager {
         
         // Handle Start button (9) for exiting gamepad mode completely
         if (buttonIndex === 9 && isPressed) {
-            console.log(`[Gamepad] Start button pressed - exiting gamepad mode completely`);
-            
-            // Set flag to show overlay on unlock
-            window.shouldShowLockOverlay = true;
-            
-            // Exit pointer lock if locked
-            if (document.pointerLockElement) {
-                document.exitPointerLock();
-            }
-            
+            console.log(`[InputManager] Start button pressed - exiting gamepad mode completely to click-to-play screen`);
             // IMPORTANT: Switch input type to keyboard/mouse
             this.setActiveInputType('keyboardMouse');
-            console.log(`[Gamepad] Switched to keyboard/mouse input mode via Start button`);
-            
+            console.log(`[InputManager] Switched to keyboard/mouse input mode via Start button`);
             // Return early to avoid processing this as a mapped button
             return;
         }
+        
+        // Handle Select button (8) for showing gamepad UI diagram
+        if (buttonIndex === 8 && isPressed) {
+            console.log(`[InputManager] Select button pressed - toggling gamepad UI diagram`);
+            if (window.gamepadUI && typeof window.gamepadUI.toggleVisibility === 'function') {
+                try {
+                    window.gamepadUI.toggleVisibility();
+                    console.log(`[Gamepad] Successfully toggled gamepad UI visibility`);
+                } catch (error) {
+                    console.error(`[Gamepad] Error toggling gamepad UI visibility:`, error);
+                }
+            } else {
+                console.warn(`[Gamepad] GamepadUI not available for toggling visibility`);
+            }
+        }
+        
+        // Handle Y button (2) for toggling build mode via ActionManager
+        if (buttonIndex === 2 && isPressed) {
+            console.log(`[Gamepad] Y button (Left) pressed - triggering toggle_building action`);
+            if (window.actionManager && typeof window.actionManager.triggerAction === 'function') {
+                try {
+                    window.actionManager.triggerAction('toggle_building', { active: true });
+                    console.log(`[Gamepad] Successfully triggered toggle_building action`);
+                } catch (error) {
+                    console.error(`[Gamepad] Error triggering toggle_building action:`, error);
+                }
+            } else {
+                console.warn(`[Gamepad] ActionManager not available for toggle_building action`);
+            }
+            // Also directly call BuildingModeManager if available to ensure compatibility
+            if (window.buildingModeManager && typeof window.buildingModeManager.toggle === 'function') {
+                try {
+                    window.buildingModeManager.toggle();
+                    console.log(`[Gamepad] Successfully toggled build mode directly`);
+                } catch (error) {
+                    console.error(`[Gamepad] Error toggling build mode directly:`, error);
+                }
+            } else {
+                console.warn(`[Gamepad] BuildingModeManager not available for direct toggle`);
+            }
+        }
+        
+        // Handle A button (1) for build mode action (e.g., place structure)
+        if (buttonIndex === 1 && isPressed) {
+            console.log(`[Gamepad] A button (Index 1) pressed - triggering build mode action`);
+            // Check if in build mode and the manager exists
+            if (window.isBuildingMode && window.buildingModeManager) {
+                try {
+                    // Call the centralized placement method
+                    if (typeof window.buildingModeManager.placeCurrentStructure === 'function') {
+                        window.buildingModeManager.placeCurrentStructure(); 
+                        console.log(`[Gamepad] Successfully triggered placeCurrentStructure(). Intending to return.`);
+                        return; // Prevent fall-through to key mapping
+                    } else {
+                        console.warn(`[Gamepad] placeCurrentStructure method not available in BuildingModeManager`);
+                        // Fallback to dispatching a custom event if method doesn't exist
+                        this.dispatchEvent('buildAction', { source: 'gamepad' });
+                    }
+                } catch (error) {
+                    console.error(`[Gamepad] Error triggering build mode action:`, error);
+                }
+            } else {
+                console.warn(`[Gamepad] Not in building mode or BuildingModeManager not available for build action`);
+            }
+        }
+        
+        // --- DEBUG LOG: Check before fallback mapping --- 
+        console.log(`[Gamepad Debug] Reached fallback mapping check for button ${buttonIndex}. Mapped key: ${this.gamepadConfig.buttonMapping[buttonIndex]}`);
         
         // Map button to keyboard key if defined in mapping
         const mappedKey = this.gamepadConfig.buttonMapping[buttonIndex];
