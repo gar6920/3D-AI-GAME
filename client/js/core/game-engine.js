@@ -1258,6 +1258,12 @@ function animate(currentTime) {
     const delta = Math.min((currentTime - window.prevTime) / 1000, 0.1);
     window.prevTime = currentTime;
     
+    // --- Process Input First --- 
+    if (window.inputManager) {
+        window.inputManager.update(delta);
+    }
+    // --- End Input Processing ---
+
     // Handle different camera modes
     if (window.isFreeCameraMode) {
         // Update free camera movement
@@ -1265,10 +1271,13 @@ function animate(currentTime) {
     } else if (window.isRTSMode) {
         // Update RTS camera movement - call directly instead of through updateControls
         updateRTSCameraMovement(delta);
-    } else if (controls && controls.isLocked) {
-        // Normal controls update for first/third person
+    } else if ( (controls && controls.isLocked) || (window.inputManager && window.inputManager.getActiveInputType() === 'gamepad') ) { 
+        // Normal controls update for first/third person (Pointer Locked OR Gamepad Active)
         window.updateControls(controls, delta);
-        updatePlayerPhysics(delta);
+        // Only update player physics prediction if locked (server sync handles otherwise)
+        if (controls && controls.isLocked) {
+             updatePlayerPhysics(delta);
+        }
     }
     
     // Update player state from server
@@ -1304,7 +1313,13 @@ function animate(currentTime) {
         
         for (let i = 0; i < window.animationCallbacks.length; i++) {
             try {
-                window.animationCallbacks[i](delta);
+                const callback = window.animationCallbacks[i];
+                // Skip inputManager.update as it's called explicitly earlier
+                if (callback === window.inputManager?.update) {
+                    continue; 
+                }
+                // Execute other callbacks
+                callback(delta);
             } catch (error) {
                 console.error("Error in animation callback:", error);
             }
@@ -1477,6 +1492,9 @@ window.updateFirstPersonCamera = function() {
         const rotationY = typeof window.playerRotationY !== 'undefined'
             ? window.playerRotationY
             : (playerState.rotationY || 0);
+
+        // Log the rotation values being used
+        console.log(`[Update FP Cam] Using Pitch: ${pitch.toFixed(3)}, Yaw: ${rotationY.toFixed(3)} (From playerRotY: ${typeof window.playerRotationY !== 'undefined'}, playerStateRotY: ${playerState.rotationY?.toFixed(3)})`);
             
         // We no longer need to add Math.PI to rotation because the model is rotated already
         window.camera.quaternion.setFromEuler(new THREE.Euler(

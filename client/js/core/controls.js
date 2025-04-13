@@ -127,92 +127,29 @@ window.initControls = function(camera, domElement) {
 
     // Use InputManager for mouse movement
     window.inputManager.on('mousemove', (data) => {
-        if (document.pointerLockElement) {
-            // Apply sensitivity adjustment to mouse movements
-            const sensitivity = window.mouseSensitivity.current;
-            const event = data.event;
-            
-            if (window.isFirstPerson && !window.isFreeCameraMode) {
-                // First-person: Standard FPS mouse look - rotate with mouse movement
+        // If pointer is locked, this event provides data.movement (used by InputManager.onMouseMove)
+        // If pointer is NOT locked, this still fires for UI interaction, but we don't rotate.
+        
+        // Handle third-person orbit IF NOT pointer locked and right mouse down
+        // (Pointer locked third-person orbit uses updateControls logic)
+        if (!document.pointerLockElement && (window.rightMouseDown || window.middleMouseDown) && !window.isFirstPerson && !window.isFreeCameraMode) {
+                // Use direct event data for unlocked orbit
+                const deltaX = data.movement.x;
+                const deltaY = data.movement.y;
                 
-                // Apply rotation locally for immediate response
-                const rotationX = data.movement.y * 0.002 * sensitivity; // Vertical rotation (pitch)
-                const rotationY = data.movement.x * 0.002 * sensitivity; // Horizontal rotation (yaw)
+                // X movement orbits camera horizontally around player
+                window.thirdPersonCameraOrbitX += deltaX * window.thirdPersonCameraOrbitSpeed;
                 
-                // Update local camera rotation immediately
-                if (window.camera) {
-                    // Update the camera's pitch (looking up/down)
-                    window.firstPersonCameraPitch = window.firstPersonCameraPitch || 0;
-                    window.firstPersonCameraPitch -= rotationX;
-                    
-                    // Clamp the pitch to prevent looking too far up or down
-                    window.firstPersonCameraPitch = THREE.MathUtils.clamp(
-                        window.firstPersonCameraPitch,
-                        -Math.PI/2 + 0.1,  // Slightly less than straight down
-                        Math.PI/2 - 0.1    // Slightly less than straight up
-                    );
-                    
-                    // Update the player's rotation around Y axis
-                    window.playerRotationY = window.playerRotationY || 0;
-                    window.playerRotationY -= rotationY;
-                    
-                    // Apply the rotations to the camera
-                    window.camera.quaternion.setFromEuler(new THREE.Euler(
-                        window.firstPersonCameraPitch,
-                        window.playerRotationY,
-                        0,
-                        'YXZ'  // Important for proper FPS controls
-                    ));
-                    
-                    // Update player mesh rotation immediately for seamless transition to third-person
-                    if (window.playerEntity && window.playerEntity.mesh) {
-                        // Update both entity property and mesh rotation - BUT NOT POSITION
-                        window.playerEntity.rotationY = window.playerRotationY;
-                        
-                        // IMPORTANT: Only update the Y rotation, don't affect position
-                        window.playerEntity.mesh.rotation.y = window.playerRotationY;
-                        
-                        // Force immediate rotation update to server
-                        if (window.sendInputUpdate) {
-                            window.sendInputUpdate();
-                        }
-                    }
-                }
-            } else if (!window.isFirstPerson && !window.isFreeCameraMode) {
-                // Third-person: Only rotate camera when right mouse button is held (classic behavior)
-                if (window.rightMouseDown || window.middleMouseDown) {
-                    // X movement orbits camera horizontally around player
-                    window.thirdPersonCameraOrbitX += data.movement.x * window.thirdPersonCameraOrbitSpeed;
-                    
-                    // Y movement changes camera height/angle (with limits to prevent flipping)
-                    window.thirdPersonCameraOrbitY -= data.movement.y * window.thirdPersonCameraOrbitSpeed;
-                    window.thirdPersonCameraOrbitY = THREE.MathUtils.clamp(
-                        window.thirdPersonCameraOrbitY,
-                        window.thirdPersonCameraMinY,
-                        window.thirdPersonCameraMaxY
-                    );
-                }
-            } else if (window.isFreeCameraMode) {
-                // Free camera mode: Standard FPS-style look with mouse
-                window.freeCameraYaw -= data.movement.x * window.freeCameraRotationSpeed;
-                window.freeCameraPitch -= data.movement.y * window.freeCameraRotationSpeed;
-                
-                // Limit pitch to avoid flipping
-                window.freeCameraPitch = THREE.MathUtils.clamp(
-                    window.freeCameraPitch,
-                    -Math.PI / 2 + 0.1,  // Avoid looking straight down
-                    Math.PI / 2 - 0.1    // Avoid looking straight up
+                // Y movement changes camera height/angle (with limits to prevent flipping)
+                window.thirdPersonCameraOrbitY -= deltaY * window.thirdPersonCameraOrbitSpeed;
+                window.thirdPersonCameraOrbitY = THREE.MathUtils.clamp(
+                    window.thirdPersonCameraOrbitY,
+                    window.thirdPersonCameraMinY,
+                    window.thirdPersonCameraMaxY
                 );
-                
-                // Apply rotation to camera using quaternions for proper rotation
-                window.camera.quaternion.setFromEuler(new THREE.Euler(
-                    window.freeCameraPitch,
-                    window.freeCameraYaw,
-                    0,
-                    'YXZ'  // Important for proper FPS controls
-                ));
-            }
         }
+        // Free camera rotation is handled in updateControls when locked
+        // First person rotation is handled in updateControls when locked
     });
     
     // Use InputManager for mouse wheel
@@ -453,54 +390,173 @@ function onKeyUp(event) {
 
 // Update controls - call this in the animation loop
 window.updateControls = function(controls, delta) {
-    // Special handling for RTS mode - don't require pointer lock
+    // Determine active input type
+    const activeInputType = window.inputManager ? window.inputManager.getActiveInputType() : 'keyboardMouse';
+
+    // --- Rotation Handling (Applies if pointer locked OR gamepad active) ---
+    let applyRotation = (activeInputType === 'gamepad' || document.pointerLockElement);
+    let deltaX = 0;
+    let deltaY = 0;
+
+    if (applyRotation) {
+        // Get the accumulated delta from InputManager (contains mouse AND/OR gamepad stick input)
+        const accumulatedDelta = window.inputManager.getMouseDelta();
+        deltaX = accumulatedDelta.x;
+        deltaY = accumulatedDelta.y;
+
+        // *** ADD SCALING FOR GAMEPAD INPUT ***
+        if (activeInputType === 'gamepad') {
+            const gamepadScaleFactor = 15; // Back to a more reasonable value
+            deltaX *= gamepadScaleFactor;
+            deltaY *= gamepadScaleFactor;
+            console.log(`[Controls] Scaled Gamepad Delta: x=${deltaX.toFixed(2)}, y=${deltaY.toFixed(2)}`);
+        }
+        // *** END SCALING ***
+
+        // IMPORTANT: Reset InputManager's delta immediately after reading
+        window.inputManager.mouseDelta.x = 0;
+        window.inputManager.mouseDelta.y = 0;
+        // Sync this cleared delta to serverInputState as well
+        window.inputManager.serverInputState.mouseDelta.x = 0;
+        window.inputManager.serverInputState.mouseDelta.y = 0;
+
+        // Apply sensitivity
+        const sensitivity = window.mouseSensitivity.current;
+        const lookSensitivityFactor = 0.002; // Base sensitivity factor
+
+        // Apply rotation based on view mode
+        if (window.isFirstPerson && !window.isFreeCameraMode) {
+            const rotationX = deltaY * lookSensitivityFactor * sensitivity; // Pitch
+            const rotationY = deltaX * lookSensitivityFactor * sensitivity; // Yaw
+            
+            // Log before applying rotation
+            console.log(`[Controls Update FP] Before Rotate: deltaX=${deltaX.toFixed(3)}, deltaY=${deltaY.toFixed(3)}, rotationX=${rotationX.toFixed(3)}, rotationY=${rotationY.toFixed(3)}, curPitch=${window.firstPersonCameraPitch?.toFixed(3)}, curYaw=${window.playerRotationY?.toFixed(3)}`);
+
+            window.firstPersonCameraPitch = window.firstPersonCameraPitch || 0;
+            window.firstPersonCameraPitch -= rotationX;
+            window.firstPersonCameraPitch = THREE.MathUtils.clamp(
+                window.firstPersonCameraPitch, -Math.PI/2 + 0.1, Math.PI/2 - 0.1
+            );
+            
+            window.playerRotationY = window.playerRotationY || 0;
+            window.playerRotationY -= rotationY;
+            
+            // Log after calculating new rotation
+            console.log(`[Controls Update FP] After Calc: newPitch=${window.firstPersonCameraPitch.toFixed(3)}, newYaw=${window.playerRotationY.toFixed(3)}`);
+
+            // Apply to camera
+            window.camera.quaternion.setFromEuler(new THREE.Euler(
+                window.firstPersonCameraPitch, window.playerRotationY, 0, 'YXZ'
+            ));
+            
+            // Apply to player mesh for third-person transition
+            if (window.playerEntity && window.playerEntity.mesh) {
+                window.playerEntity.rotationY = window.playerRotationY;
+                window.playerEntity.mesh.rotation.y = window.playerRotationY;
+            }
+            // Log after applying to camera/mesh
+            console.log(`[Controls Update FP] Applied: Camera Quat W=${window.camera.quaternion.w.toFixed(3)}, Mesh Y=${window.playerEntity?.mesh?.rotation.y.toFixed(3)}`);
+        } else if (!window.isFirstPerson && !window.isFreeCameraMode) { // Third-person
+             // Only apply third-person orbit from stick/locked mouse if appropriate
+             if (activeInputType === 'gamepad' || (document.pointerLockElement && (window.rightMouseDown || window.middleMouseDown)) ) { 
+                 // Log before applying orbit
+                 const prevOrbitX = window.thirdPersonCameraOrbitX;
+                 const prevOrbitY = window.thirdPersonCameraOrbitY;
+                 window.thirdPersonCameraOrbitX += deltaX * window.thirdPersonCameraOrbitSpeed;
+                 window.thirdPersonCameraOrbitY -= deltaY * window.thirdPersonCameraOrbitSpeed;
+                 window.thirdPersonCameraOrbitY = THREE.MathUtils.clamp(
+                     window.thirdPersonCameraOrbitY, window.thirdPersonCameraMinY, window.thirdPersonCameraMaxY
+                 );
+                 // Log after applying orbit
+                 console.log(`[Controls Update TP Orbit] deltaX=${deltaX.toFixed(3)}, deltaY=${deltaY.toFixed(3)}, OrbitX: ${prevOrbitX.toFixed(3)} -> ${window.thirdPersonCameraOrbitX.toFixed(3)}, OrbitY: ${prevOrbitY.toFixed(3)} -> ${window.thirdPersonCameraOrbitY.toFixed(3)}`);
+             }
+        } else if (window.isFreeCameraMode) { // Free Camera
+            window.freeCameraYaw -= deltaX * window.freeCameraRotationSpeed;
+            window.freeCameraPitch -= deltaY * window.freeCameraRotationSpeed;
+            window.freeCameraPitch = THREE.MathUtils.clamp(
+                window.freeCameraPitch, -Math.PI / 2 + 0.1, Math.PI / 2 - 0.1
+            );
+            window.camera.quaternion.setFromEuler(new THREE.Euler(
+                window.freeCameraPitch, window.freeCameraYaw, 0, 'YXZ'
+            ));
+        }
+    }
+    // --- End Rotation Handling ---
+
+    // Special handling for RTS mode - no rotation needed here
     if (window.isRTSMode) {
         updateRTSCameraMovement(delta);
         return;
     }
-
-    // Determine active input type
-    const activeInputType = window.inputManager ? window.inputManager.getActiveInputType() : 'keyboardMouse';
     
+    // --- Movement Handling --- 
+    // Note: Gamepad movement flags (window.moveForward etc.) are set by InputManager._handleGamepadAxis
+    // Keyboard movement flags are set by onKeyDown/Up
+
+    // We can use the same movement logic regardless of input type, based on the global flags
+    let actualMoveSpeed = window.moveSpeed * delta;
+    if (window.shiftPressed) {
+         actualMoveSpeed *= 1.5; // Sprint
+    }
+
+    // Calculate movement direction based on flags
+    let moveDirection = new THREE.Vector3(0, 0, 0);
+    if (window.moveForward) moveDirection.z -= 1;
+    if (window.moveBackward) moveDirection.z += 1;
+    if (window.moveLeft) moveDirection.x -= 1;
+    if (window.moveRight) moveDirection.x += 1;
+    moveDirection.normalize(); // Prevent faster diagonal movement
+
+    // Apply movement relative to camera orientation ONLY in first person
+    if (window.isFirstPerson) {
+         // Get forward and right vectors relative to the camera's Y rotation
+         const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0,1,0), window.playerRotationY);
+         const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0,1,0), window.playerRotationY);
+
+         // Combine directions
+         let finalMove = new THREE.Vector3();
+         finalMove.addScaledVector(forward, moveDirection.z);
+         finalMove.addScaledVector(right, moveDirection.x);
+         finalMove.normalize();
+
+         // Apply final movement scaled by speed
+         controls.getObject().position.addScaledVector(finalMove, actualMoveSpeed);
+
+    } else if (!window.isFirstPerson && !window.isFreeCameraMode) { // Third-person
+         // Movement is relative to the camera's horizontal orbit angle
+         const angle = window.thirdPersonCameraOrbitX;
+         const forward = new THREE.Vector3(-Math.sin(angle), 0, -Math.cos(angle));
+         const right = new THREE.Vector3(-Math.cos(angle), 0, Math.sin(angle));
+
+         let finalMove = new THREE.Vector3();
+         finalMove.addScaledVector(forward, moveDirection.z);
+         finalMove.addScaledVector(right, moveDirection.x);
+         finalMove.normalize();
+         
+         controls.getObject().position.addScaledVector(finalMove, actualMoveSpeed);
+    }
+    // Free camera movement is handled separately in updateFreeCameraMovement if needed
+
+    // --- Vertical Movement (Gravity/Jump) --- 
+    // Apply gravity (always active unless on ground)
+    window.velocity.y -= 9.8 * delta;
+    controls.getObject().position.y += window.velocity.y * delta;
+
+    // Ground collision
+    if (controls.getObject().position.y < window.playerHeight) {
+        window.velocity.y = 0;
+        controls.getObject().position.y = window.playerHeight;
+        window.canJump = true;
+    }
+    
+    // --- Deprecated Logic --- 
+    // This block is now replaced by the unified movement logic above
+    /*
     // Handle gamepad input independently of pointer lock
     if (activeInputType === 'gamepad') {
         // Gamepad movement - Use global movement flags set by InputManager
         // These actions should work regardless of pointer lock state
-        if (window.moveForward) {
-            controls.moveForward(window.moveSpeed * delta);
-        }
-        if (window.moveBackward) {
-            controls.moveForward(-window.moveSpeed * delta);
-        }
-        if (window.moveLeft) {
-            controls.moveRight(-window.moveSpeed * delta);
-        }
-        if (window.moveRight) {
-            controls.moveRight(window.moveSpeed * delta);
-        }
-        if (window.turnLeft) {
-            // Move diagonally forward-left (if needed, typically handled by stick)
-            const diagonalSpeed = window.moveSpeed * 0.7 * delta;
-            controls.moveForward(diagonalSpeed);
-            controls.moveRight(-diagonalSpeed);
-        }
-        if (window.turnRight) {
-            // Move diagonally forward-right (if needed, typically handled by stick)
-            const diagonalSpeed = window.moveSpeed * 0.7 * delta;
-            controls.moveForward(diagonalSpeed);
-            controls.moveRight(diagonalSpeed);
-        }
-
-        // Apply gravity for gamepad control
-        window.velocity.y -= 9.8 * delta;
-        controls.getObject().position.y += window.velocity.y * delta;
-
-        // Ground collision for gamepad
-        if (controls.getObject().position.y < window.playerHeight) {
-            window.velocity.y = 0;
-            controls.getObject().position.y = window.playerHeight;
-            window.canJump = true;
-        }
+        // ... (old gamepad movement logic removed) ...
         
         // IMPORTANT: Explicitly exit pointer lock if gamepad is active
         if (document.pointerLockElement) {
@@ -508,50 +564,25 @@ window.updateControls = function(controls, delta) {
             document.exitPointerLock();
         }
         
-        return; // Exit early for gamepad to avoid keyboard/mouse logic
+        // return; // Exit early for gamepad to avoid keyboard/mouse logic - REMOVED
     }
+    */
 
+    // This block is also replaced by the unified movement logic above
+    /*
     // Keyboard/Mouse input - requires pointer lock
     if (document.pointerLockElement === document.body) {
         // Only perform client-side movement prediction 
         // Actual position updates will be driven by the server
-        
-        // Handle directional movement - scaled by delta for consistent speed
-        if (window.moveForward) controls.moveForward(window.moveSpeed * delta);
-        if (window.moveBackward) controls.moveForward(-window.moveSpeed * delta);
-        if (window.moveLeft) controls.moveRight(-window.moveSpeed * delta);
-        if (window.moveRight) controls.moveRight(window.moveSpeed * delta);
-        
-        // Handle Q/E keys for diagonal movement (forward + turning)
-        if (window.turnLeft) {
-            // Move diagonally forward-left
-            const diagonalSpeed = window.moveSpeed * 0.7 * delta; // Scale down for diagonal
-            controls.moveForward(diagonalSpeed);
-            controls.moveRight(-diagonalSpeed);
-        }
-        if (window.turnRight) {
-            // Move diagonally forward-right
-            const diagonalSpeed = window.moveSpeed * 0.7 * delta; // Scale down for diagonal
-            controls.moveForward(diagonalSpeed);
-            controls.moveRight(diagonalSpeed);
-        }
-
-        // Apply gravity
-        window.velocity.y -= 9.8 * delta;
-        controls.getObject().position.y += window.velocity.y * delta;
-
-        // Ground collision
-        if (controls.getObject().position.y < window.playerHeight) {
-            window.velocity.y = 0;
-            controls.getObject().position.y = window.playerHeight;
-            window.canJump = true;
-        }
+        // ... (old KBM movement logic removed) ...
     } else {
         // If pointer isn't locked and using keyboard/mouse, reset velocity
         // This prevents drifting when focus is lost
-        window.velocity.x = 0;
-        window.velocity.z = 0;
+        // Note: Gravity/Ground Collision now happens outside this block
+        // window.velocity.x = 0;
+        // window.velocity.z = 0;
     }
+    */
 }
 
 // Handle free camera movement independent of player
@@ -780,149 +811,4 @@ function updateViewModeUI() {
     // if (instructions) {
     //     instructions.style.display = 'none';
     // }
-}
-
-// Check if this controller should be processed by this client
-function shouldProcessController(gamepadIndex) {
-    // Get client ID from URL if in local multiplayer mode
-    const urlParams = new URLSearchParams(window.location.search);
-    const localMultiplayer = urlParams.get('localMultiplayer') === 'true';
-    const clientGamepadIndex = parseInt(urlParams.get('gamepadIndex'));
-    
-    // In local multiplayer mode, only process the assigned controller
-    if (localMultiplayer) {
-        if (urlParams.get('inputType') === 'gamepad') {
-            // This client should only process its assigned gamepad
-            return gamepadIndex === clientGamepadIndex;
-        } else if (urlParams.get('inputType') === 'keyboard') {
-            // This client uses keyboard, don't process any gamepads
-            return false;
-        }
-        // Client with no input assigned shouldn't process any controllers
-        return false;
-    }
-    
-    // In normal mode, check with localMultiplayer manager if available
-    if (window.localMultiplayer && typeof window.localMultiplayer.shouldProcessController === 'function') {
-        const clientId = window.clientId || 'default';
-        return window.localMultiplayer.shouldProcessController(gamepadIndex, clientId);
-    }
-    
-    // Default to allowing all controllers if no other checks apply
-    return true;
-}
-
-// Update gamepad state
-function updateGamepadState() {
-    if (navigator.getGamepads) {
-        const gamepads = navigator.getGamepads();
-        for (let i = 0; i < gamepads.length; i++) {
-            const gamepad = gamepads[i];
-            
-            // Skip if no gamepad or if this controller shouldn't be processed by this client
-            if (!gamepad || !shouldProcessController(i)) {
-                continue;
-            }
-            
-            // Check if we're on the start screen
-            const startScreen = document.querySelector('.play-button') || 
-                document.querySelector('.start-button') || 
-                document.querySelector('.click-to-play');
-                
-            if (startScreen) {
-                // Check for any button press to start the game from the start screen
-                const anyButtonPressed = gamepad.buttons.some(button => button.pressed);
-                if (anyButtonPressed) {
-                    console.log("Gamepad button pressed on start screen, starting game...");
-                    startScreen.click();
-                    return; // Don't process other inputs until the game starts
-                }
-            }
-            
-            // Process gamepad input for the selected controller
-            if (useGamepad && selectedGamepadIndex === i) {
-                processGamepadInput(gamepad);
-            }
-        }
-    }
-}
-
-// Process input from a gamepad
-function processGamepadInput(gamepad) {
-    // Left stick horizontal axis (positive is right)
-    leftStickX = applyDeadzone(gamepad.axes[0], stickDeadzone) * analoglookSensitivity;
-    
-    // Left stick vertical axis (positive is down)
-    leftStickY = applyDeadzone(gamepad.axes[1], stickDeadzone) * analoglookSensitivity;
-    
-    // Right stick horizontal axis (positive is right)
-    rightStickX = applyDeadzone(gamepad.axes[2], stickDeadzone) * analoglookSensitivity;
-    
-    // Right stick vertical axis (positive is down)
-    rightStickY = applyDeadzone(gamepad.axes[3], stickDeadzone) * analoglookSensitivity;
-    
-    // D-pad - map these to inputs
-    const dpadUp = gamepad.buttons[12] ? gamepad.buttons[12].pressed : false;
-    const dpadDown = gamepad.buttons[13] ? gamepad.buttons[13].pressed : false;
-    const dpadLeft = gamepad.buttons[14] ? gamepad.buttons[14].pressed : false;
-    const dpadRight = gamepad.buttons[15] ? gamepad.buttons[15].pressed : false;
-    
-    // A button (Xbox) / X button (PlayStation)
-    gamepadData.jump = gamepad.buttons[0] ? gamepad.buttons[0].pressed : false;
-    
-    // X button (Xbox) / Square button (PlayStation)
-    gamepadData.action1 = gamepad.buttons[2] ? gamepad.buttons[2].pressed : false;
-    
-    // Y button (Xbox) / Triangle button (PlayStation)
-    gamepadData.action2 = gamepad.buttons[3] ? gamepad.buttons[3].pressed : false;
-    
-    // B button (Xbox) / Circle button (PlayStation)
-    gamepadData.action3 = gamepad.buttons[1] ? gamepad.buttons[1].pressed : false;
-    
-    // Left trigger
-    gamepadData.leftTrigger = gamepad.buttons[6] ? gamepad.buttons[6].value : 0;
-    
-    // Right trigger
-    gamepadData.rightTrigger = gamepad.buttons[7] ? gamepad.buttons[7].value : 0;
-    
-    // Left bumper
-    gamepadData.leftBumper = gamepad.buttons[4] ? gamepad.buttons[4].pressed : false;
-    
-    // Right bumper
-    gamepadData.rightBumper = gamepad.buttons[5] ? gamepad.buttons[5].pressed : false;
-    
-    // Start button
-    gamepadData.start = gamepad.buttons[9] ? gamepad.buttons[9].pressed : false;
-    
-    // Select button
-    gamepadData.select = gamepad.buttons[8] ? gamepad.buttons[8].pressed : false;
-    
-    // Map d-pad to movement as alternative to left stick
-    if (dpadUp) leftStickY = -1;
-    if (dpadDown) leftStickY = 1;
-    if (dpadLeft) leftStickX = -1;
-    if (dpadRight) leftStickX = 1;
-    
-    // Check for view toggle (Y button / Triangle button)
-    if (gamepadData.action2 && !prevGamepadData.action2) {
-        toggleView();
-    }
-    
-    // Update movement input based on left stick
-    inputVector.x = leftStickX;
-    inputVector.z = leftStickY;
-    
-    // Normalize input vector if it's longer than 1
-    if (inputVector.length() > 1) {
-        inputVector.normalize();
-    }
-    
-    // Update camera rotation based on right stick
-    if (Math.abs(rightStickX) > 0.1 || Math.abs(rightStickY) > 0.1) {
-        // Apply the right stick for camera rotation
-        rotateCamera(rightStickX, rightStickY);
-    }
-    
-    // Store the previous state
-    prevGamepadData = { ...gamepadData };
 }

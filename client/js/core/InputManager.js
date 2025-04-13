@@ -545,14 +545,6 @@ class InputManager {
             this.rightStickPosition.y = processedValue;
             console.log(`[Gamepad] Right stick Y: ${processedValue.toFixed(3)}`);
         }
-        
-        // Log the current state of stick positions
-        if (axisIndex === lookAxes.horizontal || axisIndex === lookAxes.vertical) {
-            console.log(`[Gamepad] Stick positions:`, {
-                rightStickX: this.rightStickPosition.x.toFixed(3),
-                rightStickY: this.rightStickPosition.y.toFixed(3)
-            });
-        }
     }
     
     // Handle gamepad input from Electron main process
@@ -783,15 +775,15 @@ class InputManager {
         this.mousePosition.x = event.clientX;
         this.mousePosition.y = event.clientY;
         
-        // Update mouse delta for server in pointerlock mode
+        // Update *accumulated* mouse delta ONLY if pointer is locked
+        // This delta will be read and reset once per frame in updateControls
         if (document.pointerLockElement) {
             this.mouseDelta.x += event.movementX;
             this.mouseDelta.y += event.movementY;
-            this.serverInputState.mouseDelta.x += event.movementX;
-            this.serverInputState.mouseDelta.y += event.movementY;
+            // DO NOT update serverInputState.mouseDelta here. It will be updated after processing.
         }
         
-        // Trigger callbacks with standardized event format
+        // Trigger general mousemove callbacks for things like UI hover effects
         const mouseData = { 
             position: { x: event.clientX, y: event.clientY },
             movement: { x: event.movementX, y: event.movementY },
@@ -979,23 +971,27 @@ class InputManager {
                     this.serverInputState.keys.d = window.moveRight;
                 }
                 
-                // Look (right stick) - Simulate mouse delta for camera control
+                // Look (right stick) - Read stored position and add to delta
                 let lookX = 0;
                 let lookY = 0;
-                try {
-                    lookX = gamepad.axes && gamepad.axes[2] !== undefined && Math.abs(gamepad.axes[2]) > stickThreshold ? gamepad.axes[2] * 10 : 0;
-                    lookY = gamepad.axes && gamepad.axes[3] !== undefined && Math.abs(gamepad.axes[3]) > stickThreshold ? gamepad.axes[3] * 10 : 0;
-                } catch (e) {
-                    console.error("[InputManager] Error reading gamepad look axes:", e);
+                
+                if (Math.abs(this.rightStickPosition.x) > stickThreshold) {
+                    lookX = this.rightStickPosition.x;
+                }
+                if (Math.abs(this.rightStickPosition.y) > stickThreshold) {
+                    // Do NOT invert Y axis here. Let controls.js handle inversion via subtraction.
+                    lookY = this.rightStickPosition.y; 
                 }
                 
-                if (lookX || lookY) {
+                if (lookX !== 0 || lookY !== 0) {
+                    // Accumulate into the delta variables
                     this.mouseDelta.x += lookX;
                     this.mouseDelta.y += lookY;
                     this.serverInputState.mouseDelta.x += lookX;
                     this.serverInputState.mouseDelta.y += lookY;
+                    console.log(`[Input Update Gamepad] Adding Stick Delta: lookX=${lookX.toFixed(3)}, lookY=${lookY.toFixed(3)} -> Total Delta: x=${this.mouseDelta.x.toFixed(3)}, y=${this.mouseDelta.y.toFixed(3)}`);
                     
-                    // Dispatch look event
+                    // Dispatch look event (optional, but good practice)
                     this.dispatchEvent('gamepadlook', {
                         x: lookX,
                         y: lookY
@@ -1035,7 +1031,6 @@ class InputManager {
         }
 
         // CRITICAL: Sync InputManager state to global state variables
-        // This ensures gamepad inputs affect movement
         this.syncToGlobalState();
         
         // Debugging for input states
@@ -1103,17 +1098,6 @@ class InputManager {
         } else if (window.playerEntity && window.playerEntity.mesh) {
             this.serverInputState.clientRotation.rotationY = window.playerEntity.mesh.rotation.y || 0;
         }
-        
-        // --- Final Reset ---
-        // Reset internal mouseDelta AFTER it has been synced and potentially used by callbacks
-        // This ensures the next frame starts fresh.
-        this.mouseDelta.x = 0;
-        this.mouseDelta.y = 0;
-        // Optionally reset serverInputState.mouseDelta too, though sendInputUpdate resets window.inputState
-        // If sendInputUpdate uses window.inputState, this might be redundant, but doesn't hurt.
-        this.serverInputState.mouseDelta.x = 0; 
-        this.serverInputState.mouseDelta.y = 0;
-        // --- End Final Reset ---
     }
     
     // Registration methods for callbacks

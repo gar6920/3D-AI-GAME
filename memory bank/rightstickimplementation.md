@@ -6,20 +6,54 @@ The primary objective is to enable player camera rotation in First-Person Mode u
 
 ## Relevant Game Structure & Files
 
-The core logic spans two main files:
+The core logic spans three main files:
 
-1.  **`client/js/core/inputmanager.js`**:
+1.  **`client/js/core/InputManager.js`**:
     *   Responsible for detecting and processing all raw input (keyboard, mouse, gamepad).
-    *   `pollGamepads()`: Reads gamepad axes/buttons, applies deadzones, and updates internal state like `rightStickPosition`.
-    *   `update()`: Consolidates input from the active device (KB/Mouse or Gamepad) for the current frame, calculates the final `serverInputState` (including `keys` and `mouseDelta`), syncs relevant values to global state (`window.moveForward`, etc.), and returns the `serverInputState`.
-2.  **`client/js/core/game-engine.js`**:
-    *   Manages the main game loop (`animate`), rendering, scene setup, and communication with the server (`network-core.js`).
-    *   `animate()`: The central loop that drives updates. It should:
-        *   Call `inputManager.update()` to get the current frame's input state.
-        *   Process the input state (e.g., apply rotation based on `mouseDelta`).
-        *   Send the input state (throttled) to the server via `window.room.send("updateInput", ...)`.
-        *   Update local player physics, animations, and camera positions.
-        *   Render the scene.
+    *   `pollGamepads()`: Detects connected gamepads.
+    *   `_handleGamepadAxis()`: Reads gamepad axes, applies deadzone, updates internal stick positions (`leftStickPosition`, `rightStickPosition`).
+    *   `update()`: Runs every frame. If 'gamepad' is the active input type, reads internal stick positions (`leftStickPosition`, `rightStickPosition`), applies deadzone again (for safety), calculates movement keys (`serverInputState.keys`) from left stick, and calculates `lookX`/`lookY` from right stick. **Crucially, it adds `lookX`/`lookY` to the internal `this.mouseDelta`**, which accumulates input delta throughout the frame. Does NOT reset `this.mouseDelta`.
+    *   `getMouseDelta()`: Returns the current accumulated `mouseDelta`.
+2.  **`client/js/core/controls.js`**:
+    *   `initControls()`: Sets up listeners via `InputManager`.
+    *   `onMouseMove` listener: Accumulates *mouse* movement into `InputManager.mouseDelta` if pointer locked.
+    *   `window.updateControls()`: Runs every frame (if pointer locked or gamepad active). **This is where rotation is applied.**
+        *   Reads the *combined* `accumulatedDelta` from `window.inputManager.getMouseDelta()` (containing input from mouse *and/or* gamepad stick from the *previous* frame's `InputManager.update`).
+        *   **Resets `InputManager.mouseDelta` to zero** after reading.
+        *   If input type is 'gamepad', applies a `gamepadScaleFactor` to the delta.
+        *   Applies look sensitivity (`lookSensitivityFactor * sensitivity`).
+        *   Updates `window.firstPersonCameraPitch` and `window.playerRotationY`.
+        *   Applies rotation to `window.camera.quaternion` and `window.playerEntity.mesh.rotation.y`.
+        *   Handles movement based on global flags (`window.moveForward`, etc.).
+3.  **`client/js/core/game-engine.js`**:
+    *   `animate()`: The main game loop.
+        *   **Calls `inputManager.update(delta)` early in the frame** to process raw inputs and update `inputManager.mouseDelta`.
+        *   Checks if pointer locked OR gamepad active.
+        *   If true, **calls `window.updateControls(controls, delta)`** to apply rotation/movement based on the delta prepared in the previous step.
+        *   Later, updates camera/player based on server state.
+        *   Sends input state (keys, final rotation) to server via `sendInputUpdate` interval.
+
+## Initial Problem & Solution Path
+
+1.  **Initial State:** Gamepad stick input was detected by `InputManager` but didn't cause rotation.
+2.  **Diagnosis 1 (Incorrect): Premature Reset:** Early attempts focused on `InputManager.update` potentially resetting its internal `mouseDelta` too soon. While fixing this helped, it wasn't the root cause.
+3.  **Diagnosis 2 (Incorrect): Logic in `mousemove`:** The rotation logic was initially (and incorrectly) placed inside the `InputManager.on('mousemove', ...)` handler in `controls.js`. This handler only triggers on *physical mouse movement*, not gamepad stick movement. Therefore, the gamepad delta calculated by `InputManager` was never used.
+4.  **Diagnosis 3 (Correct): Timing Issue & Control Flow:** The core problem was the order of operations in the `animate` loop:
+    *   `updateControls` (which *should* apply rotation) was called.
+    *   *Then*, `InputManager.update` (which calculated the gamepad delta) was called later via `animationCallbacks`.
+    *   This meant `updateControls` was always reading the delta from the *previous* frame (which it had reset itself), before the current frame's gamepad input was processed into the delta.
+    *   Additionally, `updateControls` was only called if the pointer was locked (`controls.isLocked`), preventing it from running when the gamepad was active (as the pointer is typically unlocked then).
+
+## Final Solution
+
+1.  **Consolidate Delta Calculation:** `InputManager._handleGamepadAxis` was simplified to only update internal stick positions. The main `InputManager.update` method was modified to read these internal stick positions and add the resulting `lookX/lookY` (right stick) to `this.mouseDelta`, accumulating input delta for the frame.
+2.  **Move Rotation Logic:** The camera rotation logic (reading delta, applying sensitivity/scaling, updating pitch/yaw, applying to camera/mesh) was moved from the `mousemove` handler into the main `window.updateControls` function in `controls.js`.
+3.  **Fix `animate` Loop Order:** In `game-engine.js`, the call to `window.inputManager.update(delta)` was moved to the *beginning* of the `animate` loop, ensuring input processing and delta calculation happen *before* `updateControls` is called.
+4.  **Fix `animate` Loop Condition:** The condition for calling `window.updateControls` was changed from `controls && controls.isLocked` to `(controls && controls.isLocked) || (window.inputManager && window.inputManager.getActiveInputType() === 'gamepad')`, allowing it to run when the gamepad is active even if the pointer isn't locked.
+5.  **Delta Reset:** `updateControls` now reads the combined delta using `window.inputManager.getMouseDelta()`, applies necessary scaling/rotation, and *then* resets `window.inputManager.mouseDelta` and `window.inputManager.serverInputState.mouseDelta` to zero, ready for the next frame's input accumulation.
+6.  **Gamepad Scaling:** A `gamepadScaleFactor` was introduced within `updateControls` to multiply the delta specifically for gamepad input, making its sensitivity comparable to mouse input *before* the final look sensitivity is applied.
+
+This ensures the correct sequence: Input Processed -> Delta Calculated -> Controls Updated (Delta Read, Rotation Applied, Delta Reset) -> Render.
 
 ## Ideal Logic Flow (Current Target)
 
