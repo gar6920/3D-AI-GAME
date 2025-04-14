@@ -194,7 +194,7 @@ function initFloor() {
         debug('Loading data center model');
         const loader = new THREE.GLTFLoader();
         loader.load(
-            './models/data_center_low-poly.glb',
+            './assets/models/data_center_low-poly.glb',
             (gltf) => {
                 const dataCenterModel = gltf.scene;
                 dataCenterModel.position.set(0, 0.1, 0); // Center of the map, slightly above ground to prevent texture bleeding
@@ -1494,9 +1494,9 @@ function sendInputUpdate() {
 
 setInterval(sendInputUpdate, 1000 / 30);
 
-window.thirdPersonCameraDistance = 5;
+window.thirdPersonCameraDistance = 8; // Increased from 5
 window.thirdPersonCameraOrbitX = 0;
-window.thirdPersonCameraOrbitY = 0;
+window.thirdPersonCameraOrbitY = 0.5; // Default vertical angle (radians)
 
 // Update third-person camera position based on orbit angles
 function updateThirdPersonCameraPosition() {

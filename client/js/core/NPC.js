@@ -102,7 +102,7 @@ class NPC extends Entity {
         }
         const loader = new THREE.GLTFLoader();
         // Path relative to where index.html is served from (likely client/)
-        const modelPath = 'models/robokeeper1.glb'; 
+        const modelPath = 'assets/models/robokeeper1.glb'; 
 
         loader.load(modelPath, (gltf) => {
             console.log(`NPC model loaded successfully for entity: ${this.id}`);
