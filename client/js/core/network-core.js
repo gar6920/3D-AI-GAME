@@ -882,6 +882,14 @@ function setupRoomListeners(room) {
                 if (window.entityHandlers?.tree?.create) {
                     window.entityHandlers.tree.create(entity, entityId);
                 }
+            } else if (entity.type === 'npc') {
+                // Handle NPC entities
+                console.log(`Attempting to create visual for NPC: ${entityId}`);
+                if (typeof window.createNpcVisual === 'function') {
+                    window.createNpcVisual(entity, entityId);
+                } else {
+                    console.warn(`window.createNpcVisual function not found for NPC ${entityId}`);
+                }
             }
         });
         
@@ -903,6 +911,14 @@ function setupRoomListeners(room) {
                     if (window.entityHandlers?.tree?.create) {
                         window.entityHandlers.tree.create(entity, entityId);
                     }
+                } else if (entity.type === 'npc') {
+                    // Handle NPC entities
+                    console.log(`Attempting to create visual for NPC: ${entityId}`);
+                    if (typeof window.createNpcVisual === 'function') {
+                        window.createNpcVisual(entity, entityId);
+                    } else {
+                        console.warn(`window.createNpcVisual function not found for NPC ${entityId}`);
+                    }
                 }
             };
         }
@@ -912,7 +928,7 @@ function setupRoomListeners(room) {
             room.state.entities.onRemove = (entity, entityId) => {
                 console.log(`Entity removed: ${entityId}, type: ${entity.type}`);
                 
-                // Handle different entity types
+                // Handle different entity types for removal
                 if (entity.type === 'operator') {
                     if (typeof window.removeOperatorVisual === 'function') {
                         window.removeOperatorVisual(entityId);
@@ -924,6 +940,14 @@ function setupRoomListeners(room) {
                 } else if (entity.type === 'tree') {
                     if (window.entityHandlers?.tree?.remove) {
                         window.entityHandlers.tree.remove(entityId);
+                    }
+                } else if (entity.type === 'npc') {
+                    // Handle NPC entity removal
+                    console.log(`Attempting to remove visual for NPC: ${entityId}`);
+                    if (typeof window.removeNpcVisual === 'function') {
+                        window.removeNpcVisual(entityId);
+                    } else {
+                        console.warn(`window.removeNpcVisual function not found for NPC ${entityId}`);
                     }
                 }
             };

@@ -1,6 +1,30 @@
 // 3D Game Platform - Game Engine
 // Handles 3D scene, rendering, game loop, and core gameplay
 
+// --- Imports ---
+// Assuming THREE is available globally or via import map from CDN
+// If using CDN directly without module loading for THREE, these might not be needed or might need different paths
+// import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'; 
+// import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+// import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+// import Stats from 'three/examples/jsm/libs/stats.module.js'; 
+ 
+// Core local modules (adjust paths if necessary)
+// import { InputManager } from './InputManager.js'; // InputManager seems to be loaded globally via script tag in HTML
+// import { ActionManager } from './ActionManager.js'; // ActionManager seems to be loaded globally via script tag in HTML
+// import { Player } from './Player.js';
+// import { NPC } from './NPC.js';
+// import { setupWorldEnvironment } from './world-environment.js';
+// import { setupMultiplayer } from './network-core.js';
+// import { PlayerUIManager } from './player-ui.js';
+// import { ControlsManager } from './controls.js';
+// import { UIManager } from './UIManager.js';
+// import { OperatorManager } from './OperatorManager.js';
+// import { BuildingModeManager } from './BuildingModeManager.js';
+// import { PointerLockManager } from './PointerLockManager.js';
+// import { ModelLoader } from './ModelLoader.js';
+// --------------- 
+ 
 // Debug support
 const DEBUG = false; // Set to false to disable debug messages
 
@@ -945,7 +969,6 @@ function init() {
     }
 }
 
-
 // Initialize the scene
 function initScene() {
     try {
@@ -984,6 +1007,12 @@ function initScene() {
         operatorManager = new OperatorManager(scene);
         window.operatorManager = operatorManager;
         
+        // --- NPC Management Integration ---
+        NPC.setScene(scene); // Provide the scene reference to the NPC class
+        window.createNpcVisual = NPC.createNpcVisual; // Expose static method globally
+        window.removeNpcVisual = NPC.removeNpcVisual; // Expose static method globally
+        // ---------------------------------
+
         debug('Scene created successfully');
     } catch (error) {
         debug(`Error creating scene: ${error.message}`, true);
@@ -1345,6 +1374,16 @@ function animate(currentTime) {
         window.buildingModeManager.update(delta);
     }
     
+    // --- Update NPCs ---
+    if (window.NPC && window.NPC.npcs) {
+        window.NPC.npcs.forEach(npc => {
+            if (npc && typeof npc.update === 'function') {
+                npc.update(delta); // Call the instance update method (for animations)
+            }
+        });
+    }
+    // -------------------
+
     renderer.render(scene, camera);
 }
 

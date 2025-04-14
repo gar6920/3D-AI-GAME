@@ -53,7 +53,7 @@ class GamepadUI {
         this.controlsContainer.style.bottom = '60px';
         this.controlsContainer.style.right = '20px';
         this.controlsContainer.style.width = '300px';
-        this.controlsContainer.style.maxHeight = '400px';
+        this.controlsContainer.style.maxHeight = '600px'; // Increased height to ensure visibility without scrolling
         this.controlsContainer.style.overflowY = 'auto';
         this.controlsContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
         this.controlsContainer.style.color = 'white';
@@ -141,12 +141,16 @@ class GamepadUI {
         // Get config from input manager if available
         const config = window.inputManager ? window.inputManager.gamepadConfig : {
             buttonMapping: {
-                0: 'space', // A button -> jump
-                1: 'v',     // B button -> toggle view
-                4: 'q',     // LB -> Q
-                5: 'e',     // RB -> E
-                6: 'shift', // LT -> shift
-                7: 'shift'  // RT -> shift (alternative)
+                0: 'v',         // A button (Right) -> toggle view
+                1: 'space',     // B button (Bottom) -> jump
+                2: 'toggle_building', // Y button (Left) -> toggle build mode
+                3: 'build_action',    // X button (Top) -> build action
+                4: 'q',         // L1 -> Q
+                5: 'e',         // R1 -> E
+                6: 'shift',     // L2 -> shift
+                7: 'shift',     // R2 -> shift (alternative)
+                8: 'show_gamepad_ui', // Select -> show gamepad UI
+                9: 'exit_gamepad'     // Start -> exit gamepad mode
             }
         };
         
@@ -157,111 +161,114 @@ class GamepadUI {
         
         // Create content container
         this.bindingsContent = document.createElement('div');
+        this.bindingsContent.style.maxHeight = '600px'; // Increased height to ensure visibility without scrolling
+        this.bindingsContent.style.overflow = 'hidden'; // Hide any overflow content
         
         // Add controller image/diagram
         const controllerImage = document.createElement('div');
         controllerImage.style.textAlign = 'center';
         controllerImage.style.margin = '10px 0';
         controllerImage.innerHTML = `
-            <div style="width: 300px; height: 180px; margin: 0 auto; background-color: rgba(50, 50, 50, 0.5); border-radius: 5px; display: flex; justify-content: center; align-items: center;">
-                <svg width="240" height="150" viewBox="0 0 240 150">
+            <div style="width: 300px; height: 200px; margin: 0 auto; background-color: rgba(50, 50, 50, 0.5); border-radius: 5px; display: flex; justify-content: center; align-items: center;">
+                <svg width="260" height="170" viewBox="0 0 260 170">
                     <!-- Simple controller outline -->
-                    <rect x="70" y="30" width="100" height="60" rx="30" fill="#444" />
-                    <rect x="30" y="50" width="40" height="40" rx="20" fill="#555" />
-                    <rect x="170" y="50" width="40" height="40" rx="20" fill="#555" />
+                    <rect x="80" y="40" width="100" height="60" rx="30" fill="#444" />
+                    <rect x="40" y="60" width="40" height="40" rx="20" fill="#555" />
+                    <rect x="180" y="60" width="40" height="40" rx="20" fill="#555" />
                     
                     <!-- Left stick -->
-                    <circle cx="50" cy="70" r="15" fill="#333" stroke="#777" stroke-width="2" />
-                    <text x="50" y="95" text-anchor="middle" fill="white" font-size="8">Left Stick</text>
-                    <text x="50" y="105" text-anchor="middle" fill="white" font-size="8">Move</text>
+                    <circle cx="60" cy="80" r="15" fill="#333" stroke="#777" stroke-width="2" />
+                    <text x="60" y="105" text-anchor="middle" fill="white" font-size="8">Left Stick</text>
+                    <text x="60" y="115" text-anchor="middle" fill="white" font-size="8">Move</text>
                     
                     <!-- Right stick -->
-                    <circle cx="190" cy="70" r="15" fill="#333" stroke="#777" stroke-width="2" />
-                    <text x="190" y="95" text-anchor="middle" fill="white" font-size="8">Right Stick</text>
-                    <text x="190" y="105" text-anchor="middle" fill="white" font-size="8">Look</text>
+                    <circle cx="200" cy="80" r="15" fill="#333" stroke="#777" stroke-width="2" />
+                    <text x="200" y="105" text-anchor="middle" fill="white" font-size="8">Right Stick</text>
+                    <text x="200" y="115" text-anchor="middle" fill="white" font-size="8">Look</text>
                     
-                    <!-- Face buttons -->
-                    <circle cx="170" cy="50" r="8" fill="#4CAF50" />
-                    <text x="170" y="53" text-anchor="middle" fill="white" font-size="8">A</text>
+                    <!-- Face buttons: Y (Left), X (Top), A (Right), B (Bottom) -->
+                    <circle cx="190" cy="80" r="8" fill="#4CAF50" />
+                    <text x="190" y="83" text-anchor="middle" fill="white" font-size="8">A</text>
+                    <text x="190" y="93" text-anchor="middle" fill="white" font-size="7">Build Action</text>
                     
-                    <circle cx="190" cy="70" r="8" fill="#F44336" />
-                    <text x="190" y="73" text-anchor="middle" fill="white" font-size="8">B</text>
+                    <circle cx="180" cy="100" r="8" fill="#F44336" />
+                    <text x="180" y="103" text-anchor="middle" fill="white" font-size="8">B</text>
+                    <text x="180" y="113" text-anchor="middle" fill="white" font-size="7">Jump</text>
                     
-                    <!-- Shoulder buttons -->
-                    <rect x="60" y="20" width="25" height="10" rx="5" fill="#777" />
-                    <text x="72" y="28" text-anchor="middle" fill="white" font-size="8">LB</text>
+                    <circle cx="160" cy="80" r="8" fill="#2196F3" />
+                    <text x="160" y="83" text-anchor="middle" fill="white" font-size="8">Y</text>
+                    <text x="160" y="93" text-anchor="middle" fill="white" font-size="7">Toggle Build Mode</text>
                     
-                    <rect x="155" y="20" width="25" height="10" rx="5" fill="#777" />
-                    <text x="167" y="28" text-anchor="middle" fill="white" font-size="8">RB</text>
+                    <circle cx="170" cy="60" r="8" fill="#FF9800" />
+                    <text x="170" y="63" text-anchor="middle" fill="white" font-size="8">X</text>
+                    <text x="170" y="73" text-anchor="middle" fill="white" font-size="7">Toggle View</text>
+                    
+                    <!-- Shoulder buttons (L1/R1) -->
+                    <rect x="70" y="30" width="25" height="10" rx="5" fill="#777" />
+                    <text x="82" y="38" text-anchor="middle" fill="white" font-size="8">L1</text>
+                    <text x="82" y="48" text-anchor="middle" fill="white" font-size="7">Turn Left</text>
+                    
+                    <rect x="165" y="30" width="25" height="10" rx="5" fill="#777" />
+                    <text x="177" y="38" text-anchor="middle" fill="white" font-size="8">R1</text>
+                    <text x="177" y="48" text-anchor="middle" fill="white" font-size="7">Turn Right</text>
+                    
+                    <!-- Trigger buttons (L2/R2) -->
+                    <rect x="70" y="15" width="25" height="10" rx="5" fill="#777" />
+                    <text x="82" y="23" text-anchor="middle" fill="white" font-size="8">L2</text>
+                    <text x="82" y="33" text-anchor="middle" fill="white" font-size="7">Sprint</text>
+                    
+                    <rect x="165" y="15" width="25" height="10" rx="5" fill="#777" />
+                    <text x="177" y="23" text-anchor="middle" fill="white" font-size="8">R2</text>
+                    <text x="177" y="33" text-anchor="middle" fill="white" font-size="7">Sprint</text>
+                    
+                    <!-- Additional buttons -->
+                    <rect x="95" y="50" width="20" height="10" rx="5" fill="#777" />
+                    <text x="105" y="58" text-anchor="middle" fill="white" font-size="8">Select</text>
+                    <text x="105" y="68" text-anchor="middle" fill="white" font-size="7">Show UI</text>
+                    
+                    <rect x="145" y="50" width="20" height="10" rx="5" fill="#777" />
+                    <text x="155" y="58" text-anchor="middle" fill="white" font-size="8">Start</text>
+                    <text x="155" y="68" text-anchor="middle" fill="white" font-size="7">Exit Mode</text>
+                    
+                    <!-- D-Pad (even if no binding) -->
+                    <rect x="95" y="75" width="20" height="20" rx="5" fill="#777" />
+                    <text x="105" y="88" text-anchor="middle" fill="white" font-size="8">D-Pad</text>
+                    <text x="105" y="98" text-anchor="middle" fill="white" font-size="7">(No Binding)</text>
                 </svg>
             </div>
         `;
         this.bindingsContent.appendChild(controllerImage);
         
-        // Add text description of controls
-        const controlsList = document.createElement('div');
-        controlsList.style.fontSize = '14px';
-        controlsList.style.lineHeight = '1.5';
+        // Clear existing bindings list content to prevent duplicates
+        while (this.bindingsList.firstChild) {
+            this.bindingsList.removeChild(this.bindingsList.firstChild);
+        }
         
+        // Add text description of controls
         const controlBindings = [
-            { label: 'Left Stick', action: 'Movement (WASD)' },
+            { label: 'Left Stick', action: 'Move character' },
             { label: 'Right Stick', action: 'Look around' },
-            { label: 'A Button', action: 'Jump' },
-            { label: 'B Button', action: 'Toggle View' },
-            { label: 'LB/RB', action: 'Turn Left/Right' },
-            { label: 'LT/RT', action: 'Sprint' }
+            { label: 'A Button', action: 'Build Action' },
+            { label: 'B Button', action: 'Jump' },
+            { label: 'Y Button', action: 'Toggle Build Mode' },
+            { label: 'X Button', action: 'Toggle View' },
+            { label: 'L1', action: 'Turn Left' },
+            { label: 'R1', action: 'Turn Right' },
+            { label: 'L2', action: 'Sprint' },
+            { label: 'R2', action: 'Sprint' },
+            { label: 'Select', action: 'Show UI' },
+            { label: 'Start', action: 'Exit Mode' },
+            { label: 'D-Pad', action: '(No Binding)' }
         ];
         
         controlBindings.forEach(binding => {
-            const row = document.createElement('div');
-            row.style.display = 'flex';
-            row.style.justifyContent = 'space-between';
-            row.style.marginBottom = '5px';
-            
-            const label = document.createElement('span');
-            label.textContent = binding.label;
-            label.style.fontWeight = 'bold';
-            
-            const action = document.createElement('span');
-            action.textContent = binding.action;
-            
-            row.appendChild(label);
-            row.appendChild(action);
-            controlsList.appendChild(row);
+            const item = document.createElement('li');
+            item.style.marginBottom = '4px'; // Further reduced spacing to fit within view
+            item.style.fontSize = '11px'; // Smaller font to fit more content
+            item.innerHTML = `<strong style="display: inline-block; width: 70px;">${binding.label}</strong>: ${binding.action}`;
+            this.bindingsList.appendChild(item);
         });
         
-        // Add connected gamepads info
-        if (window.navigator.getGamepads) {
-            const gamepads = navigator.getGamepads();
-            if (gamepads && gamepads.some(gp => gp !== null)) {
-                const connectedSection = document.createElement('div');
-                connectedSection.style.marginTop = '15px';
-                connectedSection.style.borderTop = '1px solid rgba(255, 255, 255, 0.3)';
-                connectedSection.style.paddingTop = '10px';
-                
-                const heading = document.createElement('h4');
-                heading.textContent = 'Connected Controllers';
-                heading.style.margin = '0 0 8px 0';
-                heading.style.fontSize = '14px';
-                connectedSection.appendChild(heading);
-                
-                for (let i = 0; i < gamepads.length; i++) {
-                    const gamepad = gamepads[i];
-                    if (gamepad) {
-                        const gamepadInfo = document.createElement('div');
-                        gamepadInfo.textContent = `${i+1}: ${gamepad.id.substring(0, 25)}${gamepad.id.length > 25 ? '...' : ''}`;
-                        gamepadInfo.style.fontSize = '12px';
-                        gamepadInfo.style.opacity = '0.8';
-                        gamepadInfo.style.marginBottom = '4px';
-                        connectedSection.appendChild(gamepadInfo);
-                    }
-                }
-                
-                controlsList.appendChild(connectedSection);
-            }
-        }
-        
-        this.bindingsContent.appendChild(controlsList);
         this.controlsContainer.appendChild(this.bindingsContent);
     }
     

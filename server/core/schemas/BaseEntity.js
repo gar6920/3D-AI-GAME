@@ -15,6 +15,7 @@ class BaseEntity extends Schema {
         this.rotationY = 0;       // Rotation around Y axis (yaw)
         this.value = 1;           // Generic value - meaning depends on implementation
         this.color = "#FFFFFF";   // Color in hex format
+        this.state = "Idle";      // Current action/animation state (e.g., Idle, Walk, Work)
     }
 }
 
@@ -27,5 +28,6 @@ type("number")(BaseEntity.prototype, "z");
 type("number")(BaseEntity.prototype, "rotationY");
 type("number")(BaseEntity.prototype, "value");
 type("string")(BaseEntity.prototype, "color");
+type("string")(BaseEntity.prototype, "state");
 
 module.exports = { BaseEntity }; 

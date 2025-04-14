@@ -251,21 +251,31 @@ start "" "${gamePath}\\launch_game.bat"
      */
     registerRooms() {
         // Register each implementation's room
+        let defaultRoomClass = null; // Variable to hold the specific DefaultRoom class
+
         for (const [implName, implementation] of Object.entries(implementations)) {
             const RoomClass = this.getRoomClass(implementation);
             if (RoomClass) {
                 const roomType = implementation.implementation?.roomType || implName;
                 this.gameServer.define(roomType, RoomClass);
-                
-                // Also define this room as the active room if it's the first one
-                // This maintains compatibility with existing clients
-                if (Object.keys(implementations).indexOf(implName) === 0) {
-                    console.log(`Defining ${roomType} as the active room type`);
-                    this.gameServer.define('default', RoomClass);
+                console.log(`Registered room type: ${roomType}`);
+
+                // Store the room class if this is the 'default' implementation
+                if (implName === 'default') {
+                    defaultRoomClass = RoomClass;
                 }
             } else {
                 console.warn(`No room class found for implementation: ${implName}`);
             }
+        }
+
+        // After looping through all, explicitly define the 'default' room if found
+        if (defaultRoomClass) {
+            console.log(`Defining 'default' implementation as the active room type`);
+            this.gameServer.define('default', defaultRoomClass);
+        } else {
+            console.error("CRITICAL: 'default' implementation not found or has no room class. Cannot define active 'default' room.");
+            // Optional: Fallback or throw error if 'default' is essential
         }
     }
     

@@ -200,8 +200,8 @@
     <!-- Action Management - REMOVED from here -->
     <!-- <script src="js/core/ActionManager.js"></script> -->
     
-    <!-- Main loader script (Deferred) -->
-    <script src="js/core/main.js" defer></script>
+    <!-- Your main application script - Corrected Path -->
+    <script type="module" src="js/core/main.js" defer></script>
     
     <!-- Local multiplayer scripts -->
             
@@ -275,7 +275,6 @@
                                 if (typeof window.init === 'function') {
                                     if (!window.gameInitialized) { // Prevent re-init
                                        window.gameInitialized = true;
-                                       
                                        // Listen for the game engine ready event
                                        window.addEventListener('gameEngineReady', function handleGameReady() {
                                             console.log("gameEngineReady event received, calling startGameLogic for gamepad.");

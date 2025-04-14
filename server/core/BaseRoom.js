@@ -175,8 +175,8 @@ class BaseRoom extends Room {
      * Base implementation handles player movement and physics
      */
     update() {
-        // Calculate delta time (assuming 30fps)
-        const deltaTime = 1/30;
+        // Calculate delta time (using this.clock for accuracy)
+        const deltaTime = this.clock.deltaTime / 1000; // Convert ms to seconds
         
         // Process player inputs and update positions
         this.state.players.forEach((player, sessionId) => {
@@ -191,6 +191,14 @@ class BaseRoom extends Room {
         if (this.spawnEnabled) {
             this.updateEntitySpawning(deltaTime);
         }
+        
+        // --- BEGIN Server-Authoritative NPC Update --- 
+        this.state.entities.forEach((entity) => {
+            if (entity.type === 'npc') {
+                this._updateNpc(entity, deltaTime);
+            }
+        });
+        // --- END Server-Authoritative NPC Update ---
         
         // Call implementation-specific update
         this.implementationUpdate(deltaTime);
@@ -723,6 +731,117 @@ class BaseRoom extends Room {
                 structure.height = 1;
                 structure.depth = 1;
         }
+    }
+
+    // --- NPC Specific Logic --- 
+
+    _initializeNpcState(npcEntity) {
+        // Initialize internal server-side state for an NPC
+        // Prefix with _ to denote they are not part of the synchronized schema (except 'state')
+        npcEntity._currentState = 'Idle'; // Start Idle
+        npcEntity.state = 'Idle'; // Update synchronized state
+        npcEntity._stateTimer = 0;
+        npcEntity._minStateTime = 5; // Seconds
+        npcEntity._maxStateTime = 15; // Seconds
+        npcEntity._nextStateChangeTime = this._getRandomBetween(npcEntity._minStateTime, npcEntity._maxStateTime);
+        npcEntity._targetPosition = null; // { x: number, z: number }
+        npcEntity._moveSpeed = 1.5; // Units per second
+        npcEntity._turnSpeed = Math.PI; // Radians per second
+        npcEntity._wanderRadius = 10; // Max distance from origin (0,0)
+        npcEntity._possibleStates = ['Walk', 'Idle', 'Work']; // Cycle through these
+        console.log(`Initialized server state for NPC: ${npcEntity.id}`);
+    }
+
+    _updateNpc(npcEntity, deltaTime) {
+        // Initialize state if it hasn't been done yet
+        if (npcEntity._currentState === undefined) {
+            this._initializeNpcState(npcEntity);
+        }
+
+        // Update state timer
+        npcEntity._stateTimer += deltaTime;
+
+        // Check if it's time to change state
+        if (npcEntity._stateTimer >= npcEntity._nextStateChangeTime) {
+            npcEntity._stateTimer = 0;
+            npcEntity._nextStateChangeTime = this._getRandomBetween(npcEntity._minStateTime, npcEntity._maxStateTime);
+
+            // Cycle to next state
+            const currentIndex = npcEntity._possibleStates.indexOf(npcEntity._currentState);
+            const nextIndex = (currentIndex + 1) % npcEntity._possibleStates.length;
+            const nextState = npcEntity._possibleStates[nextIndex];
+
+            if (nextState !== npcEntity._currentState) {
+                npcEntity._currentState = nextState;
+                npcEntity.state = nextState; // Update synchronized state for clients
+                // console.log(`NPC ${npcEntity.id} changed server state to: ${nextState}`);
+                
+                // If changing away from walking, clear target
+                if (npcEntity._currentState !== 'Walk') {
+                    npcEntity._targetPosition = null;
+                }
+            }
+        }
+
+        // Perform actions based on current state
+        if (npcEntity._currentState === 'Walk') {
+            this._updateNpcMovement(npcEntity, deltaTime);
+        }
+    }
+
+    _updateNpcMovement(npcEntity, deltaTime) {
+        // If no target, pick a new one within wander radius
+        if (!npcEntity._targetPosition) {
+            const angle = Math.random() * Math.PI * 2;
+            const radius = Math.random() * npcEntity._wanderRadius;
+            npcEntity._targetPosition = {
+                x: Math.cos(angle) * radius,
+                z: Math.sin(angle) * radius
+            };
+            // console.log(`NPC ${npcEntity.id} server target:`, npcEntity._targetPosition);
+        }
+
+        // Calculate direction and distance to target (on XZ plane)
+        const dx = npcEntity._targetPosition.x - npcEntity.x;
+        const dz = npcEntity._targetPosition.z - npcEntity.z;
+        const distance = Math.sqrt(dx * dx + dz * dz);
+
+        // Check if reached target
+        if (distance < 0.5) {
+            npcEntity._targetPosition = null; // Clear target to pick a new one next walk cycle
+            // Optionally, could force state change here, but timer logic handles it
+        } else {
+            // Normalize direction vector
+            const dirX = dx / distance;
+            const dirZ = dz / distance;
+
+            // Move the entity
+            const moveDistance = npcEntity._moveSpeed * deltaTime;
+            npcEntity.x += dirX * moveDistance;
+            npcEntity.z += dirZ * moveDistance;
+
+            // Calculate target rotation and smoothly turn
+            const targetRotationY = Math.atan2(dirX, dirZ);
+            // Simple linear interpolation for rotation (can be improved with shortest angle)
+            let diff = targetRotationY - npcEntity.rotationY;
+            // Normalize angle difference to [-PI, PI]
+            while (diff < -Math.PI) diff += 2 * Math.PI;
+            while (diff > Math.PI) diff -= 2 * Math.PI;
+
+            const turnStep = npcEntity._turnSpeed * deltaTime;
+            if (Math.abs(diff) < turnStep) {
+                npcEntity.rotationY = targetRotationY;
+            } else {
+                npcEntity.rotationY += Math.sign(diff) * turnStep;
+            }
+            // Normalize final rotationY to [-PI, PI]
+            while (npcEntity.rotationY < -Math.PI) npcEntity.rotationY += 2 * Math.PI;
+            while (npcEntity.rotationY > Math.PI) npcEntity.rotationY -= 2 * Math.PI;
+        }
+    }
+
+    _getRandomBetween(min, max) {
+        return Math.random() * (max - min) + min;
     }
 }
 
