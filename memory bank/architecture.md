@@ -56,12 +56,32 @@ The 3D AI Game Platform is a modular, multiplayer 3D web game built with Three.j
 - Behaviors (movement, animation state, etc.) are attached per entity in the definition.
 - The client uses `EntityFactory` to instantiate matching visual/game objects for each entity type.
 
-### **How to Add a New NPC (Current System)**
+### **How to Add a New NPC/Entity (Current System)**
 
-1. **Model File:** Place the NPC's GLB model file (e.g., `new_npc1.glb`) in `client/assets/models/`. The filename MUST exactly match the `entityId` you will define in the next step.
-2. **Server Definition:** Add a new entry to the `npcDefinitions` array in `server/implementations/default/npcs.js`. Define its unique `id` (matching the model filename), `type: 'npc'`, initial `position`, `rotation`, and `state` (usually 'Idle').
-3. **Client Code:** No code changes should be needed *if* the standard post-load processing (scaling, traversal, animation setup) in `NPC.js` works for the new model. The client automatically uses the `entityId` to load the corresponding `.glb` file. If your NPC uses different animation clip names, you may need to update or extend the animation mapping in `NPC.js`.
-4. **Run:** Start the server and client. The new NPC should appear at its defined location in its initial state and synchronize across all clients.
+The system is designed for easily adding new Non-Player Characters (NPCs) or other interactive entities by defining them on the server. Multiple instances of the same *type* of NPC can be created using the same model and behavior logic but placed at different locations.
+
+1.  **Model File (`client/assets/models/`):**
+    *   Place the GLB model file (e.g., `robokeeper1.glb`, `new_monster.glb`) in this directory. The filename here serves as the **`modelId`**.
+
+2.  **Server Definition (`server/implementations/default/npcs.js`):**
+    *   **Add/Modify Entry:** Add a new object to the `npcDefinitions` array for each **instance** you want to create.
+    *   **`id`:** Assign a unique instance identifier (e.g., `robokeeper_guard2`, `monster_alpha`). This is the entity's unique ID in the game state.
+    *   **`type`:** Set to `'npc'` (or `'entity'` for non-interactive objects).
+    *   **`modelId`:** Specify the filename (without `.glb`) of the model to use (e.g., `'robokeeper1'`, `'new_monster'`). This allows multiple definitions (`id`s) to share the same visual model.
+    *   **Position/Rotation:** Set initial `x`, `y`, `z`, and `rotationY`.
+    *   **`state`:** Initial animation state (e.g., `'Idle'`, `'Walk'`). Must match a key in the `animationMap`.
+    *   **`animationMap`:** (Optional) Define or reuse an object mapping animation clip names from the GLB file to standardized names (e.g., `{ 'Animation|Idle': 'Idle', 'Animation|Walk': 'Walk' }`). If omitted or empty, the NPC will have no animations. You can define these maps as constants in the file for reuse.
+    *   **`behavior`:** (Optional) Assign a behavior function (defined elsewhere in the file) that dictates the NPC's logic (movement, state changes). This function receives the entity state, delta time, and room state. You can define reusable behavior functions.
+
+3.  **Client Code (`client/js/core/NPC.js`):**
+    *   **No Changes Needed (Typically):** The core `NPC.js` is designed to be generic. It uses the `modelId` from the server state to load the correct model (`assets/models/${modelId}.glb`). It also uses the `animationMap` from the server state to set up animations. Standard scaling and post-processing are applied.
+    *   **(Rare) Custom Logic:** Only if a specific model requires unique client-side handling (complex setup, unusual structure) would you potentially need to modify or extend `NPC.js` or create a dedicated client class (though the goal is to avoid this via robust server definitions).
+
+4.  **Run:** Restart the server (`./start_server`) and connect with the client. The new NPC instance(s) should appear at their defined locations, using the specified model, animations, and behaviors.
+
+**Example:** You could define `robokeeper1` and `robokeeper_guard2` both using `modelId: 'robokeeper1'`, `animationMap: robokeeperAnimationMap`, and `behavior: robokeeperBehavior`, but with different `id`s and positions.
+
+This approach allows creating diverse NPC populations and variations by reusing assets and logic, configured entirely through the server-side `npcs.js` definitions.
 
 **Note:** Some NPCs (like `robot_shark1`) may require custom or simplified post-load processing due to model/visibility quirks. See `NPC.js` for details.
 
