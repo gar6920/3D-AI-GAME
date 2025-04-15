@@ -261,120 +261,50 @@ function addReconnectButton() {
 
 // Function to initialize networking for multiplayer
 async function initNetworking() {
-    // Get endpoint from gameConfig if available, or use default
-    const endpoint = window.gameConfig?.networkSettings?.serverUrl || "ws://localhost:3000";
-    
-    // Get implementation from URL parameters
-    const urlParams = new URLSearchParams(window.location.search);
-    const implementation = urlParams.get('implementation');
-    
-    // Get room name based on implementation or use 'active' as fallback
-    const roomName = implementation || 'active';
-    
-    console.log("Initializing networking system...");
-    
-    try {
-        console.log(`Connecting to Colyseus server at: ${endpoint}`);
-        
-        // Create client if needed
-        if (!client) {
-            try {
-                // Check which client constructor is available (handles both 0.14.x and 0.16.x versions)
-                if (typeof Colyseus !== 'undefined') {
-                    if (typeof Colyseus.Client === 'function') {
-                        client = new Colyseus.Client(endpoint);
-                    } else if (typeof colyseus !== 'undefined' && typeof colyseus.Client === 'function') {
-                        client = new colyseus.Client(endpoint);
-                    } else {
-                        // Direct instantiation for older versions
-                        client = new Client(endpoint);
-                    }
-                } else if (typeof Client === 'function') {
-                    client = new Client(endpoint);
-                } else {
-                    throw new Error("Colyseus client library not found");
-                }
-                console.log("Colyseus client created successfully");
-            } catch (clientError) {
-                console.error("Failed to create Colyseus client:", clientError);
-                throw new Error(`Failed to create client: ${clientError.message}`);
-            }
-        }
-        
-        // Try to join the room
-        try {
-            console.log(`Attempting to join room: ${roomName}`);
-            room = await client.joinOrCreate(roomName, {
-                name: `Player_${Math.floor(Math.random() * 1000)}`,
-                color: getRandomColor()
-            });
-            console.log(`Joined room successfully: ${room.name}`);
-            
-            // Store room in global scope
-            window.room = room;
-            
-            // Initialize object collections - use a single source of truth
-            window.otherPlayers = {};
-            window.operators = {};
-            window.staticEntities = {};
-            window.trees = {};
-            window.rocks = {};
-            
-            // Setup message handlers
-            setupMessageHandlers();
-            
-            // Setup automatic reconnection
-            setupReconnection(room, client);
-            
-            // Wait for the initial state before setting up listeners
-            room.onStateChange.once((state) => {
-                console.log("Initial state received:", state);
-                setupRoomListeners(room);
-                setupRoomPlayerListeners(room);
-                
-                // Register updateRemotePlayers with the animation loop
-                if (typeof window.registerAnimationCallback === 'function') {
-                    window.registerAnimationCallback(window.updateRemotePlayers);
-                    console.log("Registered updateRemotePlayers with animation loop");
-                } else {
-                    // Set up a fallback timer if animation callback registration is not available
-                    console.log("Setting up fallback timer for remote player updates");
-                    window.playerUpdateInterval = setInterval(window.updateRemotePlayers, 1000/60); // 60fps
-                }
-                
-                // Explicitly create local player object
-                window.myPlayer = new Player({ 
-                    id: window.room.sessionId, 
-                    isLocalPlayer: true,
-                    value: 1, 
-                    color: "#FFFF00",
-                    scene: window.scene
-                });
-                console.log("Local player created and linked to existing entity mesh:", window.myPlayer);
-                
-                // Initialize BuildingModeManager structure listeners
-                if (window.buildingModeManager && typeof window.buildingModeManager.initializeStructureListeners === 'function') {
-                    console.log("[network-core] Initial state received, calling initializeStructureListeners...");
-                    window.buildingModeManager.initializeStructureListeners(room);
-                } else {
-                    console.warn("[network-core] BuildingModeManager or initializeStructureListeners not found!");
-                }
-                
-                if (typeof animate === 'function') {
-                    animate();
-                }
-                window.dispatchEvent(new CustomEvent('avatarReady'));
-            });
-            
-            return room;
-        } catch (roomError) {
-            console.error("Error joining room:", roomError);
-            throw roomError;
-        }
-    } catch (error) {
-        console.error("Error connecting to server:", error);
-        throw error;
+    console.log("[InitNetworking] Starting...");
+    // Ensure THREE is loaded
+    if (typeof THREE === 'undefined') {
+        console.error("THREE is not defined. Make sure Three.js is loaded before network-core.js");
+        return Promise.reject("THREE library not found.");
     }
+
+    client = new Colyseus.Client(endpoint);
+    console.log(`[InitNetworking] Colyseus client created, endpoint: ${endpoint}`);
+
+    try {
+        console.log('[InitNetworking] Attempting to join room: default...');
+        // Join the default room
+        room = await client.joinOrCreate('default', { /* options */ });
+        console.log(`[InitNetworking] Successfully joined room: ${room.name}, Session ID: ${room.sessionId}`);
+        window.currentRoom = room; // Make room globally accessible if needed
+
+        // Wait for the first state patch before setting up listeners that depend on it
+        room.onStateChange.once((state) => {
+            console.log('[InitNetworking] First state received, setting up listeners...');
+            // Initialize game state listeners AFTER the first state is confirmed
+            setupRoomPlayerListeners(room); // Setup player specific listeners
+            setupRoomListeners(room); // Setup general entity listeners
+            setupMessageHandlers(room); // Setup custom message handlers
+            console.log('[InitNetworking] Room listeners setup complete.');
+
+            // Any other setup that depends on initial state can go here
+            // For example, initializing UI elements based on state
+        });
+
+        // Setup reconnection logic (can be done immediately)
+        setupReconnection(room, client);
+
+        // Resolve the promise when successfully joined
+        // (Removed resolve from here, should be handled by the caller if needed)
+
+    } catch (e) {
+        console.error("JOIN ERROR", e);
+        showErrorMessage("Failed to connect to the server. Please try again later.");
+        addReconnectButton(); // Add a button to manually reconnect
+        return Promise.reject(e); // Reject the promise on error
+    }
+    console.log("[InitNetworking] Completed successfully.");
+    return room; // Return the room object on success
 }
 
 // Setup message handlers
@@ -848,135 +778,52 @@ function setupRoomPlayerListeners(room) {
 }
 
 // Setup entity listeners for the room
-function setupRoomListeners(room) {
-    if (!room || !room.state) {
-        console.error('[setupRoomListeners] Room or state not available');
-        return;
-    }
+async function setupRoomListeners(room) {
+    console.log('[setupRoomListeners] Entered function');
+    console.log('[setupRoomListeners] Received Room object:', room);
     
-    console.log('[setupRoomListeners] Setting up entity listeners');
-    
-    // Ensure visuals collections exist
+    // Ensure visuals namespaces exist
     window.visuals = window.visuals || {};
+    window.visuals.players = window.visuals.players || {};
     window.visuals.operators = window.visuals.operators || {};
     window.visuals.staticEntities = window.visuals.staticEntities || {};
     
-    // Check for entities collection
-    if (room.state.entities) {
-        console.log('[setupRoomListeners] Processing entities:', room.state.entities.size);
+    console.log(`[NetworkCore Setup] Initial entities count: ${room.state.entities.size}`);
+    console.log('[NetworkCore Setup] About to loop through initial entities...');
+    
+    // Initial entities check
+    room.state.entities.forEach((entity, entityId) => {
+        console.log(`[NetworkCore Setup Initial Entity] Received entityId: ${entityId}, type: ${entity.type}`);
         
-        // Process existing entities
-        room.state.entities.forEach((entity, entityId) => {
-            console.log(`Processing entity: ${entityId}, type: ${entity.type}`);
-            
-            // Handle different entity types
-            if (entity.type === 'operator') {
-                if (typeof window.createOperatorVisual === 'function') {
-                    window.createOperatorVisual(entity, entityId);
-                }
-            } else if (entity.type === 'staticValueEntity') {
-                if (typeof window.createStaticEntityVisual === 'function') {
-                    window.createStaticEntityVisual(entity, entityId);
-                }
-            } else if (entity.type === 'tree') {
-                if (window.entityHandlers?.tree?.create) {
-                    window.entityHandlers.tree.create(entity, entityId);
-                }
-            } else if (entity.type === 'npc') {
-                // Handle NPC entities
-                console.log(`Attempting to create visual for NPC: ${entityId}`);
-                if (typeof window.createNpcVisual === 'function') {
-                    window.createNpcVisual(entity, entityId);
-                } else {
-                    console.warn(`window.createNpcVisual function not found for NPC ${entityId}`);
-                }
-                // --- ADD ONCHANGE HANDLER FOR NPCs (LERP LOGIC) ---
-                if (typeof entity.onChange === 'function') {
-                    entity.onChange = (changes) => {
-                        const npcInstance = window.NPC?.npcs?.get(entityId);
-                        if (npcInstance && npcInstance.mesh) {
-                            // Lerp position for smooth movement
-                            const lerpFactor = 0.3;
-                            npcInstance.mesh.position.x = THREE.MathUtils.lerp(
-                                npcInstance.mesh.position.x, entity.x, lerpFactor
-                            );
-                            npcInstance.mesh.position.y = THREE.MathUtils.lerp(
-                                npcInstance.mesh.position.y, entity.y, lerpFactor
-                            );
-                            npcInstance.mesh.position.z = THREE.MathUtils.lerp(
-                                npcInstance.mesh.position.z, entity.z, lerpFactor
-                            );
-                            npcInstance.mesh.rotation.y = entity.rotationY;
-                            // Optionally update animation/state
-                            if (entity.state !== undefined && npcInstance.state !== entity.state) {
-                                npcInstance.playAnimation(entity.state);
-                            }
-                        }
-                    };
-                }
+        if (entity.type === 'player' && entityId !== room.sessionId) {
+            // Handle existing players (visuals might be created by GameEngine on join)
+            console.log(`[NetworkCore] Handling initial non-local player: ${entityId}`);
+        } else if (entity.type === 'operator') {
+            if (typeof window.createOperatorVisual === 'function') {
+                window.createOperatorVisual(entity, entityId);
             }
-        });
-        
-        // Listen for entity added events
-        if (typeof room.state.entities.onAdd === 'function') {
-            room.state.entities.onAdd = (entity, entityId) => {
-                console.log(`Entity added: ${entityId}, type: ${entity.type}`);
-                
-                // Handle different entity types
-                if (entity.type === 'operator') {
-                    if (typeof window.createOperatorVisual === 'function') {
-                        window.createOperatorVisual(entity, entityId);
-                    }
-                } else if (entity.type === 'staticValueEntity') {
-                    if (typeof window.createStaticEntityVisual === 'function') {
-                        window.createStaticEntityVisual(entity, entityId);
-                    }
-                } else if (entity.type === 'tree') {
-                    if (window.entityHandlers?.tree?.create) {
-                        window.entityHandlers.tree.create(entity, entityId);
-                    }
-                } else if (entity.type === 'npc') {
-                    // Handle NPC entities
-                    console.log(`Attempting to create visual for NPC: ${entityId}`);
-                    if (typeof window.createNpcVisual === 'function') {
-                        window.createNpcVisual(entity, entityId);
-                    } else {
-                        console.warn(`window.createNpcVisual function not found for NPC ${entityId}`);
-                    }
-                    // --- ADD ONCHANGE HANDLER FOR NPCs (LERP LOGIC) ---
-                    if (typeof entity.onChange === 'function') {
-                        entity.onChange = (changes) => {
-                            const npcInstance = window.NPC?.npcs?.get(entityId);
-                            if (npcInstance && npcInstance.mesh) {
-                                // Lerp position for smooth movement
-                                const lerpFactor = 0.3;
-                                npcInstance.mesh.position.x = THREE.MathUtils.lerp(
-                                    npcInstance.mesh.position.x, entity.x, lerpFactor
-                                );
-                                npcInstance.mesh.position.y = THREE.MathUtils.lerp(
-                                    npcInstance.mesh.position.y, entity.y, lerpFactor
-                                );
-                                npcInstance.mesh.position.z = THREE.MathUtils.lerp(
-                                    npcInstance.mesh.position.z, entity.z, lerpFactor
-                                );
-                                npcInstance.mesh.rotation.y = entity.rotationY;
-                                // Optionally update animation/state
-                                if (entity.state !== undefined && npcInstance.state !== entity.state) {
-                                    npcInstance.playAnimation(entity.state);
-                                }
-                            }
-                        };
-                    }
-                }
-            };
-        }
-        
-        // Listen for entity changes (for existing NPCs)
-        if (typeof room.state.entities.onChange === 'function') {
-            room.state.entities.onChange = (entity, entityId) => {
-                if (entity.type === 'npc') {
+        } else if (entity.type === 'staticValueEntity') {
+            if (typeof window.createStaticEntityVisual === 'function') {
+                window.createStaticEntityVisual(entity, entityId);
+            }
+        } else if (entity.type === 'tree') {
+            if (window.entityHandlers?.tree?.create) {
+                window.entityHandlers.tree.create(entity, entityId);
+            }
+        } else if (entity.type === 'npc') {
+            // Handle NPC entities
+            console.log(`Attempting to create visual for NPC: ${entityId}`);
+            if (typeof window.createNpcVisual === 'function') {
+                window.createNpcVisual(entity, entityId);
+            } else {
+                console.warn(`window.createNpcVisual function not found for NPC ${entityId}`);
+            }
+            // --- ADD ONCHANGE HANDLER FOR NPCs (LERP LOGIC) ---
+            if (typeof entity.onChange === 'function') {
+                entity.onChange = (changes) => {
                     const npcInstance = window.NPC?.npcs?.get(entityId);
                     if (npcInstance && npcInstance.mesh) {
+                        // Lerp position for smooth movement
                         const lerpFactor = 0.3;
                         npcInstance.mesh.position.x = THREE.MathUtils.lerp(
                             npcInstance.mesh.position.x, entity.x, lerpFactor
@@ -988,45 +835,175 @@ function setupRoomListeners(room) {
                             npcInstance.mesh.position.z, entity.z, lerpFactor
                         );
                         npcInstance.mesh.rotation.y = entity.rotationY;
+                        // Optionally update animation/state
                         if (entity.state !== undefined && npcInstance.state !== entity.state) {
                             npcInstance.playAnimation(entity.state);
                         }
                     }
-                }
-            };
+                };
+            }
+        } else if (entity.type === 'entity') {
+            console.log(`[setupRoomListeners initialLoop] ENTERED 'entity' block for: ${entityId}`);
+            if (!window.visuals.staticEntities[entityId]) {
+                console.log(`[setupRoomListeners initialLoop] Visual DOES NOT exist for ${entityId}. Attempting loadAndAddStaticEntity...`);
+                loadAndAddStaticEntity(entity, entityId);
+                console.log(`[setupRoomListeners initialLoop] AFTER calling loadAndAddStaticEntity for ${entityId}.`);
+            } else {
+                console.warn(`[setupRoomListeners initialLoop] Visual ALREADY EXISTS for entity ${entityId}. Skipping load.`);
+            }
+            console.log(`[setupRoomListeners initialLoop] EXITED 'entity' block for: ${entityId}`);
         }
-        
-        // Listen for entity removed events
-        if (typeof room.state.entities.onRemove === 'function') {
-            room.state.entities.onRemove = (entity, entityId) => {
-                console.log(`Entity removed: ${entityId}, type: ${entity.type}`);
-                
-                // Handle different entity types for removal
-                if (entity.type === 'operator') {
-                    if (typeof window.removeOperatorVisual === 'function') {
-                        window.removeOperatorVisual(entityId);
+    });
+    
+    room.state.entities.onAdd = (entity, entityId) => {
+        console.log(`[NetworkCore onAdd] Received entityId: ${entityId}, type: ${entity.type}`);
+        console.log(`[NetworkCore] Entity added: ID=${entityId}, Type=${entity.type}`);
+
+        // Skip adding visual for the local player, handled by GameEngine
+        if (entity.type === 'player' && entityId === room.sessionId) {
+            return;
+        }
+
+        // Handle different entity types
+        if (entity.type === 'operator') {
+            if (typeof window.createOperatorVisual === 'function') {
+                window.createOperatorVisual(entity, entityId);
+            }
+        } else if (entity.type === 'staticValueEntity') {
+            if (typeof window.createStaticEntityVisual === 'function') {
+                window.createStaticEntityVisual(entity, entityId);
+            }
+        } else if (entity.type === 'tree') {
+            if (window.entityHandlers?.tree?.create) {
+                window.entityHandlers.tree.create(entity, entityId);
+            }
+        } else if (entity.type === 'npc') {
+            // Handle NPC entities
+            console.log(`Attempting to create visual for NPC: ${entityId}`);
+            if (typeof window.createNpcVisual === 'function') {
+                window.createNpcVisual(entity, entityId);
+            } else {
+                console.warn(`window.createNpcVisual function not found for NPC ${entityId}`);
+            }
+            // --- ADD ONCHANGE HANDLER FOR NPCs (LERP LOGIC) ---
+            if (typeof entity.onChange === 'function') {
+                entity.onChange = (changes) => {
+                    const npcInstance = window.NPC?.npcs?.get(entityId);
+                    if (npcInstance && npcInstance.mesh) {
+                        // Lerp position for smooth movement
+                        const lerpFactor = 0.3;
+                        npcInstance.mesh.position.x = THREE.MathUtils.lerp(
+                            npcInstance.mesh.position.x, entity.x, lerpFactor
+                        );
+                        npcInstance.mesh.position.y = THREE.MathUtils.lerp(
+                            npcInstance.mesh.position.y, entity.y, lerpFactor
+                        );
+                        npcInstance.mesh.position.z = THREE.MathUtils.lerp(
+                            npcInstance.mesh.position.z, entity.z, lerpFactor
+                        );
+                        npcInstance.mesh.rotation.y = entity.rotationY;
+                        // Optionally update animation/state
+                        if (entity.state !== undefined && npcInstance.state !== entity.state) {
+                            npcInstance.playAnimation(entity.state);
+                        }
                     }
-                } else if (entity.type === 'staticValueEntity') {
-                    if (typeof window.removeStaticEntityVisual === 'function') {
-                        window.removeStaticEntityVisual(entityId);
-                    }
-                } else if (entity.type === 'tree') {
-                    if (window.entityHandlers?.tree?.remove) {
-                        window.entityHandlers.tree.remove(entityId);
-                    }
-                } else if (entity.type === 'npc') {
-                    // Handle NPC entity removal
-                    console.log(`Attempting to remove visual for NPC: ${entityId}`);
-                    if (typeof window.removeNpcVisual === 'function') {
-                        window.removeNpcVisual(entityId);
-                    } else {
-                        console.warn(`window.removeNpcVisual function not found for NPC ${entityId}`);
+                };
+            }
+        } else if (entity.type === 'entity') {
+            console.log(`[NetworkCore onAdd] Creating visual for generic entity: ${entityId}`);
+            // Directly call the refined loading function
+            loadAndAddStaticEntity(entity, entityId);
+        } else {
+            console.log(`[NetworkCore onAdd] Unknown entity type: ${entity.type}`);
+        }
+    };
+    
+    // Listen for entity changes (for existing NPCs)
+    if (typeof room.state.entities.onChange === 'function') {
+        room.state.entities.onChange = (entity, entityId) => {
+            if (entity.type === 'npc') {
+                const npcInstance = window.NPC?.npcs?.get(entityId);
+                if (npcInstance && npcInstance.mesh) {
+                    const lerpFactor = 0.3;
+                    npcInstance.mesh.position.x = THREE.MathUtils.lerp(
+                        npcInstance.mesh.position.x, entity.x, lerpFactor
+                    );
+                    npcInstance.mesh.position.y = THREE.MathUtils.lerp(
+                        npcInstance.mesh.position.y, entity.y, lerpFactor
+                    );
+                    npcInstance.mesh.position.z = THREE.MathUtils.lerp(
+                        npcInstance.mesh.position.z, entity.z, lerpFactor
+                    );
+                    npcInstance.mesh.rotation.y = entity.rotationY;
+                    if (entity.state !== undefined && npcInstance.state !== entity.state) {
+                        npcInstance.playAnimation(entity.state);
                     }
                 }
-            };
-        }
-    } else {
-        console.log('[setupRoomListeners] No entities collection found');
+            } else if (entity.type === 'entity') {
+                const mesh = window.visuals.staticEntities[entityId];
+                if (mesh) {
+                    // Directly update mesh properties
+                    mesh.position.set(entity.x ?? mesh.position.x, entity.y ?? mesh.position.y, entity.z ?? mesh.position.z);
+                    mesh.rotation.y = entity.rotationY ?? mesh.rotation.y;
+                    const scale = entity.scale ?? 1;
+                    mesh.scale.set(scale, scale, scale);
+                } else {
+                    console.warn(`[NetworkCore onChange] Visual for entity ${entityId} not found.`);
+                }
+            }
+        };
+    }
+    
+    // Listen for entity removed events
+    if (typeof room.state.entities.onRemove === 'function') {
+        room.state.entities.onRemove = (entity, entityId) => {
+            console.log(`Entity removed: ${entityId}, type: ${entity.type}`);
+            
+            // Handle different entity types for removal
+            if (entity.type === 'operator') {
+                if (typeof window.removeOperatorVisual === 'function') {
+                    window.removeOperatorVisual(entityId);
+                }
+            } else if (entity.type === 'staticValueEntity') {
+                if (typeof window.removeStaticEntityVisual === 'function') {
+                    window.removeStaticEntityVisual(entityId);
+                }
+            } else if (entity.type === 'tree') {
+                if (window.entityHandlers?.tree?.remove) {
+                    window.entityHandlers.tree.remove(entityId);
+                }
+            } else if (entity.type === 'npc') {
+                // Handle NPC entity removal
+                console.log(`Attempting to remove visual for NPC: ${entityId}`);
+                if (typeof window.removeNpcVisual === 'function') {
+                    window.removeNpcVisual(entityId);
+                } else {
+                    console.warn(`window.removeNpcVisual function not found for NPC ${entityId}`);
+                }
+            } else if (entity.type === 'entity') {
+                const mesh = window.visuals.staticEntities[entityId];
+                if (mesh) {
+                    console.log(`[NetworkCore onRemove] Removing visual for entity: ${entityId}`);
+                    if (mesh.parent) {
+                        mesh.parent.remove(mesh);
+                    }
+                    // Dispose geometry/material
+                    mesh.traverse(child => {
+                        if (child.isMesh) {
+                            child.geometry.dispose();
+                            if (child.material.isMaterial) {
+                                child.material.dispose();
+                            } else if (Array.isArray(child.material)) {
+                                child.material.forEach(material => material.dispose());
+                            }
+                        }
+                    });
+                    delete window.visuals.staticEntities[entityId];
+                } else {
+                    console.warn(`[NetworkCore onRemove] Visual for entity ${entityId} not found.`);
+                }
+            }
+        };
     }
     
     console.log('[setupRoomListeners] Entity listeners setup complete');
@@ -1090,17 +1067,28 @@ window.cleanupNetworking = function() {
 window.initNetworking = initNetworking;
 window.setupMessageHandlers = setupMessageHandlers;
 window.sendPlayerCollision = sendPlayerCollision;
-window.getRandomColor = getRandomColor;
-window.getColorForValue = getColorForValue;
-window.CSS2DObject = CSS2DObject;
-window.CSS2DRenderer = CSS2DRenderer;
 window.onPlayerJoin = onPlayerJoin;
-window.onPlayerLeave = onPlayerLeave;
-window.setupMessageHandlers = setupMessageHandlers;
-window.sendPlayerCollision = sendPlayerCollision;
-window.getRandomColor = getRandomColor;
-window.getColorForValue = getColorForValue;
-window.CSS2DObject = CSS2DObject;
-window.CSS2DRenderer = CSS2DRenderer;
-window.onPlayerJoin = onPlayerJoin;
-window.onPlayerLeave = onPlayerLeave;
+window.createRemotePlayerObject = createRemotePlayerObject;
+window.setupRoomListeners = setupRoomListeners;
+window.cleanupNetworking = cleanupNetworking;
+
+// --- Helper Function for Static Entity Loading ---
+function loadAndAddStaticEntity(entity, entityId) {
+    console.log(`[loadAndAddStaticEntity ENTRY] Using EntityFactory for entityId: ${entityId}, Type: ${entity.type}`);
+    if (!window.entityFactory || !window.scene) {
+        console.error(`[loadAndAddStaticEntity] EntityFactory or Scene not available for ${entityId}.`);
+        return;
+    }
+    // Ensure id is set
+    const params = { ...entity, id: entityId };
+    const entityInstance = window.entityFactory.createEntity('entity', params);
+    if (entityInstance && entityInstance.mesh) {
+        window.scene.add(entityInstance.mesh);
+        window.visuals.staticEntities[entityId] = entityInstance.mesh;
+        console.log(`[loadAndAddStaticEntity] ${entityId} added to scene and visuals using EntityFactory.`);
+    } else {
+        console.error(`[loadAndAddStaticEntity] Failed to create or add mesh for ${entityId}.`);
+    }
+}
+
+console.log('network-core.js loaded');

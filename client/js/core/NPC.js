@@ -49,7 +49,7 @@ class NPC extends Entity {
         // --- END DEBUG LOGGING ---
 
         // Attach Colyseus .listen handlers for all fields we care about
-        ['x', 'y', 'z', 'state', 'rotationY', 'animationMap'].forEach(field => {
+        ['x', 'y', 'z', 'state', 'rotationY', 'animationMap', 'scale'].forEach(field => {
             if (typeof entity.listen === 'function') {
                 entity.listen(field, (value, prev) => {
                     console.log(`[NPC ${entityId}][LISTEN] Field '${field}' changed: ${prev} -> ${value}`);
@@ -76,6 +76,11 @@ class NPC extends Entity {
                         });
                         console.log(`[NPC ${entityId}][LISTEN] Updated animationMap:`, npcInstance.animationMap);
                         // Note: Re-mapping animations in _loadModel might be needed if this happens *after* load
+                    } else if (field === 'scale') {
+                        if (npcInstance.modelPlaceholder) {
+                            npcInstance.modelPlaceholder.scale.set(value, value, value);
+                            console.log(`NPC ${entityId}: Scale updated to ${value} via onChange.`);
+                        }
                     }
                 });
             } else {
@@ -166,12 +171,12 @@ class NPC extends Entity {
             const loadedModel = gltf.scene;
 
             // Optional: Scale or adjust the loaded model if needed
-            loadedModel.scale.set(0.2, 0.2, 0.2); // Reduce scale to make NPC smaller in the game world
+            // loadedModel.scale.set(0.2, 0.2, 0.2); // Reduced scale to make NPC smaller in the game world
             // console.log(`NPC ${this.id}: Model structure:`, loadedModel); // Reduced verbosity
             loadedModel.traverse((child) => {
                 // console.log(`NPC ${this.id}: Child - Name: ${child.name}, Type: ${child.type}, Scale: ${child.scale.x},${child.scale.y},${child.scale.z}, Position: ${child.position.x},${child.position.y},${child.position.z}`); // Reduced verbosity
                 // Ensure child scale is normalized
-                child.scale.set(0.2, 0.2, 0.2); // Apply smaller scale to children as well
+                // child.scale.set(0.2, 0.2, 0.2); // Apply smaller scale to children as well
                 // Hide objects that might represent lying-down pose based on name or position
                 if (child.name.toLowerCase().includes('dead') || child.name.toLowerCase().includes('lying') || child.name.toLowerCase().includes('down') || child.position.y < -50.0) {
                     child.visible = false;
@@ -188,6 +193,21 @@ class NPC extends Entity {
 
             // Add the loaded model to our placeholder group
             this.modelPlaceholder.add(loadedModel);
+
+            // --- ADDED: Log current state scale --- 
+            console.log(`NPC ${this.id}: Checking this.state.scale before applying initial scale:`, this.state ? this.state.scale : 'this.state is null/undefined');
+            // --- END ADDED ---
+
+            // --- Apply initial scale from server state ---
+            if (this.state && this.state.scale !== undefined) {
+                this.modelPlaceholder.scale.set(this.state.scale, this.state.scale, this.state.scale);
+                console.log(`NPC ${this.id}: Initial scale set to ${this.state.scale} from server state.`);
+            } else {
+                // Fallback if state isn't ready or scale missing (shouldn't usually happen)
+                console.warn(`NPC ${this.id}: Initial scale not found in server state, using default 1.`);
+                this.modelPlaceholder.scale.set(1, 1, 1);
+            }
+
             // Check for multiple top-level children which might indicate separate poses/models
             if (loadedModel.children.length > 1) {
                 // console.warn(`NPC ${this.id}: Model has multiple top-level children (${loadedModel.children.length}), which might include separate poses. Inspecting...`); // Reduced verbosity
@@ -386,6 +406,11 @@ class NPC extends Entity {
             console.log(`[NPC ${this.id} updateFromSchema] State changed: ${this.state} -> ${entity.state}`);
             this.state = entity.state;
             this.playAnimation(this.state);
+        }
+        // Update scale
+        if (entity.scale !== undefined && this.modelPlaceholder) {
+            this.modelPlaceholder.scale.set(entity.scale, entity.scale, entity.scale);
+            console.log(`NPC ${this.id}: Scale updated to ${entity.scale} via updateFromSchema.`);
         }
     }
 

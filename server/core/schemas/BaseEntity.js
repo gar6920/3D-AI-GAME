@@ -18,6 +18,7 @@ class BaseEntity extends Schema {
         this.color = "#FFFFFF";   // Color in hex format
         this.state = "Idle";      // Current action/animation state (e.g., Idle, Walk, Work)
         this.animationMap = new MapSchema(); // Add animationMap field
+        this.scale = 1; // Default scale
     }
 }
 
@@ -33,5 +34,6 @@ type("number")(BaseEntity.prototype, "value");
 type("string")(BaseEntity.prototype, "color");
 type("string")(BaseEntity.prototype, "state");
 type({ map: "string" })(BaseEntity.prototype, "animationMap"); // Register animationMap type
+type("number")(BaseEntity.prototype, "scale"); // Register scale type
 
 module.exports = { BaseEntity }; 

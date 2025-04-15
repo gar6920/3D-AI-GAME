@@ -56,6 +56,24 @@ The 3D AI Game Platform is a modular, multiplayer 3D web game built with Three.j
 - Behaviors (movement, animation state, etc.) are attached per entity in the definition.
 - The client uses `EntityFactory` to instantiate matching visual/game objects for each entity type.
 
+### **Unified Entity/NPC Pipeline (2025 Update)**
+
+- All static entities (type `'entity'`) and NPCs (type `'npc'`) are defined in `/server/implementations/[impl]/npcs.js`.
+- Each entity/NPC definition specifies:
+    - `id`: Unique instance identifier (e.g., `hover_cube_0`, `robot_shark1_3`)
+    - `type`: `'entity'` for static objects, `'npc'` for interactive/animated
+    - `modelId`: The model filename (without `.glb`) in `/client/assets/models/`
+    - `x`, `y`, `z`, `rotationY`, `scale`, etc.: Placement and appearance
+    - `animationMap`: (Optional) Maps raw GLB animation names to standard actions (for NPCs)
+    - `behavior`: (Optional) Server-side logic for NPCs
+- The server loads all definitions at room creation and manages state/authority.
+- The client uses `EntityFactory` to instantiate all objects, using the same modular pipeline for both static entities and NPCs.
+- **To add multiple instances:** Just add multiple objects to `npcDefinitions` (e.g., 50 cubes, 5 sharks), each with a unique `id` and desired position.
+- **No client code changes are needed** when adding new models or instances—everything is data-driven.
+- **Model documentation:** For each new model, add an entry to `/client/assets/models/README.md` with details (animations, file size, mapping, etc.) to keep assets organized and onboarding easy.
+
+---
+
 ### **How to Add a New NPC/Entity (Current System)**
 
 The system is designed for easily adding new Non-Player Characters (NPCs) or other interactive entities by defining them on the server. Multiple instances of the same *type* of NPC can be created using the same model and behavior logic but placed at different locations.

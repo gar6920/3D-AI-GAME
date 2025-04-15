@@ -27,13 +27,14 @@ class BaseGameRoom extends BaseRoom {
             console.log(`[${this.roomId}] Spawning NPC/Entity from definition ID: ${def.id}`);
             const entity = new BaseEntity();
             entity.id = def.id;             // Unique instance ID
-            entity.type = def.type;         // 'npc', 'entity', etc.
-            entity.modelId = def.modelId;   // Copy def.modelId to entity.modelId
-            entity.x = def.x;
-            entity.y = def.y;
-            entity.z = def.z;
-            entity.rotationY = def.rotationY;
-            entity.state = def.state;
+            entity.type = def.type || 'entity';         // 'npc', 'entity', etc.
+            entity.modelId = def.modelId || def.id;   // Copy def.modelId to entity.modelId
+            entity.x = def.x || 0;
+            entity.y = def.y || 0;
+            entity.z = def.z || 0;
+            entity.rotationY = def.rotationY || 0;
+            entity.state = def.state || 'Idle';
+            entity.scale = def.scale !== undefined ? def.scale : 1; // Set scale from definition, default 1
             if (def.behavior) entity.behavior = def.behavior;
 
             // Populate the entity's animationMap from the definition
@@ -48,7 +49,7 @@ class BaseGameRoom extends BaseRoom {
 
             this.state.entities.set(def.id, entity);
             this.spawnedNPCs.push(def.id);
-            console.log(`[${this.roomId}] Entity ${def.id} added to state. Type: ${entity.type}, ModelId: ${entity.modelId}`);
+            console.log(`[${this.roomId}] Entity ${def.id} added to state. Type: ${entity.type}, ModelId: ${entity.modelId}, Scale: ${entity.scale}`);
             console.log(`[BaseGameRoom] Spawned NPC: ${def.id} at (${def.x}, ${def.y}, ${def.z})`);
         });
         // Log all entities in state after spawning

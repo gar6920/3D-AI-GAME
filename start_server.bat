@@ -103,9 +103,17 @@ if "%1"=="reinstall" (
 )
 echo Dependencies are up to date.
 
-REM Kill any existing Node.js processes
-echo Killing any existing Node.js processes...
-taskkill /F /IM node.exe >nul 2>&1
+REM Kill any existing Node.js process listening on port 3000
+echo Killing any existing Node.js process on port 3000...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr "LISTENING" ^| findstr ":3000"') do (
+    set PID=%%a
+    if defined PID (
+        echo Found process with PID %PID% listening on port 3000. Terminating...
+        taskkill /F /PID %PID% >nul 2>&1
+    ) else (
+        echo No process found listening on port 3000.
+    )
+)
 timeout /t 1 /nobreak >nul
 
 REM Start the game server

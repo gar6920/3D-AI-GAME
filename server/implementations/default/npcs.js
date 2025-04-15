@@ -95,6 +95,7 @@ const npcDefinitions = [
         type: 'npc',
         modelId: 'robokeeper1', // Model file to load
         x: 5, y: 0, z: 5, rotationY: Math.PI / 2,
+        scale: 0.8, // <<< CHANGED from 0.2
         state: 'Idle',
         animationMap: robokeeperAnimationMap, // Use reusable map
         behavior: robokeeperBehavior         // Use reusable behavior
@@ -104,29 +105,66 @@ const npcDefinitions = [
         type: 'npc',
         modelId: 'robokeeper1', // Reuse the SAME model
         x: -8, y: 0, z: -3, rotationY: 0, // Different starting position/rotation
+        scale: 0.8, // <<< CHANGED from 0.2
         state: 'Idle',                  // Start Idle
         animationMap: robokeeperAnimationMap, // Reuse the SAME map
         behavior: robokeeperBehavior         // Reuse the SAME behavior
     },
-    { // --- SPINNING HOVER CUBE (Centered) ---
-        id: 'hover_cube',       // Unique instance ID, matches model file
-        type: 'entity',         // Static entity
-        modelId: 'hover_cube',  // Model file to load (expects client/assets/models/hover_cube.glb)
-        x: 0, y: 2, z: 0,       // POSITION: Centered horizontally, hovering
-        rotationY: 0,
-        state: 'Idle',          // Default state
-        animationMap: {},       // No animations
-        // BEHAVIOR: Add spinning logic
-        behavior: function(entity, deltaTime) {
-            const rotationSpeed = 0.5; // Radians per second
-            let newRotationY = entity.rotationY + rotationSpeed * deltaTime;
-            // Keep rotation within 0 to 2*PI range (optional, but good practice)
-            newRotationY %= (Math.PI * 2);
-            return { rotationY: newRotationY }; // Return the update
+    /* // Test NPC - Commented out
+    {
+        id: 'test_keeper', // New ID
+        type: 'npc', // Changed type
+        modelId: 'robokeeper1', // Use existing model
+        x: 0, y: 2, z: 0, rotationY: 0, // Same position as hover_cube
+        scale: 0.8, // Same scale as other robokeepers
+        state: 'Idle', // Initial state
+        behavior: null, // No specific behavior for this test
+        animationMap: { // Copy from robokeeper1
+            'CharacterArmature|Idle': 'Idle',
+            'CharacterArmature|Walk': 'Walk',
+            'CharacterArmature|Run': 'Run'
         }
     }
-    // Datacenter definition explicitly removed.
-    // Add more NPC/entity definitions here for Default implementation
+    */
+    // --- 50 Cubes in the Sky ---
+    ...Array.from({length: 50}, (_, i) => ({
+        id: `hover_cube_${i}`,
+        type: 'entity',
+        modelId: 'hover_cube',
+        x: (i % 10) * 4 - 18, // Spread in grid, center at 0
+        y: 20 + Math.floor(i / 10) * 2, // 5 rows, 2 units apart vertically
+        z: Math.floor(i / 10) * 8 - 16, // 5 rows, 8 units apart in z
+        rotationY: 0,
+        scale: 1.5,
+        state: null,
+        behavior: null,
+        animationMap: null
+    })),
+    // --- 5 Robot Shark NPCs in the Sky ---
+    ...Array.from({length: 5}, (_, i) => ({
+        id: `robot_shark1_${i}`,
+        type: 'npc',
+        modelId: 'robot_shark1',
+        x: i * 8 - 16, // Spread out horizontally
+        y: 30,
+        z: 20,
+        rotationY: 0,
+        scale: 2.0,
+        state: null,
+        behavior: null,
+        animationMap: null
+    })),
+    // Original hover_cube definition - Re-enabled
+    {
+        id: 'hover_cube',
+        type: 'entity',
+        modelId: 'hover_cube',
+        x: 0, y: 2, z: 0, rotationY: 0,
+        scale: 1.5,
+        state: null, // Static entities might not have state
+        behavior: null, // Static entities typically don't have behavior
+        animationMap: null
+    }
 ];
 
 module.exports = { npcDefinitions };

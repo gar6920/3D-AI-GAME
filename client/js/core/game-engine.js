@@ -1539,7 +1539,7 @@ window.updateFirstPersonCamera = function() {
             : (playerState.rotationY || 0);
 
         // Log the rotation values being used
-        console.log(`[Update FP Cam] Using Pitch: ${pitch.toFixed(3)}, Yaw: ${rotationY.toFixed(3)} (From playerRotY: ${typeof window.playerRotationY !== 'undefined'}, playerStateRotY: ${playerState.rotationY?.toFixed(3)})`);
+     //   console.log(`[Update FP Cam] Using Pitch: ${pitch.toFixed(3)}, Yaw: ${rotationY.toFixed(3)} (From playerRotY: ${typeof window.playerRotationY !== 'undefined'}, playerStateRotY: ${playerState.rotationY?.toFixed(3)})`);
             
         // We no longer need to add Math.PI to rotation because the model is rotated already
         window.camera.quaternion.setFromEuler(new THREE.Euler(
