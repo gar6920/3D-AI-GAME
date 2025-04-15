@@ -1,4 +1,4 @@
-const { Schema, type } = require("@colyseus/schema");
+const { Schema, type, MapSchema } = require("@colyseus/schema");
 
 /**
  * Base entity schema for all game entities
@@ -7,8 +7,9 @@ const { Schema, type } = require("@colyseus/schema");
 class BaseEntity extends Schema {
     constructor() {
         super();
-        this.id = "";             // Unique identifier
+        this.id = "";             // Unique instance identifier
         this.type = "";           // Entity type (e.g., "player", "npc", "static")
+        this.modelId = "";        // Identifier for the visual model file (e.g., "robokeeper1")
         this.x = 0;               // Position X
         this.y = 0;               // Position Y 
         this.z = 0;               // Position Z
@@ -16,12 +17,14 @@ class BaseEntity extends Schema {
         this.value = 1;           // Generic value - meaning depends on implementation
         this.color = "#FFFFFF";   // Color in hex format
         this.state = "Idle";      // Current action/animation state (e.g., Idle, Walk, Work)
+        this.animationMap = new MapSchema(); // Add animationMap field
     }
 }
 
 // Register schema types
 type("string")(BaseEntity.prototype, "id");
 type("string")(BaseEntity.prototype, "type");
+type("string")(BaseEntity.prototype, "modelId"); // Register modelId type
 type("number")(BaseEntity.prototype, "x");
 type("number")(BaseEntity.prototype, "y");
 type("number")(BaseEntity.prototype, "z");
@@ -29,5 +32,6 @@ type("number")(BaseEntity.prototype, "rotationY");
 type("number")(BaseEntity.prototype, "value");
 type("string")(BaseEntity.prototype, "color");
 type("string")(BaseEntity.prototype, "state");
+type({ map: "string" })(BaseEntity.prototype, "animationMap"); // Register animationMap type
 
 module.exports = { BaseEntity }; 

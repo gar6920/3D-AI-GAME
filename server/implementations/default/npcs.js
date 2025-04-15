@@ -1,122 +1,124 @@
 // Modular NPC/entity definitions for Default implementation
 // Each NPC/entity can define its id, type, position, rotation, initial state, and behavior function
 
+// Reusable Animation Map for Robokeeper
+const robokeeperAnimationMap = {
+    'Armature.001|mixamo.com|Layer0': 'Idle',
+    'Armature.002|mixamo.com|Layer0': 'Die',
+    'Armature.003|mixamo.com|Layer0': 'Walk',
+};
+
+// Reusable Behavior Function for Robokeeper (simple follow)
+function robokeeperBehavior(entity, deltaTime, roomState) {
+    const speed = 1.5; // units per second
+    const stopDistance = 1.5; // how close the NPC gets before stopping
+    const stopDistanceSq = stopDistance * stopDistance; // Use squared distance for comparison
+
+    let nearestPlayer = null;
+    let minDistSq = Infinity;
+
+    // Throttle logging for behavior checks
+    const now = Date.now();
+    const logThrottle = 2000; // ms
+    if (!entity._lastBehaviorLogTime) entity._lastBehaviorLogTime = 0;
+    const shouldLogBehavior = now - entity._lastBehaviorLogTime > logThrottle;
+
+    // Find nearest player
+    if (roomState && roomState.players) {
+        roomState.players.forEach(player => {
+            const dx = player.x - entity.x;
+            const dz = player.z - entity.z;
+            const distSq = dx * dx + dz * dz;
+            if (distSq < minDistSq) {
+                minDistSq = distSq;
+                nearestPlayer = player;
+            }
+        });
+    }
+
+    if (shouldLogBehavior) {
+        const playerCount = roomState?.players?.size || 0;
+        console.log(`[NPC ${entity.id} Behavior] Update Check: Found ${playerCount} players. Nearest player: ${nearestPlayer ? nearestPlayer.id : 'None'}. MinDistSq: ${minDistSq.toFixed(2)}`);
+        entity._lastBehaviorLogTime = now;
+    }
+
+    let newState = 'Idle'; // Default state
+    let updates = null; // Object to hold calculated updates
+
+    if (nearestPlayer && minDistSq > stopDistanceSq) {
+        // Move towards nearest player
+        const dx = nearestPlayer.x - entity.x;
+        const dz = nearestPlayer.z - entity.z;
+        const dist = Math.sqrt(minDistSq);
+        const nx = dx / dist; // Normalized direction x
+        const nz = dz / dist; // Normalized direction z
+        const newX = entity.x + nx * speed * deltaTime;
+        const newZ = entity.z + nz * speed * deltaTime;
+        const newRotationY = Math.atan2(nx, nz);
+        newState = 'Walk';
+        updates = { x: newX, z: newZ, rotationY: newRotationY, state: newState };
+
+    } else if (nearestPlayer) {
+        // Player is close, face them but stay Idle
+        const dx = nearestPlayer.x - entity.x;
+        const dz = nearestPlayer.z - entity.z;
+        const newRotationY = Math.atan2(dx, dz);
+        newState = 'Idle';
+        if (newState !== entity.state || Math.abs(newRotationY - entity.rotationY) > 0.01) {
+            updates = { rotationY: newRotationY, state: newState };
+        }
+    }
+
+    // Update state if needed and no other updates occurred
+    if (!updates && newState !== entity.state) {
+        updates = { state: newState };
+    }
+
+    // Log state change if it occurs
+    if (updates && updates.state && updates.state !== entity.state) {
+        console.log(`[NPC ${entity.id} Behavior] State WILL CHANGE to: ${updates.state}`);
+    } else if (!updates && newState === entity.state) {
+        // Log periodically even if state doesn't change (throttled)
+        if (!entity._lastStateLogTime) entity._lastStateLogTime = 0;
+        if (now - entity._lastStateLogTime > logThrottle) {
+            console.log(`[NPC ${entity.id} Behavior] State remains: ${entity.state}`);
+            entity._lastStateLogTime = now;
+        }
+    }
+
+    return updates;
+}
+
 const npcDefinitions = [
     {
-        id: 'robokeeper1',
+        id: 'robokeeper1',      // Original instance
         type: 'npc',
-        x: 5,
-        y: 0,
-        z: 5,
-        rotationY: Math.PI / 2,
+        modelId: 'robokeeper1', // Model file to load
+        x: 5, y: 0, z: 5, rotationY: Math.PI / 2,
         state: 'Idle',
-        // Optionally, define a behavior function for server-side animation/state
-        behavior: function(entity, deltaTime, roomState) {
-            const speed = 1.5; // units per second
-            const stopDistance = 1.5; // how close the NPC gets before stopping
-            const stopDistanceSq = stopDistance * stopDistance; // Use squared distance for comparison
-
-            let nearestPlayer = null;
-            let minDistSq = Infinity;
-
-            // Add logging inside the behavior function
-            const hasRoomState = !!roomState;
-            const hasPlayers = hasRoomState && !!roomState.players;
-            const playerCount = hasPlayers ? roomState.players.size : 0;
-            // console.log(`[NPC ${entity.id} Behavior] Update Start. Has roomState: ${hasRoomState}, Has players: ${hasPlayers}, Player count: ${playerCount}`); // Throttled log below
-
-            // Find nearest player
-            if (roomState && roomState.players) {
-                roomState.players.forEach(player => {
-                    const dx = player.x - entity.x;
-                    const dz = player.z - entity.z;
-                    const distSq = dx * dx + dz * dz;
-                    if (distSq < minDistSq) {
-                        minDistSq = distSq;
-                        nearestPlayer = player;
-                    }
-                });
-            }
-
-            // Throttle detailed logs to avoid spamming
-            if (!entity._lastBehaviorLogTime || Date.now() - entity._lastBehaviorLogTime > 2000) { 
-                console.log(`[NPC ${entity.id} Behavior] Update Check: Found ${playerCount} players. Nearest player: ${nearestPlayer ? nearestPlayer.id : 'None'}. MinDistSq: ${minDistSq.toFixed(2)}`);
-                entity._lastBehaviorLogTime = Date.now();
-            }
-
-            let newState = 'Idle'; // Default state
-            let updates = null; // Object to hold calculated updates
-
-            if (nearestPlayer && minDistSq > stopDistanceSq) {
-                // Move towards nearest player
-                const dx = nearestPlayer.x - entity.x;
-                const dz = nearestPlayer.z - entity.z;
-                const dist = Math.sqrt(minDistSq);
-
-                const nx = dx / dist; // Normalized direction x
-                const nz = dz / dist; // Normalized direction z
-
-                // Calculate new position
-                const newX = entity.x + nx * speed * deltaTime;
-                const newZ = entity.z + nz * speed * deltaTime;
-
-                // Calculate new rotation to face the player
-                const newRotationY = Math.atan2(nx, nz);
-
-                newState = 'Walk';
-
-                updates = { x: newX, z: newZ, rotationY: newRotationY, state: newState };
-
-            } else if (nearestPlayer) {
-                // Player is close, face them but stay Idle
-                const dx = nearestPlayer.x - entity.x;
-                const dz = nearestPlayer.z - entity.z;
-                const newRotationY = Math.atan2(dx, dz);
-                newState = 'Idle';
-
-                // Only update rotation and state if needed
-                if (newState !== entity.state || Math.abs(newRotationY - entity.rotationY) > 0.01) {
-                    updates = { rotationY: newRotationY, state: newState };
-                }
-
-            }
-
-            // Log the determined state before applying
-            // console.log(`[NPC ${entity.id} Behavior] Determined State: ${newState}. Current State: ${entity.state}`); // Throttled log below
-
-            // Return the calculated updates (or null if nothing changed and no movement required)
-            // Add state update to 'updates' object if only state needs changing
-            if (!updates && newState !== entity.state) {
-                updates = { state: newState };
-            }
-
-            // Log state change if updates contains a new state
-            if (updates && updates.state && updates.state !== entity.state) {
-                console.log(`[NPC ${entity.id} Behavior] State WILL CHANGE to: ${updates.state}`);
-            } else if (!updates && newState === entity.state) {
-                // Log periodically even if state doesn't change (throttled)
-                if (!entity._lastStateLogTime || Date.now() - entity._lastStateLogTime > 2000) {
-                    console.log(`[NPC ${entity.id} Behavior] State remains: ${entity.state}`);
-                    entity._lastStateLogTime = Date.now();
-                }
-            }
-
-            return updates;
-        }
+        animationMap: robokeeperAnimationMap, // Use reusable map
+        behavior: robokeeperBehavior         // Use reusable behavior
+    },
+    { // --- NEW INSTANCE ---
+        id: 'robokeeper_guard2', // New unique instance ID
+        type: 'npc',
+        modelId: 'robokeeper1', // Reuse the SAME model
+        x: -8, y: 0, z: -3, rotationY: 0, // Different starting position/rotation
+        state: 'Idle',                  // Start Idle
+        animationMap: robokeeperAnimationMap, // Reuse the SAME map
+        behavior: robokeeperBehavior         // Reuse the SAME behavior
     },
     {
-        id: 'datacenter1',
-        type: 'entity',
-        x: 0,
-        y: 0,
-        z: -5,
-        rotationY: 0,
+        id: 'datacenter1',      // Unique instance ID
+        type: 'entity',         // Note: this is 'entity', not 'npc'
+        modelId: 'datacenter1', // Model file to load
+        x: 0, y: 0, z: -5, rotationY: 0,
         state: 'Idle',
+        animationMap: { /* No map defined */ },
         behavior: function(entity, deltaTime) {
-            // Example: datacenter could pulse or animate
+            // Simple pulse for datacenter
             if (!entity.behaviorTimer) entity.behaviorTimer = 0;
             entity.behaviorTimer += deltaTime;
-            // Simple pulse animation
             const pulse = 1 + 0.1 * Math.sin(entity.behaviorTimer / 500);
             entity.pulse = pulse;
         }

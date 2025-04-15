@@ -10,24 +10,6 @@ const ANIMATIONS = {
     WORK: 'Work'
 };
 
-// Generic animation mapping for NPCs - can be overridden per model or type
-const DEFAULT_ANIMATION_MAP = {
-    // Placeholder for default mappings if needed
-    'Idle': ANIMATIONS.IDLE,
-    'Walk': ANIMATIONS.WALK,
-    'Run': ANIMATIONS.RUN,
-    'Die': ANIMATIONS.DIE,
-    'Work': ANIMATIONS.WORK,
-
-    // --- Mappings for robokeeper1 ---
-    'Armature.001|mixamo.com|Layer0': ANIMATIONS.IDLE, // Assuming this is Idle based on logs
-    'Armature.002|mixamo.com|Layer0': ANIMATIONS.DIE,  // Identified as Die
-    'Armature.003|mixamo.com|Layer0': ANIMATIONS.WALK, // Trying this for Walk
-    // Add mappings for other robokeeper1 animations if needed (Run etc.)
-    // 'Armature.004|mixamo.com|Layer0': ANIMATIONS.RUN, 
-    // ...
-};
-
 class NPC extends Entity {
     // --- Static Properties and Methods for Management ---
     static npcs = new Map(); // Stores all active NPC instances, keyed by entityId
@@ -67,7 +49,7 @@ class NPC extends Entity {
         // --- END DEBUG LOGGING ---
 
         // Attach Colyseus .listen handlers for all fields we care about
-        ['x', 'y', 'z', 'state', 'rotationY'].forEach(field => {
+        ['x', 'y', 'z', 'state', 'rotationY', 'animationMap'].forEach(field => {
             if (typeof entity.listen === 'function') {
                 entity.listen(field, (value, prev) => {
                     console.log(`[NPC ${entityId}][LISTEN] Field '${field}' changed: ${prev} -> ${value}`);
@@ -86,6 +68,14 @@ class NPC extends Entity {
                         if (npcInstance.mesh) {
                             npcInstance.mesh.position[field] = value;
                         }
+                    } else if (field === 'animationMap') {
+                        // Re-copy the animation map if it changes dynamically (unlikely but possible)
+                        npcInstance.animationMap.clear();
+                        value.forEach((mapValue, mapKey) => {
+                            npcInstance.animationMap.set(mapKey, mapValue);
+                        });
+                        console.log(`[NPC ${entityId}][LISTEN] Updated animationMap:`, npcInstance.animationMap);
+                        // Note: Re-mapping animations in _loadModel might be needed if this happens *after* load
                     }
                 });
             } else {
@@ -129,6 +119,21 @@ class NPC extends Entity {
         // Pass core params, ensure type is 'npc'
         super({ ...params, type: 'npc' });
 
+        // --- Copy Animation Map from Server Data ---
+        this.animationMap = new Map(); // Use a standard JS Map client-side
+        if (params.animationMap) {
+            params.animationMap.forEach((value, key) => {
+                this.animationMap.set(key, value);
+            });
+            console.log(`[NPC ${this.id} Constructor] Copied animationMap from server (${this.animationMap.size} entries):`, this.animationMap);
+        } else {
+            console.warn(`[NPC ${this.id} Constructor] No animationMap received from server.`);
+        }
+        // --- End Copy ---
+
+        this.modelId = params.modelId; // Store modelId received from server
+        console.log(`[NPC ${this.id}] Created. InstanceID: ${this.id}, ModelID: ${this.modelId}`);
+
         // Behavior/Animation state
         this.mixer = null;
         this.actions = {}; // Store animation actions { name: THREE.AnimationAction }
@@ -145,20 +150,18 @@ class NPC extends Entity {
     }
 
     _loadModel() {
-        // Ensure THREE.js and GLTFLoader are loaded
-        if (typeof THREE === 'undefined' || !THREE.GLTFLoader) {
-            console.error("THREE.js or GLTFLoader not found. Cannot load NPC model.");
+        if (!this.modelId) {
+            console.error(`[NPC ${this.id}] Cannot load model: modelId is missing!`);
             return;
         }
-        const loader = new THREE.GLTFLoader();
-        // Path relative to where index.html is served from (likely client/)
-        const modelPath = 'assets/models/robokeeper1.glb'; 
+        const modelPath = `assets/models/${this.modelId}.glb`; // Use modelId here
+        console.log(`[NPC ${this.id}] Loading model from path: ${modelPath}`);
 
-        // --- DEBUG LOGGING ---
-        console.log(`[NPC ${this.id}] [DEBUG] _loadModel called. Entity:`, this);
-        // --- END DEBUG LOGGING ---
+        if (!this.loader) {
+            this.loader = new THREE.GLTFLoader(); // Use static loader
+        }
 
-        loader.load(modelPath, (gltf) => {
+        this.loader.load(modelPath, (gltf) => {
             console.log(`NPC model loaded successfully for entity: ${this.id}`);
             const loadedModel = gltf.scene;
 
@@ -215,49 +218,47 @@ class NPC extends Entity {
                 }
             }
 
-            // Setup animation mixer and actions
+            // Setup animation mixer and actions USING this.animationMap
             this.mixer = new THREE.AnimationMixer(loadedModel);
-            // console.log(`[NPC ${this.id} Animations] Found ${gltf.animations.length} animations in GLB:`); // REMOVED LOG
+            this.actions = {}; // Clear any previous actions
+            let animationsFoundCount = 0;
+            let animationsMappedCount = 0;
+
             gltf.animations.forEach((clip) => {
+                animationsFoundCount++;
                 const rawName = clip.name;
-                // console.log(`  - Raw Name: '${rawName}'`); // REMOVED LOG
-                // Use the explicit map
-                const mappedName = DEFAULT_ANIMATION_MAP[rawName];
+                const mappedName = this.animationMap.get(rawName); // Use the instance's map
 
                 if (mappedName) {
                     if (!this.actions[mappedName]) { // Prevent overwriting if multiple clips map to the same name
                         this.actions[mappedName] = this.mixer.clipAction(clip);
+                        animationsMappedCount++;
                         console.log(`  - NPC ${this.id}: Mapped animation '${rawName}' to '${mappedName}'`);
                     } else {
-                        console.warn(`  - NPC ${this.id}: Multiple animations map to '${mappedName}'. Skipping duplicate '${rawName}'.`);
+                        console.warn(`  - NPC ${this.id}: Multiple animations map to '${mappedName}'. Skipping duplicate raw animation '${rawName}'.`);
                     }
                 } else {
-                    console.warn(`  - NPC ${this.id}: Could not map animation '${rawName}'. Storing under original name.`);
-                    // Store under original name as a fallback if needed, though ideally all used animations are mapped
-                    if (!this.actions[rawName]) { 
-                        this.actions[rawName] = this.mixer.clipAction(clip);
+                    // Only warn if the map exists but doesn't contain the raw name
+                    if (this.animationMap.size > 0) {
+                        console.warn(`  - NPC ${this.id}: Raw animation '${rawName}' not found in provided animationMap. It will not be playable via standard names.`);
                     }
+                    // Do NOT store under original name anymore
                 }
             });
+             console.log(`[NPC ${this.id} Animations] Processed ${animationsFoundCount} raw animations. Mapped ${animationsMappedCount} to standard names.`);
 
             // --- Initialize Animation State ---
-            // Initialize animation based purely on server state.
-            let initialState = this.state; // Get initial state from server data passed to constructor
+            let initialState = this.state; // Get initial state from server data
             let initialActionName = null;
 
             if (initialState && this.actions[initialState]) {
-                console.log(`NPC ${this.id}: Initializing animation to server state: ${initialState}`);
+                console.log(`NPC ${this.id}: Initializing animation to server state: '${initialState}'`);
                 initialActionName = initialState;
-            } else if (this.actions[ANIMATIONS.IDLE]) { // Default to Idle if state invalid/missing
-                console.warn(`NPC ${this.id}: Initial server state ('${initialState}') is invalid or missing. Defaulting to '${ANIMATIONS.IDLE}'.`);
-                initialActionName = ANIMATIONS.IDLE;
-                this.state = ANIMATIONS.IDLE; // Update internal state to match default
-            } else if (Object.keys(this.actions).length > 0) { // Default to first available animation if Idle missing
-                initialActionName = Object.keys(this.actions)[0];
-                console.warn(`NPC ${this.id}: Initial server state ('${initialState}') and '${ANIMATIONS.IDLE}' are invalid/missing. Defaulting to first available animation: '${initialActionName}'.`);
-                this.state = initialActionName; // Update internal state to match default
+            // REMOVED: Fallback to Idle
+            // REMOVED: Fallback to first available animation
             } else {
-                console.error(`NPC ${this.id}: No valid initial state from server and no animations found. Cannot set initial animation.`);
+                 console.warn(`NPC ${this.id}: Initial server state ('${initialState}') does not correspond to any mapped animation in this.actions. No initial animation will be played.`);
+                 console.log(`NPC ${this.id}: Available mapped actions:`, Object.keys(this.actions));
             }
 
             if (initialActionName) {
@@ -356,6 +357,19 @@ class NPC extends Entity {
      * @param {object} entity - The Colyseus schema entity
      */
     updateFromSchema(entity) {
+        // --- Update Animation Map if needed --- (Already handled by listener)
+        /*
+        if (entity.animationMap && entity.animationMap.size !== this.animationMap.size) { // Basic check for changes
+            console.log(`[NPC ${this.id} updateFromSchema] AnimationMap changed, updating...`);
+            this.animationMap.clear();
+            entity.animationMap.forEach((value, key) => {
+                this.animationMap.set(key, value);
+            });
+            // TODO: Potentially need to re-initialize actions if map changes after _loadModel completes
+        }
+        */
+        // --- End Update ---
+
         const sessionId = window.room?.sessionId || 'unknown';
         if (entity.id === 'robokeeper1') {
             console.log(`%c[robokeeper1][UPDATE][${sessionId}] x=${entity.x}, y=${entity.y}, z=${entity.z}, state=${entity.state} @${new Date().toLocaleTimeString()}`,'color: #fff; background: #FF4136; font-weight: bold;');
@@ -395,6 +409,7 @@ if (typeof window !== 'undefined') {
     window.NPC = NPC;
 }
 
-if (typeof module !== 'undefined') {
-    module.exports = { NPC };
+// Optional: CommonJS export for potential use in Node.js environments or bundlers
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { NPC, ANIMATIONS };
 }

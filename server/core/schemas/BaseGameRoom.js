@@ -24,17 +24,31 @@ class BaseGameRoom extends BaseRoom {
         // Spawn each NPC and add to state
         this.spawnedNPCs = [];
         npcDefs.forEach(def => {
+            console.log(`[${this.roomId}] Spawning NPC/Entity from definition ID: ${def.id}`);
             const entity = new BaseEntity();
-            entity.id = def.id;
-            entity.type = def.type;
+            entity.id = def.id;             // Unique instance ID
+            entity.type = def.type;         // 'npc', 'entity', etc.
+            entity.modelId = def.modelId;   // Copy def.modelId to entity.modelId
             entity.x = def.x;
             entity.y = def.y;
             entity.z = def.z;
             entity.rotationY = def.rotationY;
             entity.state = def.state;
             if (def.behavior) entity.behavior = def.behavior;
+
+            // Populate the entity's animationMap from the definition
+            if (def.animationMap) {
+                for (const [key, value] of Object.entries(def.animationMap)) {
+                    entity.animationMap.set(key, value);
+                }
+                console.log(`[BaseGameRoom] Populated animationMap for ${def.id} with ${Object.keys(def.animationMap).length} entries.`);
+            } else {
+                console.warn(`[BaseGameRoom] No animationMap found in definition for ${def.id}`);
+            }
+
             this.state.entities.set(def.id, entity);
             this.spawnedNPCs.push(def.id);
+            console.log(`[${this.roomId}] Entity ${def.id} added to state. Type: ${entity.type}, ModelId: ${entity.modelId}`);
             console.log(`[BaseGameRoom] Spawned NPC: ${def.id} at (${def.x}, ${def.y}, ${def.z})`);
         });
         // Log all entities in state after spawning
