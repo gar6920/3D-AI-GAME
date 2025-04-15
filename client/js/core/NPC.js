@@ -10,14 +10,22 @@ const ANIMATIONS = {
     WORK: 'Work'
 };
 
-// Explicit map for robokeeper1.glb animations (adjust if needed based on actual animations)
-const ROBOKEEPER_ANIMATION_MAP = {
-    'Armature.001|mixamo.com|Layer0': ANIMATIONS.IDLE,
-    'Armature.002|mixamo.com|Layer0': ANIMATIONS.WALK,
-    'Armature.003|mixamo.com|Layer0': ANIMATIONS.DIE,
-    'Armature.004|mixamo.com|Layer0': ANIMATIONS.WORK,
-    'Armature.005|mixamo.com|Layer0': ANIMATIONS.RUN,
-    // 'Armature|mixamo.com|Layer0': ??? // Base armature, likely T-pose, leave unmapped for now
+// Generic animation mapping for NPCs - can be overridden per model or type
+const DEFAULT_ANIMATION_MAP = {
+    // Placeholder for default mappings if needed
+    'Idle': ANIMATIONS.IDLE,
+    'Walk': ANIMATIONS.WALK,
+    'Run': ANIMATIONS.RUN,
+    'Die': ANIMATIONS.DIE,
+    'Work': ANIMATIONS.WORK,
+
+    // --- Mappings for robokeeper1 ---
+    'Armature.001|mixamo.com|Layer0': ANIMATIONS.IDLE, // Assuming this is Idle based on logs
+    'Armature.002|mixamo.com|Layer0': ANIMATIONS.DIE,  // Identified as Die
+    'Armature.003|mixamo.com|Layer0': ANIMATIONS.WALK, // Trying this for Walk
+    // Add mappings for other robokeeper1 animations if needed (Run etc.)
+    // 'Armature.004|mixamo.com|Layer0': ANIMATIONS.RUN, 
+    // ...
 };
 
 class NPC extends Entity {
@@ -209,10 +217,12 @@ class NPC extends Entity {
 
             // Setup animation mixer and actions
             this.mixer = new THREE.AnimationMixer(loadedModel);
+            // console.log(`[NPC ${this.id} Animations] Found ${gltf.animations.length} animations in GLB:`); // REMOVED LOG
             gltf.animations.forEach((clip) => {
                 const rawName = clip.name;
+                // console.log(`  - Raw Name: '${rawName}'`); // REMOVED LOG
                 // Use the explicit map
-                const mappedName = ROBOKEEPER_ANIMATION_MAP[rawName];
+                const mappedName = DEFAULT_ANIMATION_MAP[rawName];
 
                 if (mappedName) {
                     if (!this.actions[mappedName]) { // Prevent overwriting if multiple clips map to the same name
@@ -283,7 +293,7 @@ class NPC extends Entity {
     playAnimation(name, fadeDuration = 0.3) {
         if (!this.mixer || !this.actions[name]) {
             // Don't warn excessively if model/animations just haven't loaded yet
-            // console.warn(`NPC ${this.id}: Cannot play animation '${name}'. Mixer or action not ready.`);
+            console.warn(`NPC ${this.id}: Cannot play animation '${name}'. Mixer or action not ready.`);
             return;
         }
 
@@ -304,7 +314,7 @@ class NPC extends Entity {
         console.log(`[NPC ${this.id} playAnimation] Request: '${name}'. Current: '${currentActionName}'.`);
 
         if (currentAction === newAction) {
-             console.log(`[NPC ${this.id} playAnimation] Already playing '${name}'. Skipping.`);
+            console.log(`[NPC ${this.id} playAnimation] Already playing '${name}'. Skipping.`);
             return; // Already playing this animation and it's fully faded in
         }
 
@@ -359,7 +369,9 @@ class NPC extends Entity {
         });
         // Optionally, update animation/state
         if (entity.state !== undefined && this.state !== entity.state) {
-            this.playAnimation(entity.state);
+            console.log(`[NPC ${this.id} updateFromSchema] State changed: ${this.state} -> ${entity.state}`);
+            this.state = entity.state;
+            this.playAnimation(this.state);
         }
     }
 

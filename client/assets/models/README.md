@@ -39,4 +39,24 @@ This file documents the 3D models used in the game, located in this directory or
 
 ---
 
+## Model 3: Robo Keeper 1
+
+*   **Model ID/Name:** `robokeeper1`
+*   **File Path:** `robokeeper1.glb`
+*   **Format:** `glTF Binary (.glb)`
+*   **Source:** Mixamo (Assumed from animation names)
+*   **Poly Count:** `Triangles: ???, Vertices: ???`
+*   **File Size:** `??? KB/MB`
+*   **Textures:** `(e.g., PBR - Albedo, Normal, etc.)` (Please update)
+*   **Animations (Raw Mixamo Name -> Mapped Name in `NPC.js`):**
+    *   `Armature.001|mixamo.com|Layer0`: `Idle`
+    *   `Armature.002|mixamo.com|Layer0`: `Die`
+    *   `Armature.003|mixamo.com|Layer0`: `Walk`
+    *   `Armature.004|mixamo.com|Layer0`: `???` (Unmapped)
+    *   `Armature.005|mixamo.com|Layer0`: `???` (Unmapped)
+    *   `Armature|mixamo.com|Layer0`: `???` (Unmapped)
+*   **Technical Notes:** `Uses standard Mixamo rig. Mappings are defined in \`client/js/core/NPC.js\` in the \`DEFAULT_ANIMATION_MAP\` constant.`
+
+---
+
 *(Add entries for other models as they are added)*
