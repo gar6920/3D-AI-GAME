@@ -193,11 +193,7 @@ class BaseRoom extends Room {
         }
         
         // --- BEGIN Server-Authoritative NPC Update --- 
-        this.state.entities.forEach((entity) => {
-            if (entity.type === 'npc') {
-                this._updateNpc(entity, deltaTime);
-            }
-        });
+        // REMOVED: Generic NPC update logic. This should be handled by implementationUpdate.
         // --- END Server-Authoritative NPC Update ---
         
         // Call implementation-specific update

@@ -890,6 +890,30 @@ function setupRoomListeners(room) {
                 } else {
                     console.warn(`window.createNpcVisual function not found for NPC ${entityId}`);
                 }
+                // --- ADD ONCHANGE HANDLER FOR NPCs (LERP LOGIC) ---
+                if (typeof entity.onChange === 'function') {
+                    entity.onChange = (changes) => {
+                        const npcInstance = window.NPC?.npcs?.get(entityId);
+                        if (npcInstance && npcInstance.mesh) {
+                            // Lerp position for smooth movement
+                            const lerpFactor = 0.3;
+                            npcInstance.mesh.position.x = THREE.MathUtils.lerp(
+                                npcInstance.mesh.position.x, entity.x, lerpFactor
+                            );
+                            npcInstance.mesh.position.y = THREE.MathUtils.lerp(
+                                npcInstance.mesh.position.y, entity.y, lerpFactor
+                            );
+                            npcInstance.mesh.position.z = THREE.MathUtils.lerp(
+                                npcInstance.mesh.position.z, entity.z, lerpFactor
+                            );
+                            npcInstance.mesh.rotation.y = entity.rotationY;
+                            // Optionally update animation/state
+                            if (entity.state !== undefined && npcInstance.state !== entity.state) {
+                                npcInstance.playAnimation(entity.state);
+                            }
+                        }
+                    };
+                }
             }
         });
         
@@ -918,6 +942,55 @@ function setupRoomListeners(room) {
                         window.createNpcVisual(entity, entityId);
                     } else {
                         console.warn(`window.createNpcVisual function not found for NPC ${entityId}`);
+                    }
+                    // --- ADD ONCHANGE HANDLER FOR NPCs (LERP LOGIC) ---
+                    if (typeof entity.onChange === 'function') {
+                        entity.onChange = (changes) => {
+                            const npcInstance = window.NPC?.npcs?.get(entityId);
+                            if (npcInstance && npcInstance.mesh) {
+                                // Lerp position for smooth movement
+                                const lerpFactor = 0.3;
+                                npcInstance.mesh.position.x = THREE.MathUtils.lerp(
+                                    npcInstance.mesh.position.x, entity.x, lerpFactor
+                                );
+                                npcInstance.mesh.position.y = THREE.MathUtils.lerp(
+                                    npcInstance.mesh.position.y, entity.y, lerpFactor
+                                );
+                                npcInstance.mesh.position.z = THREE.MathUtils.lerp(
+                                    npcInstance.mesh.position.z, entity.z, lerpFactor
+                                );
+                                npcInstance.mesh.rotation.y = entity.rotationY;
+                                // Optionally update animation/state
+                                if (entity.state !== undefined && npcInstance.state !== entity.state) {
+                                    npcInstance.playAnimation(entity.state);
+                                }
+                            }
+                        };
+                    }
+                }
+            };
+        }
+        
+        // Listen for entity changes (for existing NPCs)
+        if (typeof room.state.entities.onChange === 'function') {
+            room.state.entities.onChange = (entity, entityId) => {
+                if (entity.type === 'npc') {
+                    const npcInstance = window.NPC?.npcs?.get(entityId);
+                    if (npcInstance && npcInstance.mesh) {
+                        const lerpFactor = 0.3;
+                        npcInstance.mesh.position.x = THREE.MathUtils.lerp(
+                            npcInstance.mesh.position.x, entity.x, lerpFactor
+                        );
+                        npcInstance.mesh.position.y = THREE.MathUtils.lerp(
+                            npcInstance.mesh.position.y, entity.y, lerpFactor
+                        );
+                        npcInstance.mesh.position.z = THREE.MathUtils.lerp(
+                            npcInstance.mesh.position.z, entity.z, lerpFactor
+                        );
+                        npcInstance.mesh.rotation.y = entity.rotationY;
+                        if (entity.state !== undefined && npcInstance.state !== entity.state) {
+                            npcInstance.playAnimation(entity.state);
+                        }
                     }
                 }
             };

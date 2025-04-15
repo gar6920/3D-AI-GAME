@@ -251,7 +251,7 @@ start "" "${gamePath}\\launch_game.bat"
      */
     registerRooms() {
         // Register each implementation's room
-        let defaultRoomClass = null; // Variable to hold the specific DefaultRoom class
+        let baseGameRoomClass = null; // Variable to hold the specific BaseGameRoom class
 
         for (const [implName, implementation] of Object.entries(implementations)) {
             const RoomClass = this.getRoomClass(implementation);
@@ -262,7 +262,7 @@ start "" "${gamePath}\\launch_game.bat"
 
                 // Store the room class if this is the 'default' implementation
                 if (implName === 'default') {
-                    defaultRoomClass = RoomClass;
+                    baseGameRoomClass = RoomClass;
                 }
             } else {
                 console.warn(`No room class found for implementation: ${implName}`);
@@ -270,9 +270,9 @@ start "" "${gamePath}\\launch_game.bat"
         }
 
         // After looping through all, explicitly define the 'default' room if found
-        if (defaultRoomClass) {
+        if (baseGameRoomClass) {
             console.log(`Defining 'default' implementation as the active room type`);
-            this.gameServer.define('default', defaultRoomClass);
+            this.gameServer.define('default', baseGameRoomClass);
         } else {
             console.error("CRITICAL: 'default' implementation not found or has no room class. Cannot define active 'default' room.");
             // Optional: Fallback or throw error if 'default' is essential
@@ -289,9 +289,9 @@ start "" "${gamePath}\\launch_game.bat"
         if (implementation.ImplementationRoom) {
             return implementation.ImplementationRoom;
         }
-        // Fallback to DefaultRoom if provided
-        if (implementation.DefaultRoom) {
-            return implementation.DefaultRoom;
+        // Fallback to BaseGameRoom if provided
+        if (implementation.BaseGameRoom) {
+            return implementation.BaseGameRoom;
         }
         return null;
     }

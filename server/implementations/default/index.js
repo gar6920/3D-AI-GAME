@@ -3,7 +3,7 @@
  * Exports the necessary components for the default game setup.
  */
 
-const { DefaultRoom } = require("../../core/schemas/DefaultRoom");
+const { BaseGameRoom } = require("../../core/schemas/BaseGameRoom");
 
 // Default implementation information
 const implementation = {
@@ -13,5 +13,5 @@ const implementation = {
 
 module.exports = {
     implementation,
-    DefaultRoom
+    BaseGameRoom
 };

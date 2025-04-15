@@ -10,6 +10,16 @@ const ANIMATIONS = {
     WORK: 'Work'
 };
 
+// Explicit map for robokeeper1.glb animations (adjust if needed based on actual animations)
+const ROBOKEEPER_ANIMATION_MAP = {
+    'Armature.001|mixamo.com|Layer0': ANIMATIONS.IDLE,
+    'Armature.002|mixamo.com|Layer0': ANIMATIONS.WALK,
+    'Armature.003|mixamo.com|Layer0': ANIMATIONS.DIE,
+    'Armature.004|mixamo.com|Layer0': ANIMATIONS.WORK,
+    'Armature.005|mixamo.com|Layer0': ANIMATIONS.RUN,
+    // 'Armature|mixamo.com|Layer0': ??? // Base armature, likely T-pose, leave unmapped for now
+};
+
 class NPC extends Entity {
     // --- Static Properties and Methods for Management ---
     static npcs = new Map(); // Stores all active NPC instances, keyed by entityId
@@ -38,11 +48,43 @@ class NPC extends Entity {
         }
         if (NPC.npcs.has(entityId)) {
             console.warn(`NPC.createNpcVisual: NPC with ID ${entityId} already exists. Removing old instance before creating new.`);
-            // Remove the old instance to prevent duplicates
             NPC.removeNpcVisual(entityId);
         }
 
-        console.log(`[NPC Class] Creating visual for NPC: ${entityId}`, entity);
+        // --- DEBUG LOGGING ---
+        console.log(`[NPC Class] [DEBUG] Creating visual for NPC: ${entityId}`);
+        console.log(`[NPC Class] [DEBUG] Entity object:`, entity);
+        console.log(`[NPC Class] [DEBUG] Entity prototype:`, Object.getPrototypeOf(entity));
+        console.log(`[NPC Class] [DEBUG] Entity keys:`, Object.keys(entity));
+        // --- END DEBUG LOGGING ---
+
+        // Attach Colyseus .listen handlers for all fields we care about
+        ['x', 'y', 'z', 'state', 'rotationY'].forEach(field => {
+            if (typeof entity.listen === 'function') {
+                entity.listen(field, (value, prev) => {
+                    console.log(`[NPC ${entityId}][LISTEN] Field '${field}' changed: ${prev} -> ${value}`);
+                    const npcInstance = NPC.npcs.get(entityId);
+                    if (!npcInstance) return;
+                    if (field === 'state') {
+                        npcInstance.state = value;
+                        npcInstance.playAnimation(value);
+                    } else if (field === 'rotationY') {
+                        npcInstance.rotationY = value;
+                        if (npcInstance.mesh) {
+                            npcInstance.mesh.rotation.y = value;
+                        }
+                    } else if (['x','y','z'].includes(field)) {
+                        npcInstance.position[field] = value;
+                        if (npcInstance.mesh) {
+                            npcInstance.mesh.position[field] = value;
+                        }
+                    }
+                });
+            } else {
+                console.warn(`[NPC ${entityId}][LISTEN] entity.listen is not a function!`);
+            }
+        });
+
         try {
             const npcInstance = new NPC(entity, entityId); 
             NPC.npcs.set(entityId, npcInstance);
@@ -104,6 +146,10 @@ class NPC extends Entity {
         // Path relative to where index.html is served from (likely client/)
         const modelPath = 'assets/models/robokeeper1.glb'; 
 
+        // --- DEBUG LOGGING ---
+        console.log(`[NPC ${this.id}] [DEBUG] _loadModel called. Entity:`, this);
+        // --- END DEBUG LOGGING ---
+
         loader.load(modelPath, (gltf) => {
             console.log(`NPC model loaded successfully for entity: ${this.id}`);
             const loadedModel = gltf.scene;
@@ -164,55 +210,49 @@ class NPC extends Entity {
             // Setup animation mixer and actions
             this.mixer = new THREE.AnimationMixer(loadedModel);
             gltf.animations.forEach((clip) => {
-                const actionName = clip.name; // Use name from Blender export
-                if (actionName) {
-                    this.actions[actionName] = this.mixer.clipAction(clip);
-                    console.log(`  - NPC ${this.id}: Found animation clip: ${actionName}`);
+                const rawName = clip.name;
+                // Use the explicit map
+                const mappedName = ROBOKEEPER_ANIMATION_MAP[rawName];
+
+                if (mappedName) {
+                    if (!this.actions[mappedName]) { // Prevent overwriting if multiple clips map to the same name
+                        this.actions[mappedName] = this.mixer.clipAction(clip);
+                        console.log(`  - NPC ${this.id}: Mapped animation '${rawName}' to '${mappedName}'`);
+                    } else {
+                        console.warn(`  - NPC ${this.id}: Multiple animations map to '${mappedName}'. Skipping duplicate '${rawName}'.`);
+                    }
                 } else {
-                    console.warn(`NPC ${this.id}: Found animation clip with no name.`);
+                    console.warn(`  - NPC ${this.id}: Could not map animation '${rawName}'. Storing under original name.`);
+                    // Store under original name as a fallback if needed, though ideally all used animations are mapped
+                    if (!this.actions[rawName]) { 
+                        this.actions[rawName] = this.mixer.clipAction(clip);
+                    }
                 }
             });
 
-            // Start the initial animation state based on server's initial state
-            // Use base class's state value which should be synchronized initially
-            if (this.state && this.actions[this.state]) {
-                 console.log(`NPC ${this.id}: Initializing animation to server state: ${this.state}`);
-                 this.playAnimation(this.state, 0); // Play immediately, no fade-in
+            // --- Initialize Animation State ---
+            // Initialize animation based purely on server state.
+            let initialState = this.state; // Get initial state from server data passed to constructor
+            let initialActionName = null;
+
+            if (initialState && this.actions[initialState]) {
+                console.log(`NPC ${this.id}: Initializing animation to server state: ${initialState}`);
+                initialActionName = initialState;
+            } else if (this.actions[ANIMATIONS.IDLE]) { // Default to Idle if state invalid/missing
+                console.warn(`NPC ${this.id}: Initial server state ('${initialState}') is invalid or missing. Defaulting to '${ANIMATIONS.IDLE}'.`);
+                initialActionName = ANIMATIONS.IDLE;
+                this.state = ANIMATIONS.IDLE; // Update internal state to match default
+            } else if (Object.keys(this.actions).length > 0) { // Default to first available animation if Idle missing
+                initialActionName = Object.keys(this.actions)[0];
+                console.warn(`NPC ${this.id}: Initial server state ('${initialState}') and '${ANIMATIONS.IDLE}' are invalid/missing. Defaulting to first available animation: '${initialActionName}'.`);
+                this.state = initialActionName; // Update internal state to match default
             } else {
-                 console.log(`NPC ${this.id}: Server state is undefined. Initiating fallback behavior with available actions:`, Object.keys(this.actions));
-                 if (Object.keys(this.actions).length > 0) {
-                     const firstAction = Object.keys(this.actions)[0];
-                     console.log(`NPC ${this.id}: Starting with first animation: ${firstAction}`);
-                     this.playAnimation(firstAction);
-                     // Start fallback behavior to cycle animations and move
-                     this.startFallbackBehavior();
-                 }
+                console.error(`NPC ${this.id}: No valid initial state from server and no animations found. Cannot set initial animation.`);
             }
 
-            // *** Add listener for state changes from the server ***
-            this.onChange = (changes) => {
-                console.log(`[NPC] State change for ${this.id}`, changes);
-                changes.forEach(change => {
-                    const { field, value } = change;
-                    if (field === 'state') {
-                        this.playAnimation(value);
-                    } else if (field === 'x' || field === 'y' || field === 'z') {
-                        this.position[field] = value;
-                        if (this.mesh) {
-                            this.mesh.position[field] = value;
-                        }
-                    } else if (field === 'rotationY') {
-                        this.rotationY = value;
-                        if (this.mesh) {
-                            this.mesh.rotation.y = value;
-                        }
-                    }
-                });
-                // If server sends state or position updates, stop fallback behavior
-                if (this.fallbackAnimInterval || this.fallbackMoveInterval) {
-                    this.stopFallbackBehavior();
-                }
-            };
+            if (initialActionName) {
+                this.playAnimation(initialActionName, 0); // Play immediately, no fade-in
+            }
 
         }, 
         undefined, // Progress callback (optional)
@@ -249,31 +289,31 @@ class NPC extends Entity {
 
         const newAction = this.actions[name];
         let currentAction = null;
+        let currentActionName = 'None';
 
         // Find currently active (playing and not fading out) action
         for (const actionName in this.actions) {
             const action = this.actions[actionName];
             if (action.isRunning() && action.getEffectiveWeight() > 0) {
                 currentAction = action;
+                currentActionName = actionName;
                 break;
             }
         }
+        
+        console.log(`[NPC ${this.id} playAnimation] Request: '${name}'. Current: '${currentActionName}'.`);
 
         if (currentAction === newAction) {
+             console.log(`[NPC ${this.id} playAnimation] Already playing '${name}'. Skipping.`);
             return; // Already playing this animation and it's fully faded in
         }
 
         // Reset and fade in the new action
+        console.log(`[NPC ${this.id} playAnimation] Resetting and playing '${name}' immediately (no fade).`);
         newAction.reset();
-        newAction.setEffectiveTimeScale(1); // Ensure normal speed
-        newAction.setEffectiveWeight(1);    // Ensure full weight
-        newAction.time = 0; // Start from beginning
+        newAction.setEffectiveWeight(1); // Ensure full weight
+        newAction.time = 0;
         newAction.play();
-        if (currentAction) {
-            newAction.crossFadeFrom(currentAction, fadeDuration, true);
-        } else {
-             newAction.fadeIn(fadeDuration); // Fade in if no other action was playing
-        }
         
         // console.log(`NPC ${this.id}: Playing animation '${name}'`);
     }
@@ -282,61 +322,45 @@ class NPC extends Entity {
         // Update animation mixer regardless of state
         if (this.mixer) {
             this.mixer.update(deltaTime);
+            
+            // Log active animation according to the mixer (every ~2 seconds to avoid spam)
+            if (!this._lastMixerLogTime || Date.now() - this._lastMixerLogTime > 2000) {
+                let activeActionName = 'None';
+                for (const actionName in this.actions) {
+                    if (this.actions[actionName].getEffectiveWeight() > 0.1) { // Check weight > threshold
+                        activeActionName = actionName;
+                        break;
+                    }
+                }
+                console.log(`[NPC ${this.id} Mixer Update] Mixer reports active animation: '${activeActionName}'`);
+                this._lastMixerLogTime = Date.now();
+            }
         }
         // Client-side update loop is now only responsible for updating the animation mixer.
         // Position, rotation, and animation state changes are driven by server updates
         // handled by the base Entity class and the 'onChange' listener for 'state'.
     }
 
-    // Fallback behavior to cycle animations and simulate movement when server state is undefined
-    startFallbackBehavior() {
-        console.log(`NPC ${this.id}: Starting fallback behavior for animation cycling and movement.`);
-        let currentAnimIndex = 0;
-        const animKeys = Object.keys(this.actions);
-        // Cycle through animations every 5 seconds
-        const cycleAnimation = () => {
-            if (animKeys.length > 0) {
-                currentAnimIndex = (currentAnimIndex + 1) % animKeys.length;
-                const nextAnim = animKeys[currentAnimIndex];
-                console.log(`NPC ${this.id}: Cycling to animation: ${nextAnim}`);
-                this.playAnimation(nextAnim);
-            }
-        };
-        // Simulate movement in a small radius around initial position
-        const simulateMovement = () => {
-            if (this.mesh) {
-                const time = Date.now() * 0.001; // Slow time factor
-                const radius = 2.0; // Small radius for wandering
-                const initPos = this.position;
-                const newX = initPos.x + Math.sin(time) * radius;
-                const newZ = initPos.z + Math.cos(time) * radius;
-                this.mesh.position.x = newX;
-                this.mesh.position.z = newZ;
-                // Face direction of movement
-                const dx = Math.cos(time) * radius;
-                const dz = -Math.sin(time) * radius;
-                if (dx !== 0 || dz !== 0) {
-                    this.mesh.rotation.y = Math.atan2(dx, dz);
-                }
-                // console.log(`NPC ${this.id}: Simulated movement to (${newX.toFixed(2)}, ${newZ.toFixed(2)})`); // Commented for reduced verbosity
-            }
-        };
-        // Set intervals for cycling animations and movement
-        this.fallbackAnimInterval = setInterval(cycleAnimation, 5000); // Every 5 seconds
-        this.fallbackMoveInterval = setInterval(simulateMovement, 100); // Every 100ms for smooth movement
-    }
-    
-    // Stop fallback behavior if server takes control
-    stopFallbackBehavior() {
-        if (this.fallbackAnimInterval) {
-            clearInterval(this.fallbackAnimInterval);
-            this.fallbackAnimInterval = null;
+    /**
+     * Update this NPC instance from the latest schema entity (position, rotation, state, etc.)
+     * @param {object} entity - The Colyseus schema entity
+     */
+    updateFromSchema(entity) {
+        const sessionId = window.room?.sessionId || 'unknown';
+        if (entity.id === 'robokeeper1') {
+            console.log(`%c[robokeeper1][UPDATE][${sessionId}] x=${entity.x}, y=${entity.y}, z=${entity.z}, state=${entity.state} @${new Date().toLocaleTimeString()}`,'color: #fff; background: #FF4136; font-weight: bold;');
         }
-        if (this.fallbackMoveInterval) {
-            clearInterval(this.fallbackMoveInterval);
-            this.fallbackMoveInterval = null;
+        // Update position and rotation
+        this.updatePosition({
+            x: entity.x,
+            y: entity.y,
+            z: entity.z,
+            rotationY: entity.rotationY
+        });
+        // Optionally, update animation/state
+        if (entity.state !== undefined && this.state !== entity.state) {
+            this.playAnimation(entity.state);
         }
-        console.log(`NPC ${this.id}: Stopped fallback behavior as server control is detected.`);
     }
 
     // Destroy method to clean up resources

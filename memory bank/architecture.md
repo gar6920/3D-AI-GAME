@@ -56,6 +56,17 @@ The 3D AI Game Platform is a modular, multiplayer 3D web game built with Three.j
 - Behaviors (movement, animation state, etc.) are attached per entity in the definition.
 - The client uses `EntityFactory` to instantiate matching visual/game objects for each entity type.
 
+### **How to Add a New NPC (Current System)**
+
+1. **Model File:** Place the NPC's GLB model file (e.g., `new_npc1.glb`) in `client/assets/models/`. The filename MUST exactly match the `entityId` you will define in the next step.
+2. **Server Definition:** Add a new entry to the `npcDefinitions` array in `server/implementations/default/npcs.js`. Define its unique `id` (matching the model filename), `type: 'npc'`, initial `position`, `rotation`, and `state` (usually 'Idle').
+3. **Client Code:** No code changes should be needed *if* the standard post-load processing (scaling, traversal, animation setup) in `NPC.js` works for the new model. The client automatically uses the `entityId` to load the corresponding `.glb` file. If your NPC uses different animation clip names, you may need to update or extend the animation mapping in `NPC.js`.
+4. **Run:** Start the server and client. The new NPC should appear at its defined location in its initial state and synchronize across all clients.
+
+**Note:** Some NPCs (like `robot_shark1`) may require custom or simplified post-load processing due to model/visibility quirks. See `NPC.js` for details.
+
+**Animation:** NPCs will play their animation corresponding to their `state` property. The server must update the `state` property to trigger animation changes. The client listens for state changes via Colyseus `.listen` handlers for real-time updates.
+
 ---
 
 ## Multiplayer Room Management
