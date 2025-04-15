@@ -89,6 +89,53 @@ This approach allows creating diverse NPC populations and variations by reusing 
 
 ---
 
+## NPC Definition and Spawning
+
+Adding new NPCs or interactive entities involves defining their properties on the server and ensuring the client can load the corresponding model.
+
+### 1. Server-Side Definition (`server/implementations/<implementation_name>/npcs.js`)
+
+-   Each implementation (e.g., `default`) has an `npcs.js` file containing an array named `npcDefinitions`.
+-   Each object in this array defines one NPC or entity instance.
+-   **Required Properties:**
+    -   `id`: A unique string identifier for this specific instance (e.g., `robokeeper1`, `hover_cube`).
+    -   `type`: String indicating the category (e.g., `'npc'`, `'entity'`).
+    -   `modelId`: String specifying the base name of the model file (e.g., `robokeeper1`, `hover_cube`). The client will load `assets/models/<modelId>.glb`.
+    -   `x`, `y`, `z`: *Flat* numeric properties defining the initial world position.
+    -   `rotationY`: *Flat* numeric property for initial yaw rotation (in radians).
+    -   `state`: Initial state string (e.g., `'Idle'`), used for animation triggering.
+    -   `animationMap`: An object mapping animation names from the GLB file to standardized names (e.g., `{ 'Armature|mixamo.com|Layer0': 'Idle', 'Armature|mixamo.com|Layer1': 'Walk' }`). This map is synchronized to the client.
+    -   `behavior`: A JavaScript function `(entity, room)` or `(entity, deltaTime, roomState)` that gets called periodically on the server to update the NPC's state, position, etc. It can return an object with properties to update (e.g., `{ x: newX, state: 'Walking' }`).
+
+-   **Important:** The initial position and rotation **must** be defined using the flat properties (`x`, `y`, `z`, `rotationY`). Nested `position: {x, y, z}` or `rotation: {y}` objects are **not** currently supported by the spawning logic in `BaseGameRoom.js`.
+
+### 2. Client-Side Model (`client/assets/models/`)
+
+-   A corresponding GLB model file must exist in `client/assets/models/`. The filename (without extension) must exactly match the `modelId` specified in the server definition (e.g., `hover_cube.glb` for `modelId: 'hover_cube'`).
+
+### 3. Spawning Process (`server/core/schemas/BaseGameRoom.js`)
+
+-   When a room starts (`initializeImplementation`), it reads the `npcDefinitions` for its implementation.
+-   For each definition, it creates a `BaseEntity` state object.
+-   It copies the properties (`id`, `type`, `modelId`, `x`, `y`, `z`, `rotationY`, `state`, `animationMap`, `behavior`) from the definition directly onto the `BaseEntity` instance.
+-   This `BaseEntity` is added to the room's `state.entities` map, synchronizing it to all connected clients.
+
+### 4. Client-Side Handling (`client/js/core/NPC.js` and `EntityManager.js`)
+
+-   The `EntityManager` detects when a new entity with `type: 'npc'` appears in the room state.
+-   It creates an instance of the `NPC` class.
+-   The `NPC` class constructor uses the `modelId` from the synchronized state to load the correct GLB file (`assets/models/<modelId>.glb`).
+-   It uses the synchronized `animationMap` to set up the available animations.
+-   It listens for changes to the entity's `state` property and plays the corresponding mapped animation.
+
+By following this structure, adding new NPCs should primarily involve:
+1.  Creating/placing the GLB model.
+2.  Adding a correctly structured definition object to the appropriate `npcs.js` file.
+
+This minimizes the need to modify core files like `BaseGameRoom.js` or `NPC.js` for standard NPC additions.
+
+---
+
 ## Multiplayer Room Management
 - Colyseus rooms are created dynamically. By default, all clients join the same room until full (configurable, e.g. 100 players per room).
 - Each room has its own set of entities, players, and state.

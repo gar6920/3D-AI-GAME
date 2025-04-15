@@ -189,30 +189,6 @@ function initFloor() {
         scene.add(floor);
         
         debug('Floor created successfully with simplified procedural texture');
-        
-        // Load and position data_center_low-poly.glb at the center of the map
-        debug('Loading data center model');
-        const loader = new THREE.GLTFLoader();
-        loader.load(
-            './assets/models/data_center_low-poly.glb',
-            (gltf) => {
-                const dataCenterModel = gltf.scene;
-                dataCenterModel.position.set(0, 0.1, 0); // Center of the map, slightly above ground to prevent texture bleeding
-                dataCenterModel.scale.set(1, 1, 1); // Adjust scale if needed
-                dataCenterModel.traverse((child) => {
-                    if (child.isMesh) {
-                        child.castShadow = true;
-                        child.receiveShadow = true;
-                    }
-                });
-                scene.add(dataCenterModel);
-                debug('Data center model loaded and positioned at map center');
-            },
-            undefined,
-            (error) => {
-                debug(`Error loading data center model: ${error.message}`, true);
-            }
-        );
     } catch (error) {
         debug(`Error creating floor: ${error.message}`, true);
     }

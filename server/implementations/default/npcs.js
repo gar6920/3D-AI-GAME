@@ -108,21 +108,24 @@ const npcDefinitions = [
         animationMap: robokeeperAnimationMap, // Reuse the SAME map
         behavior: robokeeperBehavior         // Reuse the SAME behavior
     },
-    {
-        id: 'datacenter1',      // Unique instance ID
-        type: 'entity',         // Note: this is 'entity', not 'npc'
-        modelId: 'datacenter1', // Model file to load
-        x: 0, y: 0, z: -5, rotationY: 0,
-        state: 'Idle',
-        animationMap: { /* No map defined */ },
+    { // --- SPINNING HOVER CUBE (Centered) ---
+        id: 'hover_cube',       // Unique instance ID, matches model file
+        type: 'entity',         // Static entity
+        modelId: 'hover_cube',  // Model file to load (expects client/assets/models/hover_cube.glb)
+        x: 0, y: 2, z: 0,       // POSITION: Centered horizontally, hovering
+        rotationY: 0,
+        state: 'Idle',          // Default state
+        animationMap: {},       // No animations
+        // BEHAVIOR: Add spinning logic
         behavior: function(entity, deltaTime) {
-            // Simple pulse for datacenter
-            if (!entity.behaviorTimer) entity.behaviorTimer = 0;
-            entity.behaviorTimer += deltaTime;
-            const pulse = 1 + 0.1 * Math.sin(entity.behaviorTimer / 500);
-            entity.pulse = pulse;
+            const rotationSpeed = 0.5; // Radians per second
+            let newRotationY = entity.rotationY + rotationSpeed * deltaTime;
+            // Keep rotation within 0 to 2*PI range (optional, but good practice)
+            newRotationY %= (Math.PI * 2);
+            return { rotationY: newRotationY }; // Return the update
         }
     }
+    // Datacenter definition explicitly removed.
     // Add more NPC/entity definitions here for Default implementation
 ];
 
