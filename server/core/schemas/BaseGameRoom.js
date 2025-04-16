@@ -24,7 +24,7 @@ class BaseGameRoom extends BaseRoom {
         // Spawn each NPC and add to state
         this.spawnedNPCs = [];
         npcDefs.forEach(def => {
-            console.log(`[${this.roomId}] Spawning NPC/Entity from definition ID: ${def.id}`);
+            // console.log(`[${this.roomId}] Spawning NPC/Entity from definition ID: ${def.id}`);
             const entity = new BaseEntity();
             entity.id = def.id;             // Unique instance ID
             entity.type = def.type || 'entity';         // 'npc', 'entity', etc.
@@ -42,18 +42,18 @@ class BaseGameRoom extends BaseRoom {
                 for (const [key, value] of Object.entries(def.animationMap)) {
                     entity.animationMap.set(key, value);
                 }
-                console.log(`[BaseGameRoom] Populated animationMap for ${def.id} with ${Object.keys(def.animationMap).length} entries.`);
+                // console.log(`[BaseGameRoom] Populated animationMap for ${def.id} with ${Object.keys(def.animationMap).length} entries.`);
             } else {
-                console.warn(`[BaseGameRoom] No animationMap found in definition for ${def.id}`);
+                // console.log(`[BaseGameRoom] No animationMap found in definition for ${def.id}`);
             }
 
             this.state.entities.set(def.id, entity);
             this.spawnedNPCs.push(def.id);
-            console.log(`[${this.roomId}] Entity ${def.id} added to state. Type: ${entity.type}, ModelId: ${entity.modelId}, Scale: ${entity.scale}`);
-            console.log(`[BaseGameRoom] Spawned NPC: ${def.id} at (${def.x}, ${def.y}, ${def.z})`);
+            // console.log(`[${this.roomId}] Entity ${def.id} added to state. Type: ${entity.type}, ModelId: ${entity.modelId}, Scale: ${entity.scale}`);
+            // console.log(`[BaseGameRoom] Spawned NPC: ${def.id} at (${def.x}, ${def.y}, ${def.z})`);
         });
         // Log all entities in state after spawning
-        console.log('[BaseGameRoom] Entities after NPC spawn:', Array.from(this.state.entities.keys()));
+        // console.log('[BaseGameRoom] Entities after NPC spawn:', Array.from(this.state.entities.keys()));
     }
 
     /**
@@ -65,12 +65,12 @@ class BaseGameRoom extends BaseRoom {
         // Log if robokeeper1 is present in state
         if (this.state.entities.has('robokeeper1')) {
             const robokeeper = this.state.entities.get('robokeeper1');
-            if (!robokeeper._lastLogTime || Date.now() - robokeeper._lastLogTime > 2000) {
-                console.log(`[BaseGameRoom] robokeeper1 state: x=${robokeeper.x}, y=${robokeeper.y}, z=${robokeeper.z}, state=${robokeeper.state}`);
-                robokeeper._lastLogTime = Date.now();
-            }
+            // if (!robokeeper._lastLogTime || Date.now() - robokeeper._lastLogTime > 2000) {
+            //     console.log(`[BaseGameRoom] robokeeper1 state: x=${robokeeper.x}, y=${robokeeper.y}, z=${robokeeper.z}, state=${robokeeper.state}`);
+            //     robokeeper._lastLogTime = Date.now();
+            // }
         } else {
-            console.warn('[BaseGameRoom] robokeeper1 is NOT present in state.entities!');
+            // console.warn('[BaseGameRoom] robokeeper1 is NOT present in state.entities!');
         }
         // Call modular behavior for each entity if defined
         this.state.entities.forEach(entity => {
@@ -86,6 +86,7 @@ class BaseGameRoom extends BaseRoom {
                 if (updates) {
                     let dirty = false;
                     if (updates.x !== undefined && updates.x !== prev.x) { entity.x = updates.x; dirty = true; }
+                    if (updates.y !== undefined && updates.y !== prev.y) { entity.y = updates.y; dirty = true; }
                     if (updates.z !== undefined && updates.z !== prev.z) { entity.z = updates.z; dirty = true; }
                     if (updates.rotationY !== undefined && updates.rotationY !== prev.rotationY) { entity.rotationY = updates.rotationY; dirty = true; }
                     if (updates.state !== undefined && updates.state !== prev.state) { entity.state = updates.state; dirty = true; }

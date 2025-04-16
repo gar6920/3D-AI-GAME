@@ -67,6 +67,11 @@ class NPC extends Entity {
                         npcInstance.position[field] = value;
                         if (npcInstance.mesh) {
                             npcInstance.mesh.position[field] = value;
+                            if (field === 'y') {
+                                console.log(`[NPC ${entityId}] Client mesh y updated to: ${value}`);
+                            } else if (field === 'z') {
+                                console.log(`[NPC ${entityId}] Client mesh z updated to: ${value}`);
+                            }
                         }
                     } else if (field === 'animationMap') {
                         // Re-copy the animation map if it changes dynamically (unlikely but possible)

@@ -89,6 +89,60 @@ function robokeeperBehavior(entity, deltaTime, roomState) {
     return updates;
 }
 
+// Shark behavior: move fast, descend to player
+function sharkBehavior(entity, deltaTime, roomState) {
+    const speed = 6.0; // Much faster than robokeeper
+    const stopDistance = 1.5;
+    const stopDistanceSq = stopDistance * stopDistance;
+    let nearestPlayer = null;
+    let minDistSq = Infinity;
+    if (roomState && roomState.players) {
+        roomState.players.forEach(player => {
+            const dx = player.x - entity.x;
+            const dy = (player.y || 0) - (entity.y || 0);
+            const dz = player.z - entity.z;
+            const distSq = dx * dx + dy * dy + dz * dz;
+            if (distSq < minDistSq) {
+                minDistSq = distSq;
+                nearestPlayer = player;
+            }
+        });
+    }
+    let newState = 'Idle';
+    let updates = null;
+    if (nearestPlayer && minDistSq > stopDistanceSq) {
+        // Move toward player in 3D
+        const dx = nearestPlayer.x - entity.x;
+        const dy = (nearestPlayer.y || 0) - (entity.y || 0);
+        const dz = nearestPlayer.z - entity.z;
+        const dist = Math.sqrt(minDistSq);
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const nz = dz / dist;
+        const newX = entity.x + nx * speed * deltaTime;
+        const newY = (entity.y || 0) + ny * speed * deltaTime;
+        const newZ = entity.z + nz * speed * deltaTime;
+        // console.log(`[Shark ${entity.id}] Y debug: Player y=${nearestPlayer.y?.toFixed(2) ?? '0.00'}, Shark y=${(entity.y||0).toFixed(2)}, newY=${newY.toFixed(2)}`);
+        // console.log(`[Shark ${entity.id}] Player at (${nearestPlayer.x.toFixed(2)}, ${nearestPlayer.y?.toFixed(2) ?? '0.00'}, ${nearestPlayer.z.toFixed(2)}), Shark at (${entity.x.toFixed(2)}, ${(entity.y||0).toFixed(2)}, ${entity.z.toFixed(2)}), Moving to (${newX.toFixed(2)}, ${newY.toFixed(2)}, ${newZ.toFixed(2)})`);
+        const newRotationY = Math.atan2(nx, nz);
+        newState = 'Walk';
+        updates = { x: newX, y: newY, z: newZ, rotationY: newRotationY, state: newState };
+    } else if (nearestPlayer) {
+        // Face player, stay idle
+        const dx = nearestPlayer.x - entity.x;
+        const dz = nearestPlayer.z - entity.z;
+        const newRotationY = Math.atan2(dx, dz);
+        newState = 'Idle';
+        if (newState !== entity.state || Math.abs(newRotationY - entity.rotationY) > 0.01) {
+            updates = { rotationY: newRotationY, state: newState };
+        }
+    }
+    if (!updates && newState !== entity.state) {
+        updates = { state: newState };
+    }
+    return updates;
+}
+
 const npcDefinitions = [
     {
         id: 'robokeeper1',      // Original instance
@@ -141,6 +195,7 @@ const npcDefinitions = [
         animationMap: null
     })),
     // --- 5 Robot Shark NPCs in the Sky ---
+    // --- Shark Behavior: Fast, 3D movement ---
     ...Array.from({length: 5}, (_, i) => ({
         id: `robot_shark1_${i}`,
         type: 'npc',
@@ -151,8 +206,8 @@ const npcDefinitions = [
         rotationY: 0,
         scale: 2.0,
         state: null,
-        behavior: null,
-        animationMap: null
+        behavior: sharkBehavior, // Custom shark behavior
+        animationMap: null // No animations
     })),
     // Original hover_cube definition - Re-enabled
     {

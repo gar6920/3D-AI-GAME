@@ -931,6 +931,7 @@ async function setupRoomListeners(room) {
                     npcInstance.mesh.position.y = THREE.MathUtils.lerp(
                         npcInstance.mesh.position.y, entity.y, lerpFactor
                     );
+                    console.log(`[NPC ${entityId}] network-core.js lerp: mesh y now ${npcInstance.mesh.position.y}, entity.y=${entity.y}`);
                     npcInstance.mesh.position.z = THREE.MathUtils.lerp(
                         npcInstance.mesh.position.z, entity.z, lerpFactor
                     );
