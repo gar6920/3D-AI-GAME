@@ -56,9 +56,15 @@ class BaseGameRoom extends BaseRoom {
         });
 
         // Load and spawn structures
-        let structDefs;
+        // Implementation-agnostic structure loading
+        let structDefs = [];
         try {
-            structDefs = require('../../implementations/default/structures').structureDefinitions;
+            const impl = require('../../implementations/default/index');
+            if (typeof impl.getStructureDefinitions === 'function') {
+                structDefs = impl.getStructureDefinitions();
+            } else {
+                structDefs = require('../../implementations/default/structures').structureDefinitions;
+            }
         } catch (e) {
             console.warn('[BaseGameRoom] Could not load structureDefinitions:', e);
             structDefs = [];
@@ -69,13 +75,13 @@ class BaseGameRoom extends BaseRoom {
             s.id = def.id;
             s.entityType = 'structure';
             s.definitionId = def.id;
-            s.modelId = def.modelPath;
+            s.modelId = def.modelId || (def.modelPath ? def.modelPath.split('/').pop().replace('.glb', '') : def.id);
             s.x = def.position.x;
             s.y = def.position.y;
             s.z = def.position.z;
             s.rotationY = def.rotationY || 0;
             s.scale = def.scale || 1;
-            this.state.entities.set(def.id, s);
+            this.state.structures.set(def.id, s);
             this.spawnedStructures.push(def.id);
         });
 

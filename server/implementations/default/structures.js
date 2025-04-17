@@ -6,14 +6,16 @@
  */
 const structureDefinitions = [
   {
-    id: "data_center",
+    id: "city_building_center",
     structureType: "building",
-    modelPath: "assets/models/data_center_low-poly.glb",
+    modelId: "city_building",
+    modelPath: "assets/models/city_building.glb",
     position: { x: 0, y: 0, z: 0 },
     rotationY: 0,
-    scale: 1,
-    buildable: true
+    scale: 10,
+    buildable: false
   },
+
   {
     id: "hover_cube",
     structureType: "cube",

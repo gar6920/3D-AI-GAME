@@ -11,7 +11,14 @@ const implementation = {
     roomType: "default"
 };
 
+const { structureDefinitions } = require('./structures');
+
+function getStructureDefinitions() {
+    return structureDefinitions;
+}
+
 module.exports = {
     implementation,
-    BaseGameRoom
+    BaseGameRoom,
+    getStructureDefinitions
 };

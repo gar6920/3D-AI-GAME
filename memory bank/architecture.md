@@ -56,21 +56,105 @@ The 3D AI Game Platform is a modular, multiplayer 3D web game built with Three.j
 - Behaviors (movement, animation state, etc.) are attached per entity in the definition.
 - The client uses `EntityFactory` to instantiate matching visual/game objects for each entity type.
 
-### **Unified Entity/NPC Pipeline (2025 Update)**
+### **Unified Structure & Building Pipeline (2025 Update)**
 
-- All static entities (type `'entity'`) and NPCs (type `'npc'`) are defined in `/server/implementations/[impl]/npcs.js`.
-- Each entity/NPC definition specifies:
-    - `id`: Unique instance identifier (e.g., `hover_cube_0`, `robot_shark1_3`)
-    - `type`: `'entity'` for static objects, `'npc'` for interactive/animated
-    - `modelId`: The model filename (without `.glb`) in `/client/assets/models/`
-    - `x`, `y`, `z`, `rotationY`, `scale`, etc.: Placement and appearance
-    - `animationMap`: (Optional) Maps raw GLB animation names to standard actions (for NPCs)
-    - `behavior`: (Optional) Server-side logic for NPCs
-- The server loads all definitions at room creation and manages state/authority.
-- The client uses `EntityFactory` to instantiate all objects, using the same modular pipeline for both static entities and NPCs.
-- **To add multiple instances:** Just add multiple objects to `npcDefinitions` (e.g., 50 cubes, 5 sharks), each with a unique `id` and desired position.
-- **No client code changes are needed** when adding new models or instances—everything is data-driven.
+#### Implementation-Agnostic Static Structure Spawning
+- The server core now supports implementation-agnostic static structure spawning.
+- Each implementation can export a `getStructureDefinitions()` function from its `/server/implementations/[impl]/index.js`.
+- At room creation, the server will call this function (if present) to load all static and buildable structures.
+- Structures are added to the authoritative game state in `this.state.structures` and synced to clients.
+
+#### How to Define Structures (Buildings and Non-Buildings)
+- All structures (including buildings and non-building props) are defined in `/server/implementations/[impl]/structures.js` as objects in the exported `structureDefinitions` array.
+- **Required fields for each structure:**
+    - `id`: Unique identifier (e.g., `city_building_center`)
+    - `structureType`: Type/category (e.g., `'building'`, `'decor'`, `'wall'`)
+    - `modelId`: Model filename (without `.glb`, e.g., `city_building`)
+    - `modelPath`: Path to the GLB model (e.g., `assets/models/city_building.glb`)
+    - `position`: `{ x, y, z }` object for world placement
+    - `rotationY`: Yaw in radians
+    - `scale`: Visual scale multiplier
+    - `buildable`: `true` if players can place this structure, `false` for static world props
+
+#### Static vs. Buildable Structures
+- **Static structures** (`buildable: false`): Spawned automatically at room creation and always present in the world (e.g., city buildings, world props).
+- **Buildable structures** (`buildable: true`): Appear in the player's build menu and can be placed by players during gameplay. Not spawned by default.
+
+#### Steps to Add a New Structure or Building
+1. Place your `.glb` model in `/client/assets/models/` (the filename should match your `modelId`).
+2. Add a new object to the `structureDefinitions` array in `/server/implementations/[impl]/structures.js` with all required fields.
+    - For a static structure, set `buildable: false` and set its `position` to where you want it to appear by default.
+    - For a buildable structure, set `buildable: true`. Its default `position` can be `{ x: 0, y: 0, z: 0 }` since placement is determined by the player.
+3. (Optional) Export a `getStructureDefinitions()` function from your `/server/implementations/[impl]/index.js` that returns the array (already set up in the default implementation).
+4. Restart the server and client. The structure will appear according to its type.
+
+#### Example Structure Definitions
+```js
+// Example static building (always present)
+{
+  id: "city_building_center",
+  structureType: "building",
+  modelId: "city_building",
+  modelPath: "assets/models/city_building.glb",
+  position: { x: 0, y: 0, z: 0 },
+  rotationY: 0,
+  scale: 10,
+  buildable: false // Not buildable by players
+},
+// Example buildable prop (player can place)
+{
+  id: "hover_cube",
+  structureType: "cube",
+  modelId: "hover_cube",
+  modelPath: "assets/models/hover_cube.glb",
+  position: { x: 0, y: 0, z: 0 },
+  rotationY: 0,
+  scale: 1,
+  buildable: true // Will appear in build menu
+}
+```
+- You can add as many structures as you want, with any mix of static and buildable types.
+- All logic for what is buildable is controlled by the `buildable` field in the definition.
+- No changes to client code are required when adding or updating structures—everything is data-driven from the implementation folder.
+
 - **Model documentation:** For each new model, add an entry to `/client/assets/models/README.md` with details (animations, file size, mapping, etc.) to keep assets organized and onboarding easy.
+
+---
+
+### **How to Add a New Structure/Building (Current System)**
+
+Static world props, buildings, and structures must be defined in `/server/implementations/[impl]/structures.js` (not `npcs.js`).
+
+1.  **Model File (`client/assets/models/`):**
+    *   Place the GLB model file (e.g., `city_building.glb`) in this directory. The filename here is referenced in `modelPath`.
+
+2.  **Server Definition (`server/implementations/default/structures.js`):**
+    *   **Add/Modify Entry:** Add a new object to the `structureDefinitions` array for each **instance** you want to create.
+    *   **`id`:** Assign a unique instance identifier (e.g., `city_building_center`).
+    *   **`structureType`:** Set to `'building'` (or `'wall'`, `'decor'`, etc. as appropriate).
+    *   **`modelPath`:** Specify the full path to the model (e.g., `assets/models/city_building.glb`).
+    *   **`position`:** Set as an object: `{ x, y, z }`.
+    *   **`rotationY`:** Yaw in radians.
+    *   **`scale`:** Size multiplier (e.g., `10` for 10x larger).
+    *   **`buildable`:** `false` for static world props, `true` if players can place it in Building Mode.
+
+    **Example:**
+    ```js
+    {
+      id: "city_building_center",
+      structureType: "building",
+      modelPath: "assets/models/city_building.glb",
+      position: { x: 0, y: 0, z: 0 },
+      rotationY: 0,
+      scale: 10,
+      buildable: false
+    }
+    ```
+
+3.  **Client Code:**
+    *   **No Changes Needed:** Structures are spawned and rendered automatically based on the server definition.
+
+4.  **Run:** Restart the server (`./start_server`) and connect with the client. The new structure/building should appear at its defined location, using the specified model and scale.
 
 ---
 
