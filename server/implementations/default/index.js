@@ -17,8 +17,14 @@ function getStructureDefinitions() {
     return structureDefinitions;
 }
 
+// Return map size for this implementation (10x larger than default)
+function getMapSize() {
+    return 1000;
+}
+
 module.exports = {
     implementation,
     BaseGameRoom,
-    getStructureDefinitions
+    getStructureDefinitions,
+    getMapSize
 };

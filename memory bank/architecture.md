@@ -13,6 +13,7 @@ The 3D AI Game Platform is a modular, multiplayer 3D web game built with Three.j
 - **schemas/**: Colyseus schemas for game state, entities, players, etc.
   - `DefaultRoom.js`: Main room logic for the default implementation. Loads modular entity/NPC definitions from the active implementation.
   - `BaseEntity.js`, `Player.js`, `GameState.js`, etc.: Define server-side state for all entities and players.
+  - **GameConfigSchema.js**: Defines game configuration schema including a dynamic `mapSize` value, sourced from the active implementation’s `getMapSize()` (default returns 1000), enabling flexible map dimensions.
 
 ### Implementations (`/server/implementations`)
 - **default/**: The default game implementation.
@@ -31,8 +32,8 @@ The 3D AI Game Platform is a modular, multiplayer 3D web game built with Three.j
 
 ### Core Platform (`/client/js/core`)
 - **main.js**: Entry point; loads core and implementation modules, initializes managers.
-- **game-engine.js**: Sets up Three.js renderer, scene, camera, and main loop.
-- **network-core.js**: Handles Colyseus networking, joining/leaving rooms, syncing state, and entity creation/destruction.
+- **game-engine.js**: Sets up Three.js renderer, scene, camera, main loop, and generates the floor geometry using the server-provided `mapSize`.
+- **network-core.js**: Handles Colyseus networking, joining/leaving rooms, syncing state, fetches `mapSize` from the server, and triggers dynamic floor regeneration.
 - **EntityFactory.js**: Registers and instantiates all entity types (core and implementation-specific).
 - **Entity.js**, **Player.js**, **NPC.js**: Base classes for all game objects.
 - **controls.js**: Camera and input control logic for all view modes.

@@ -10,7 +10,13 @@ class GameConfigSchema extends Schema {
         this.implementation = "default"; 
         this.mode = "standard";               // Game mode
         this.maxPlayers = 100;                // Maximum number of players
-        this.mapSize = 40;                    // Size of the map
+        // Implementation-driven map size
+        try {
+            const impl = require('../../implementations/default/index');
+            this.mapSize = typeof impl.getMapSize === 'function' ? impl.getMapSize() : 40;
+        } catch (e) {
+            this.mapSize = 40;
+        }
     }
 }
 

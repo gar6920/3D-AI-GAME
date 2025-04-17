@@ -138,7 +138,7 @@ function initFloor() {
     try {
         debug('Creating floor');
         
-        const floorSize = 100;
+        const floorSize = 400;
         const floorGeometry = new THREE.PlaneGeometry(floorSize, floorSize);
         
         // Create a simple procedural texture using canvas
