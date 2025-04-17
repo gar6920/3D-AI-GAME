@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D AI Game Platform</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            color: white;
+            overflow: hidden;
+        }
+        
+        header {
+            text-align: center;
+            padding: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        
+        h1 {
+            margin: 0;
+            font-size: 32px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        
+        .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .game-settings {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            width: 100%;
+            max-width: 600px;
+        }
+        
+        .game-settings h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        
+        .implementations {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .implementation-select {
+            background-color: rgba(255, 255, 255, 0.2);
+            border: 2px solid white;
+            padding: 8px 15px;
+            border-radius: 5px;
+            color: white;
+            font-size: 16px;
+            min-width: 200px;
+        }
+        
+        .implementation-select option {
+            background-color: #333;
+            color: white;
+        }
+        
+        .options {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+            width: 100%;
+            max-width: 600px;
+        }
+        
+        .option-card {
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 25px;
+            text-align: center;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .option-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        .option-card h2 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #fff;
+        }
+        
+        .option-card p {
+            margin-bottom: 25px;
+            line-height: 1.5;
+        }
+        
+        .option-card.single-player {
+            border-left: 5px solid #28a745;
+        }
+        
+        .option-card.multiplayer {
+            border-left: 5px solid #007bff;
+        }
+        
+        .button {
+            display: inline-block;
+            padding: 12px 30px;
+            border-radius: 8px;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            border: none;
+        }
+        
+        .button.single-player {
+            background-color: #28a745;
+        }
+        
+        .button.single-player:hover {
+            background-color: #218838;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        .button.multiplayer {
+            background-color: #007bff;
+        }
+        
+        .button.multiplayer:hover {
+            background-color: #0069d9;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        .buttons-container {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+        
+        .mode-instructions {
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .mode-instructions.visible {
+            display: block;
+        }
+        
+        .mode-instructions ol {
+            text-align: left;
+            margin-top: 10px;
+            padding-left: 25px;
+        }
+        
+        .download-button {
+            background-color: #007bff;
+            padding: 10px 20px;
+            border-radius: 5px;
+            color: white;
+            font-size: 16px;
+            text-decoration: none;
+        }
+        
+        code {
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: Consolas, monospace;
+        }
+        
+        footer {
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            text-align: center;
+            font-size: 14px;
+        }
+        
+        .highlight {
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        /* Modal styling */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            display: none;
+        }
+        
+        .modal-overlay.visible {
+            display: flex;
+        }
+        
+        .modal-content {
+            background-color: #1e1e1e;
+            border-radius: 8px;
+            padding: 20px;
+            width: 80%;
+            max-width: 500px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        .modal-title {
+            margin-top: 0;
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+        }
+        
+        .option-button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            background-color: #2a2a2a;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            text-align: left;
+            transition: background-color 0.2s;
+        }
+        
+        .option-button:hover {
+            background-color: #3a3a3a;
+        }
+        
+        .option-button .icon {
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        
+        .primary-option {
+            background-color: #0078d7;
+        }
+        
+        .primary-option:hover {
+            background-color: #0086f0;
+        }
+        
+        .close-modal {
+            background-color: transparent;
+            border: none;
+            color: #888;
+            padding: 10px;
+            margin-top: 10px;
+            cursor: pointer;
+            width: 100%;
+        }
+        
+        .close-modal:hover {
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>3D AI Game Platform</h1>
+    </header>
+    
+    <div class="container">
+        <!-- Game implementation selection moved outside of player mode boxes -->
+        <div class="game-settings">
+            <h3>Game Implementation</h3>
+            <div class="implementations">
+                <label for="gameImplementation">Select Implementation:</label>
+                <select id="gameImplementation" class="implementation-select">
+                    <option value="default">Default Implementation</option>
+                    <!-- Additional implementations will be populated dynamically -->
+                </select>
+            </div>
+        </div>
+        
+        <div class="options">
+            <div class="option-card single-player">
+                <h2>Single Player Mode</h2>
+                <p>Play directly in your browser with keyboard and mouse controls. This mode is perfect for quick sessions or when you want to play solo.</p>
+                
+                <a href="#" id="singlePlayerButton" class="button single-player">Play Now</a>
+            </div>
+            
+            <div class="option-card multiplayer">
+                <h2>Multiplayer Mode</h2>
+                <p>Play with up to 4 players on one screen with gamepad support using our desktop application.</p>
+                
+                <div class="buttons-container">
+                    <a href="#" id="playMultiplayerButton" class="button multiplayer">Play Now</a>
+                    <a href="#" id="multiplayerButton" class="button multiplayer" style="background-color: rgba(0, 123, 255, 0.6);">How To Launch</a>
+                </div>
+                
+                <div id="multiplayerInstructions" class="mode-instructions">
+                    <h3>Multiplayer Mode Instructions</h3>
+                    <ol>
+                        <li>Download and install the 3D AI Game Launcher using the button below</li>
+                        <li>Once installed, you can use the "Play Now" button above to launch the game</li>
+                        <li>Or manually start the launcher from your desktop</li>
+                        <li>Select player count and game implementation in the launcher</li>
+                        <li>Enjoy multiplayer mode!</li>
+                    </ol>
+                    <p><a href="/download/3d-ai-game-launcher.exe" id="downloadButton" class="download-button">Download Launcher</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Launcher Modal -->
+    <div id="launcherModal" class="modal-overlay">
+        <div class="modal-content">
+            <h2 class="modal-title">3D AI Game Launcher</h2>
+            <p>To play multiplayer, you need the 3D AI Game Launcher application.</p>
+            
+            <button id="downloadLauncherBtn" class="option-button primary-option">
+                <span class="icon">↓</span> Download Launcher
+            </button>
+            
+            <button id="alreadyHaveLauncherBtn" class="option-button">
+                <span class="icon">▶</span> I already have the launcher
+            </button>
+            
+            <button id="closeModalBtn" class="close-modal">Cancel</button>
+        </div>
+    </div>
+    
+    <footer>
+        &copy; 2025 3D AI Game Platform
+    </footer>
+    
+    <script>
+        // Get DOM elements
+        const singlePlayerButton = document.getElementById('singlePlayerButton');
+        const multiplayerButton = document.getElementById('multiplayerButton');
+        const playMultiplayerButton = document.getElementById('playMultiplayerButton');
+        const downloadButton = document.getElementById('downloadButton');
+        const gameImplementation = document.getElementById('gameImplementation');
+        const multiplayerInstructions = document.getElementById('multiplayerInstructions');
+        
+        // Modal elements
+        const launcherModal = document.getElementById('launcherModal');
+        const downloadLauncherBtn = document.getElementById('downloadLauncherBtn');
+        const alreadyHaveLauncherBtn = document.getElementById('alreadyHaveLauncherBtn');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        
+        // Set up play singleplayer button
+        singlePlayerButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            const implementation = gameImplementation.value;
+            window.location.href = `/game?implementation=${implementation}`;
+        });
+        
+        // Toggle instructions visibility
+        multiplayerButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (multiplayerInstructions.classList.contains('visible')) {
+                multiplayerInstructions.classList.remove('visible');
+                multiplayerButton.textContent = 'How To Launch';
+            } else {
+                multiplayerInstructions.classList.add('visible');
+                multiplayerButton.textContent = 'Hide Instructions';
+            }
+        });
+        
+        // Set up play multiplayer button to show the launcher modal
+        playMultiplayerButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            // Show the modal
+            launcherModal.classList.add('visible');
+        });
+        
+        // Download button in modal
+        downloadLauncherBtn.addEventListener('click', () => {
+            // Start the download
+            window.location.href = '/download/3d-ai-game-launcher.exe';
+            
+            // Hide the modal
+            launcherModal.classList.remove('visible');
+            
+            // Show the instructions
+            multiplayerInstructions.classList.add('visible');
+            multiplayerButton.textContent = 'Hide Instructions';
+            
+            // Alert with further instructions
+            setTimeout(() => {
+                alert('The launcher is being downloaded. Once downloaded, run it to start the multiplayer game.');
+            }, 500);
+        });
+        
+        // Already have launcher button
+        alreadyHaveLauncherBtn.addEventListener('click', () => {
+            // Hide the modal
+            launcherModal.classList.remove('visible');
+            
+            // Try to close the browser tab (may be blocked by browser)
+            window.close();
+            
+            // Immediately show the redirect screen (will work even if tab closing is blocked)
+            document.body.innerHTML = `
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; text-align: center; padding: 20px; background-color: #121212; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                    <h1 style="margin-bottom: 20px;">Please Run the 3D AI Game Launcher</h1>
+                    <p style="font-size: 18px; margin-bottom: 10px;">You already have the launcher installed on your computer.</p>
+                    <p style="font-size: 18px; margin-bottom: 30px;">Please locate and run the launcher application to start playing.</p>
+                    <div style="background-color: #1e1e1e; padding: 20px; border-radius: 8px; max-width: 500px; margin-bottom: 30px;">
+                        <p style="font-weight: bold; margin-bottom: 10px;">Where to find your launcher:</p>
+                        <ul style="text-align: left; line-height: 1.6;">
+                            <li>Check your <strong>Downloads</strong> folder</li>
+                            <li>Look for <strong>3d-ai-game-launcher.exe</strong></li>
+                            <li>Check your <strong>Desktop</strong> for shortcuts</li>
+                        </ul>
+                    </div>
+                    <button onclick="window.location.href='/';" style="background-color: #0078d7; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 4px; cursor: pointer; transition: background-color 0.2s;">
+                        Return to Home Page
+                    </button>
+                </div>
+            `;
+        });
+        
+        // Close modal button
+        closeModalBtn.addEventListener('click', () => {
+            launcherModal.classList.remove('visible');
+        });
+        
+        // Close modal when clicking outside
+        launcherModal.addEventListener('click', (e) => {
+            if (e.target === launcherModal) {
+                launcherModal.classList.remove('visible');
+            }
+        });
+        
+        // Initial API call to get game implementations
+        fetch('/api/implementations')
+            .then(response => response.json())
+            .then(data => {
+                // Populate dropdown with available implementations
+                gameImplementation.innerHTML = '';
+                data.forEach(impl => {
+                    const option = document.createElement('option');
+                    option.value = impl;
+                    option.textContent = impl.charAt(0).toUpperCase() + impl.slice(1);
+                    gameImplementation.appendChild(option);
+                });
+            })
+            .catch(error => console.error('Error fetching implementations:', error));
+    </script>
+</body>
+</html>

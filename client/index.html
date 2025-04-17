@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D AI Game Platform</title>
+    <link rel="stylesheet" href="css/styles.css">
+    
+    <!-- Load Manager Classes Synchronously VERY EARLY -->
+    <script src="js/core/InputManager.js"></script>
+    <script src="js/core/ActionManager.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        #lock-instructions {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            text-align: center;
+            cursor: pointer;
+            z-index: 10;
+        }
+        #player-list-container {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            border-radius: 5px;
+            width: 200px;
+            max-height: 300px;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            z-index: 100;
+        }
+        #player-list-header {
+            padding: 5px 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #player-list {
+            margin-top: 5px;
+            max-height: 150px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            transition: height 0.3s ease;
+        }
+        .player-entry {
+            padding: 3px;
+            margin-bottom: 3px;
+            display: flex;
+            align-items: center;
+            font-size: 11px;
+            background-color: rgba(255,255,255,0.1);
+            border-radius: 3px;
+        }
+        .player-color {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+            flex-shrink: 0;
+        }
+        .player-info {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        #collapse-icon {
+            transition: transform 0.3s ease;
+        }
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            font-family: Arial, sans-serif;
+        }
+        #loading-status {
+            margin-top: 20px;
+            font-size: 16px;
+        }
+        .spinner {
+            border: 5px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top: 5px solid white;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .hide-cursor, .hide-cursor * {
+            cursor: none !important;
+        }
+        #building-menu button {
+            cursor: pointer !important;
+        }
+    </style>
+    <script>
+        // Fetch the current implementation information and update the page title
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('/api/config');
+                if (response.ok) {
+                    const config = await response.json();
+                    // Update the page title with the active implementation
+                    document.title = `3D AI Game - ${config.activeImplementation}`;
+                    
+                    // Also add a small indicator in the corner
+                    const implIndicator = document.createElement('div');
+                    implIndicator.style.position = 'absolute';
+                    implIndicator.style.top = '5px';
+                    implIndicator.style.right = '10px';
+                    implIndicator.style.background = 'rgba(0,0,0,0.5)';
+                    implIndicator.style.color = 'white';
+                    implIndicator.style.padding = '5px 10px';
+                    implIndicator.style.borderRadius = '3px';
+                    implIndicator.style.fontSize = '12px';
+                    implIndicator.style.zIndex = '1000';
+                    implIndicator.textContent = `Implementation: ${config.activeImplementation}`;
+                    document.body.appendChild(implIndicator);
+                }
+            } catch (error) {
+                console.error('Failed to fetch implementation info:', error);
+            }
+        });
+    </script>
+</head>
+<body>
+    <canvas id="game-canvas"></canvas>
+    
+    <div id="lock-instructions">
+        Click to play<br>
+        WASD to move, Mouse to look<br>
+        V to toggle camera views<br>
+        Right-click + Mouse to orbit in third-person view
+    </div>
+    
+    <!-- Multiplayer panel - Players List -->
+    <div id="player-list-container">
+        <div id="player-list-header">
+            <span id="collapse-icon">▼</span> Players <span id="player-count">(0)</span>
+        </div>
+        <div id="player-list"></div>
+    </div>
+    
+    <!-- Game HUD -->
+    <div id="game-hud"></div>
+    
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <h2>3D Game Platform</h2>
+        <div class="spinner"></div>
+        <div id="loading-status">Loading game engine...</div>
+        <div style="margin-top: 10px; font-size: 14px;">Connecting to server...</div>
+    </div>
+    
+    <!-- Three.js library via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/PointerLockControls.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/renderers/CSS2DRenderer.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js" defer></script>
+    
+    <!-- Colyseus client library -->
+    <script src="https://unpkg.com/colyseus.js@^0.14.13/dist/colyseus.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/simplex-noise@3.0.0/dist/simplex-noise.min.js" defer></script>
+    
+    <!-- Input Management - REMOVED from here -->
+    <!-- <script src="js/core/InputManager.js"></script> -->
+    
+    <!-- Action Management - REMOVED from here -->
+    <!-- <script src="js/core/ActionManager.js"></script> -->
+    
+    <!-- Your main application script - Corrected Path -->
+    <script type="module" src="js/core/main.js" defer></script>
+    
+    <!-- Local multiplayer scripts -->
+            
+    <!-- Building Mode Script -->
+    <script src="js/core/BuildingModeManager.js" defer></script>
+    
+    <!-- Game Integration (Step 3) -->
+    <script src="js/core/GameIntegration.js" defer></script>
+    
+    <!-- Add main keyboard controls -->
+    <script>
+    // Using InputManager for P key (multiplayer setup)
+    document.addEventListener('DOMContentLoaded', function() {
+        // Wait for InputManager to be ready before registering handlers
+        const waitForInputManager = setInterval(() => {
+            if (window.inputManager && typeof window.inputManager.on === 'function') {
+                clearInterval(waitForInputManager);
+                
+                // Register P key through InputManager
+                window.inputManager.on('keydown', function(event) {
+                    if (event.key === 'p' || event.key === 'P') {
+                        // Check if we're in the main window (not an iframe)
+                        if (window === window.parent) {
+                            console.log("Starting split-screen multiplayer setup");
+                            // Create event to trigger player selection UI
+                            document.dispatchEvent(new CustomEvent('startLocalMultiplayer'));
+                        }
+                    }
+                });
+                
+                console.log("Multiplayer setup P key handler registered with InputManager");
+            }
+        }, 100); // Check every 100ms
+    });
+    </script>
+    
+    <!-- Function to start the game when a controller button is pressed -->
+    <script>
+    function setupGamepadStartSupport() {
+        console.log("Setting up gamepad start support...");
+        let gameStarted = false; // Prevent multiple starts from rapid button presses
+        
+        function checkGamepads() {
+            if (gameStarted) return; // Don't poll if already started
+
+            const gamepads = navigator.getGamepads();
+            for (let i = 0; i < gamepads.length; i++) {
+                const gp = gamepads[i];
+                if (gp && gp.connected) {
+                    // Check for any button press
+                    if (gp.buttons && gp.buttons.length > 0) {
+                        for (let b = 0; b < gp.buttons.length; b++) {
+                            if (gp.buttons[b] && gp.buttons[b].pressed) {
+                                console.log("Gamepad button pressed, initiating game start...");
+                                gameStarted = true; // Set flag
+                                
+                                // Set the input type to gamepad explicitly
+                                if (window.inputManager) {
+                                    window.inputManager.setActiveInputType('gamepad');
+                                } else {
+                                    console.warn("InputManager not ready when starting via gamepad");
+                                }
+                                
+                                // Hide the instructions immediately
+                                const instructions = document.getElementById('lock-instructions');
+                                if (instructions) {
+                                    instructions.style.display = 'none';
+                                }
+
+                                // Call init() first, then trigger startGameLogic once engine is ready
+                                if (typeof window.init === 'function') {
+                                    if (!window.gameInitialized) { // Prevent re-init
+                                       window.gameInitialized = true;
+                                       // Listen for the game engine ready event
+                                       window.addEventListener('gameEngineReady', function handleGameReady() {
+                                            console.log("gameEngineReady event received, calling startGameLogic for gamepad.");
+                                            if (typeof window.startGameLogic === 'function') {
+                                                window.startGameLogic();
+                                            } else {
+                                                console.error("startGameLogic function not found after gameEngineReady.");
+                                            }
+                                            // Remove listener after use
+                                            window.removeEventListener('gameEngineReady', handleGameReady);
+                                        }, { once: true }); // Ensure listener runs only once
+                                       
+                                       // Now call init
+                                       window.init();
+                                       console.log("Game init() called via gamepad button press.");
+                                    } else {
+                                        console.log("Game already initialized, skipping init() call.");
+                                        // If already initialized but logic didn't run (edge case?), try calling startGameLogic directly
+                                        if (typeof window.startGameLogic === 'function' && !window.gameLogicStarted) {
+                                            console.log("Calling startGameLogic directly as game was already initialized.");
+                                            window.startGameLogic();
+                                        }
+                                    }
+                                } else {
+                                    console.error("window.init not found, cannot start game via gamepad.");
+                                }
+                                
+                                return; // Stop checking once we start the game
+                            }
+                        }
+                    }
+                }
+            }
+            // Continue polling if no button press detected and game hasn't started
+             if (!gameStarted) {
+                 setTimeout(checkGamepads, 100);
+             }
+        }
+        
+        // Start polling for gamepad input
+        setTimeout(checkGamepads, 100);
+        
+        // Also listen for gamepad connection
+        window.addEventListener("gamepadconnected", function(e) {
+            console.log("Gamepad connected:", e.gamepad.id);
+            // Start polling if not already started and game not started
+            if (!gameStarted) {
+                 setTimeout(checkGamepads, 100);
+            }
+        });
+    }
+
+    // Start gamepad support when the page loads
+    document.addEventListener('DOMContentLoaded', setupGamepadStartSupport);
+    </script>
+    
+    <!-- Gamepad UI -->
+    <script src="js/core/GamepadUI.js" defer></script>
+    
+    <script>
+    // Handle pointer lock change to show/hide instructions
+    // REMOVED THIS REDUNDANT EVENT LISTENER THAT WAS CAUSING OVERLAY FLASHING
+    
+    // Add a click handler to the lock instructions
+    document.addEventListener('DOMContentLoaded', function() {
+        const instructions = document.getElementById('lock-instructions');
+        if (instructions) {
+            instructions.addEventListener('click', function() {
+                // Only proceed if interaction hasn't already started via gamepad
+                if (!window.gameInteractionStarted) {
+                    console.log("Lock instructions clicked, requesting game start via keyboard/mouse...");
+                    window.gameInteractionStarted = true; // Stop polling
+                    window.startInitiatedBy = 'keyboardMouse'; // Record initiator
+
+                    // Hide instructions immediately
+                    instructions.style.display = 'none';
+
+                    // Trigger game initialization (init will handle setting type, logic, and lock)
+                    if (typeof window.init === 'function') {
+                        if (!window.gameInitialized) {
+                           window.gameInitialized = true;
+                           window.init(); // Let init handle the rest
+                            console.log("Game init() called via click request.");
+                        } else {
+                             console.log("Game already initialized, skipping init() call from click.");
+                             // If already init, maybe just try to lock?
+                             if (typeof window.attemptLockOnClick === 'function') {
+                                 window.attemptLockOnClick(); 
+                             }
+                        }
+                    } else {
+                         console.error("window.init not found, cannot start game via click.");
+                    }
+                } else if (window.startInitiatedBy === 'gamepad') {
+                    // If interaction WAS already started by gamepad, this click is just to take over controls
+                    console.log("Lock instructions clicked for KB/M takeover...");
+                    // Explicitly set KB/M and attempt lock (don't re-call init)
+                    if (window.inputManager) {
+                        window.inputManager.setActiveInputType('keyboardMouse');
+                    }
+                    if (typeof window.attemptLockOnClick === 'function') {
+                        window.attemptLockOnClick(); 
+                    }
+                } else {
+                     // Click occurred after KB/M start, likely to re-acquire lock
+                     console.log("Lock instructions clicked after KB/M start (re-acquire lock?)");
+                     if (typeof window.attemptLockOnClick === 'function') {
+                         window.attemptLockOnClick(); 
+                     }
+                }
+            });
+        }
+    });
+    </script>
+</body>
+</html>

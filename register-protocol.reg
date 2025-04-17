@@ -1,0 +1,17 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CLASSES_ROOT\electron]
+@="URL:3D AI Game Protocol"
+"URL Protocol"=""
+
+[HKEY_CLASSES_ROOT\electron\DefaultIcon]
+@="C:\\Users\\Garrett\\Documents\\3D AI Game\\launch_game.bat,0"
+
+[HKEY_CLASSES_ROOT\electron\shell]
+@=""
+
+[HKEY_CLASSES_ROOT\electron\shell\open]
+@=""
+
+[HKEY_CLASSES_ROOT\electron\shell\open\command]
+@="\"C:\\Users\\Garrett\\Documents\\3D AI Game\\launch_game.bat\" \"%1\""

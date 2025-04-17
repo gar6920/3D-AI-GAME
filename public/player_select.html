@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Players & Implementation</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #f0f0f0; }
+        .container { background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; }
+        h1 { margin-bottom: 20px; color: #333; }
+        .selection-group { margin-bottom: 25px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
+        select { padding: 10px; font-size: 16px; border-radius: 5px; border: 1px solid #ccc; min-width: 200px; margin-bottom: 15px; }
+        .button-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        button { padding: 15px 20px; font-size: 16px; cursor: pointer; border: none; border-radius: 5px; background-color: #007bff; color: white; transition: background-color 0.3s ease; }
+        button:hover { background-color: #0056b3; }
+        button:active { background-color: #004085; }
+        #loading-message { margin-top: 15px; color: #777; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Configure Your Game</h1>
+
+        <div class="selection-group">
+            <label for="implementation-select">Select Game Implementation:</label>
+            <select id="implementation-select" name="implementation">
+                <option value="">Loading implementations...</option>
+            </select>
+            <div id="loading-message" style="display: none;">Loading...</div>
+        </div>
+
+        <h2>Select Number of Players (on this machine)</h2>
+        <div class="button-grid">
+            <button onclick="selectPlayers(1)">1 Player</button>
+            <button onclick="selectPlayers(2)">2 Players</button>
+            <button onclick="selectPlayers(3)">3 Players</button>
+            <button onclick="selectPlayers(4)">4 Players</button>
+        </div>
+    </div>
+
+    <script>
+        async function fetchImplementations() {
+            const selectElement = document.getElementById('implementation-select');
+            const loadingMessage = document.getElementById('loading-message');
+            loadingMessage.style.display = 'block'; // Show loading message
+            selectElement.disabled = true;
+
+            try {
+                const response = await fetch('/api/config');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const config = await response.json();
+                
+                // Clear placeholder
+                selectElement.innerHTML = ''; 
+
+                // Populate dropdown
+                if (config.availableImplementations && config.availableImplementations.length > 0) {
+                    config.availableImplementations.forEach(impl => {
+                        const option = document.createElement('option');
+                        option.value = impl;
+                        option.textContent = impl.charAt(0).toUpperCase() + impl.slice(1); // Capitalize
+                        selectElement.appendChild(option);
+                    });
+                } else {
+                    const option = document.createElement('option');
+                    option.value = "";
+                    option.textContent = "No implementations available";
+                    selectElement.appendChild(option);
+                    selectElement.disabled = true;
+                    console.warn("No available implementations found via API.");
+                }
+
+            } catch (error) {
+                console.error('Failed to fetch implementations:', error);
+                selectElement.innerHTML = '<option value="default">Default (Error loading others)</option>';
+            } finally {
+                loadingMessage.style.display = 'none'; // Hide loading message
+                selectElement.disabled = false;
+            }
+        }
+
+        function selectPlayers(count) {
+            const selectedImplementation = document.getElementById('implementation-select').value;
+            
+            if (!selectedImplementation) {
+                alert('Please select a game implementation first.');
+                return;
+            }
+            
+            const baseUrl = `/game?implementation=${selectedImplementation}`; // Pass implementation to game
+            const setupUrl = `/setup?players=${count}&implementation=${selectedImplementation}`; // Pass to setup
+
+            if (count === 1) {
+                // Redirect directly to the game page for single player
+                window.location.href = baseUrl;
+            } else if (count >= 2 && count <= 4) {
+                // Redirect to the setup page for multi-player split screen
+                window.location.href = setupUrl;
+            } else {
+                alert('Invalid player count selected.');
+            }
+        }
+
+        // Fetch implementations when the page loads
+        document.addEventListener('DOMContentLoaded', fetchImplementations);
+    </script>
+</body>
+</html> 
