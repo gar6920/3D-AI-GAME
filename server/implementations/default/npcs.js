@@ -37,8 +37,7 @@ function robokeeperBehavior(entity, deltaTime, roomState) {
     }
 
     if (shouldLogBehavior) {
-        const playerCount = roomState?.players?.size || 0;
-        console.log(`[NPC ${entity.id} Behavior] Update Check: Found ${playerCount} players. Nearest player: ${nearestPlayer ? nearestPlayer.id : 'None'}. MinDistSq: ${minDistSq.toFixed(2)}`);
+        // console.log(`[NPC ${entity.id} Behavior] Update Check: Found ${playerCount} players. Nearest player: ${nearestPlayer ? nearestPlayer.id : 'None'}. MinDistSq: ${minDistSq.toFixed(2)}`);
         entity._lastBehaviorLogTime = now;
     }
 
@@ -76,12 +75,12 @@ function robokeeperBehavior(entity, deltaTime, roomState) {
 
     // Log state change if it occurs
     if (updates && updates.state && updates.state !== entity.state) {
-        console.log(`[NPC ${entity.id} Behavior] State WILL CHANGE to: ${updates.state}`);
+        // console.log(`[NPC ${entity.id} Behavior] State WILL CHANGE to: ${updates.state}`);
     } else if (!updates && newState === entity.state) {
         // Log periodically even if state doesn't change (throttled)
         if (!entity._lastStateLogTime) entity._lastStateLogTime = 0;
         if (now - entity._lastStateLogTime > logThrottle) {
-            console.log(`[NPC ${entity.id} Behavior] State remains: ${entity.state}`);
+            // console.log(`[NPC ${entity.id} Behavior] State remains: ${entity.state}`);
             entity._lastStateLogTime = now;
         }
     }
@@ -131,7 +130,50 @@ function sharkBehavior(entity, deltaTime, roomState) {
     return { x: newX, y: newY, z: newZ, rotationY: newRotationY, state: 'Walk' };
 }
 
+// Basic ground enemy behavior: chase & attack city center
+function basicEnemyBehavior(entity, deltaTime, roomState) {
+    const target = roomState.structures.get('city_building_center');
+    if (!target) return null;
+    const dx = target.x - entity.x;
+    const dz = target.z - entity.z;
+    const distSq = dx*dx + dz*dz;
+    const attackRange = 2;
+    if (distSq <= attackRange*attackRange) {
+        if (!entity._attackCooldown) entity._attackCooldown = 0;
+        entity._attackCooldown -= deltaTime;
+        if (entity._attackCooldown <= 0) {
+            target.health -= entity.attackDamage;
+            entity._attackCooldown = 1;
+            console.log(`[Enemy ${entity.id}] Attacked city center. Remaining HP: ${target.health}`);
+        }
+        return { state: 'Attack' };
+    }
+    const dist = Math.sqrt(distSq) || 1;
+    const nx = dx / dist;
+    const nz = dz / dist;
+    const newX = entity.x + nx * entity.speed * deltaTime;
+    const newZ = entity.z + nz * entity.speed * deltaTime;
+    const newRotationY = Math.atan2(nx, nz);
+    return { x: newX, z: newZ, rotationY: newRotationY, state: 'Walk' };
+}
+
+// NPC definitions array
 const npcDefinitions = [
+    // Basic ground enemy unit
+    {
+        id: 'ground_enemy1',
+        type: 'npc',
+        modelId: 'enemy1',
+        x: 20, y: 0, z: 20, rotationY: 0,
+        scale: 1,
+        health: 100,
+        maxHealth: 100,
+        speed: 2,
+        attackDamage: 15,
+        state: 'Idle',
+        animationMap: null,
+        behavior: basicEnemyBehavior
+    },
     {
         id: 'robokeeper1',      // Original instance
         type: 'npc',

@@ -20,6 +20,10 @@ class BaseEntity extends Schema {
         this.state = "Idle";      // Current action/animation state (e.g., Idle, Walk, Work)
         this.animationMap = new MapSchema(); // Add animationMap field
         this.scale = 1; // Default scale
+        this.health = 100;
+        this.maxHealth = 100;
+        this.speed = 1;
+        this.attackDamage = 10;
     }
 }
 
@@ -37,5 +41,9 @@ type("string")(BaseEntity.prototype, "color");
 type("string")(BaseEntity.prototype, "state");
 type({ map: "string" })(BaseEntity.prototype, "animationMap"); // Register animationMap type
 type("number")(BaseEntity.prototype, "scale"); // Register scale type
+type("number")(BaseEntity.prototype, "health");
+type("number")(BaseEntity.prototype, "maxHealth");
+type("number")(BaseEntity.prototype, "speed");
+type("number")(BaseEntity.prototype, "attackDamage");
 
 module.exports = { BaseEntity }; 

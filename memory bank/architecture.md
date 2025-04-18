@@ -11,7 +11,7 @@ The 3D AI Game Platform is a modular, multiplayer 3D web game built with Three.j
 - **index.js**: Main server entry; starts Colyseus, loads implementations, registers rooms.
 - **BaseRoom.js**: Abstract base for all room types (handles state, updates, player join/leave).
 - **schemas/**: Colyseus schemas for game state, entities, players, etc.
-  - `DefaultRoom.js`: Main room logic for the default implementation. Loads modular entity/NPC definitions from the active implementation.
+  - `BaseGameRoom.js`: Core room logic for the default implementation. Loads modular NPC definitions, handles dynamic reset (city destruction & deferred respawn), and timer-based game cycle.
   - `BaseEntity.js`, `Player.js`, `GameState.js`, etc.: Define server-side state for all entities and players.
   - **GameConfigSchema.js**: Defines game configuration schema including a dynamic `mapSize` value, sourced from the active implementation’s `getMapSize()` (default returns 1000), enabling flexible map dimensions.
 
@@ -25,6 +25,7 @@ The 3D AI Game Platform is a modular, multiplayer 3D web game built with Three.j
 - Modular entity/NPC creation: Entities are defined per implementation in `npcs.js` and loaded dynamically by the room.
 - All entity behavior (animation, movement, state) can be defined in the modular definitions.
 - Server is authoritative for all state and entity updates.
+- Dynamic reset logic: `BaseGameRoom.resetGame` clears all NPC entities on city center destruction and flags deferred respawn for the next cycle.
 
 ---
 

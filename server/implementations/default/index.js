@@ -3,7 +3,7 @@
  * Exports the necessary components for the default game setup.
  */
 
-const { BaseGameRoom } = require("../../core/schemas/BaseGameRoom");
+const { BaseGameRoom } = require("../../core/BaseGameRoom");
 
 // Default implementation information
 const implementation = {
@@ -24,7 +24,7 @@ function getMapSize() {
 
 module.exports = {
     implementation,
-    BaseGameRoom,
+    ImplementationRoom: BaseGameRoom,
     getStructureDefinitions,
     getMapSize
 };

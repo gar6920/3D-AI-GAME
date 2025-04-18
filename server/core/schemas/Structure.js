@@ -10,6 +10,7 @@ class Structure extends BaseEntity {
         super();
         this.entityType = "structure";
         this.definitionId = "";       // Specific structure definition ID
+        this.structureType = "";     // Type identifier for client (e.g., 'building')
         this.health = 100;             // Health points
         this.maxHealth = 100;          // Maximum health points
         this.ownerId = "";             // ID of player who built this (dynamic)
@@ -17,8 +18,11 @@ class Structure extends BaseEntity {
 }
 
 // Register schema types
-type("number")(Structure.prototype, "health");
-type("number")(Structure.prototype, "maxHealth");
+type("string")(Structure.prototype, "definitionId");
+type("string")(Structure.prototype, "structureType");
+// Removed duplicate health type registration; inherited from BaseEntity
+// type("number")(Structure.prototype, "health");
+// type("number")(Structure.prototype, "maxHealth");
 type("string")(Structure.prototype, "ownerId");
 
 module.exports = { Structure }; 
