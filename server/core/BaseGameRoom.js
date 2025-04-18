@@ -121,11 +121,32 @@ class BaseGameRoom extends BaseRoom {
      * @param {number} deltaTime Time since last update
      */
     implementationUpdate(deltaTime) {
-        // Early game-over check: reset when city center is destroyed
+        // Early game-over check: trigger delayed restart when city center is destroyed
         const city = this.state.structures.get('city_building_center');
-        if (city && city.health <= 0) {
-            console.log('[BaseGameRoom] City destroyed, restarting cycle');
-            this.resetGame();
+        if (city && city.health <= 0 && !this._restartDelayTimer) {
+            console.log('[BaseGameRoom] City destroyed, starting 10 second restart delay');
+            this._restartDelayTimer = 10.0; // seconds
+            // Remove all enemy NPCs immediately
+            const toRemove = [];
+            this.state.entities.forEach((entity, id) => {
+                if (entity.behavior && entity.behavior.name === 'basicEnemyBehavior') {
+                    toRemove.push(id);
+                }
+            });
+            toRemove.forEach(id => this.state.entities.delete(id));
+            // Remove city center structure and its definition
+            this.state.structures.delete('city_building_center');
+            this.state.structureDefinitions.delete('city_building_center');
+            return;
+        }
+        // Handle delayed restart
+        if (this._restartDelayTimer) {
+            this._restartDelayTimer -= deltaTime;
+            if (this._restartDelayTimer <= 0) {
+                console.log('[BaseGameRoom] Restart delay finished, respawning city center and enemies');
+                this._restartDelayTimer = null;
+                this.respawnCityAndEnemies();
+            }
             return;
         }
         // Timer-based reset after duration
@@ -168,8 +189,7 @@ class BaseGameRoom extends BaseRoom {
      */
     resetGame() {
         console.log('[BaseGameRoom] City destroyed, restarting cycle');
-
-        // Remove only enemy NPCs (by behavior)
+        // For compatibility: immediately remove enemies and city, then respawn (used for timer-based reset)
         const toRemove = [];
         this.state.entities.forEach((entity, id) => {
             if (entity.behavior && entity.behavior.name === 'basicEnemyBehavior') {
@@ -177,11 +197,11 @@ class BaseGameRoom extends BaseRoom {
             }
         });
         toRemove.forEach(id => this.state.entities.delete(id));
-
-        // Remove city center structure and its definition
         this.state.structures.delete('city_building_center');
         this.state.structureDefinitions.delete('city_building_center');
-
+        this.respawnCityAndEnemies();
+    }
+    respawnCityAndEnemies() {
         // Respawn city center
         const cityDef = this._staticStructDefs.find(def => def.id === 'city_building_center');
         if (cityDef) {
@@ -209,7 +229,6 @@ class BaseGameRoom extends BaseRoom {
             defSchema.buildable = cityDef.buildable;
             this.state.structureDefinitions.set(defSchema.id, defSchema);
         }
-
         // Respawn enemies
         const enemyDefs = this._npcDefs.filter(def => def.behavior && def.behavior.name === 'basicEnemyBehavior');
         enemyDefs.forEach(def => {

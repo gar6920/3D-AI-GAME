@@ -108,15 +108,36 @@ class NPC extends Entity {
      * @param {string} entityId - The ID of the NPC to remove.
      */
     static removeNpcVisual(entityId) {
-        if (!NPC.npcs.has(entityId)) {
+        const npcInstance = NPC.npcs.get(entityId);
+        if (!npcInstance) {
             console.warn(`NPC.removeNpcVisual: NPC with ID ${entityId} not found.`);
             return;
         }
-
         console.log(`[NPC Class] Removing visual for NPC: ${entityId}`);
         try {
-            const npcInstance = NPC.npcs.get(entityId);
-            npcInstance.dispose(); // Call instance method for cleanup
+            // Remove mesh from scene
+            if (npcInstance.mesh && npcInstance.mesh.parent) {
+                npcInstance.mesh.parent.remove(npcInstance.mesh);
+                // Dispose geometry/material for all child meshes
+                npcInstance.mesh.traverse(child => {
+                    if (child.isMesh) {
+                        if (child.geometry) child.geometry.dispose();
+                        if (child.material) {
+                            if (Array.isArray(child.material)) {
+                                child.material.forEach(mat => mat && mat.dispose && mat.dispose());
+                            } else if (child.material.dispose) {
+                                child.material.dispose();
+                            }
+                        }
+                    }
+                });
+            }
+            // Call instance dispose/destroy if defined
+            if (typeof npcInstance.dispose === 'function') {
+                npcInstance.dispose();
+            } else if (typeof npcInstance.destroy === 'function') {
+                npcInstance.destroy();
+            }
             NPC.npcs.delete(entityId);
             console.log(`[NPC Class] Successfully removed NPC: ${entityId}`);
         } catch (error) {
