@@ -24,6 +24,17 @@ const structureDefinitions = [
     rotationY: 0,
     scale: 1,
     buildable: true
+  },
+  // Add the static house definition here
+  {
+    id: "house", // Changed ID for buildable type
+    structureType: "building",
+    modelId: "house", // Matches house.glb
+    modelPath: "assets/models/house.glb",
+    position: { x: 10, y: 0, z: 10 }, // Original position (ignored for buildable)
+    rotationY: 0, // Initial rotation
+    scale: 8, // Increased scale
+    buildable: true // Make it buildable
   }
 ];
 
