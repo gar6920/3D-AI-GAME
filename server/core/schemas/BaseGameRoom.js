@@ -70,19 +70,24 @@ class BaseGameRoom extends BaseRoom {
             structDefs = [];
         }
         this.spawnedStructures = [];
+
+        // Spawn ONLY static structures (buildable: false)
         structDefs.forEach(def => {
-            const s = new Structure();
-            s.id = def.id;
-            s.entityType = 'structure';
-            s.definitionId = def.id;
-            s.modelId = def.modelId || (def.modelPath ? def.modelPath.split('/').pop().replace('.glb', '') : def.id);
-            s.x = def.position.x;
-            s.y = def.position.y;
-            s.z = def.position.z;
-            s.rotationY = def.rotationY || 0;
-            s.scale = def.scale || 1;
-            this.state.structures.set(def.id, s);
-            this.spawnedStructures.push(def.id);
+            if (def.buildable === false) {
+                console.log(`[BaseGameRoom] Spawning static structure: ${def.id}`);
+                const s = new Structure();
+                s.id = def.id; // Use definition ID as instance ID for static items
+                s.entityType = 'structure';
+                s.definitionId = def.id;
+                s.modelId = def.modelId || (def.modelPath ? def.modelPath.split('/').pop().replace('.glb', '') : def.id);
+                s.x = def.position.x;
+                s.y = def.position.y;
+                s.z = def.position.z;
+                s.rotationY = def.rotationY || 0;
+                s.scale = def.scale || 1;
+                this.state.structures.set(s.id, s);
+                this.spawnedStructures.push(s.id);
+            }
         });
 
         // Sync structure definitions to clients

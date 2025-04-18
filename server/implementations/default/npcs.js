@@ -197,17 +197,18 @@ const npcDefinitions = [
         behavior: sharkBehavior, // Custom shark behavior
         animationMap: null // No animations
     })),
-    // Original hover_cube definition - Re-enabled
+    /* // Original hover_cube definition - Commented out as it's defined as buildable in structures.js
     {
         id: 'hover_cube',
         type: 'entity',
         modelId: 'hover_cube',
         x: 0, y: 2, z: 0, rotationY: 0,
-        scale: 1.5,
-        state: null, // Static entities might not have state
-        behavior: null, // Static entities typically don't have behavior
+        scale: 1,
+        state: null,
+        behavior: null,
         animationMap: null
     }
+    */
 ];
 
 module.exports = { npcDefinitions };
