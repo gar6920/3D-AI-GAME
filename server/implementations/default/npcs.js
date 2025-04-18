@@ -159,21 +159,28 @@ function basicEnemyBehavior(entity, deltaTime, roomState) {
 
 // NPC definitions array
 const npcDefinitions = [
-    // Basic ground enemy unit
-    {
-        id: 'ground_enemy1',
-        type: 'npc',
-        modelId: 'enemy1',
-        x: 20, y: 0, z: 20, rotationY: 0,
-        scale: 1,
-        health: 100,
-        maxHealth: 100,
-        speed: 2,
-        attackDamage: 15,
-        state: 'Idle',
-        animationMap: null,
-        behavior: basicEnemyBehavior
-    },
+    // 50 basic ground enemy NPCs coming from all sides
+    ...Array.from({length: 50}, (_, i) => {
+        // Random angle and distance from center
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 60 + Math.random() * 20; // 60-80 units from center
+        const x = Math.round(Math.cos(angle) * distance);
+        const z = Math.round(Math.sin(angle) * distance);
+        return {
+            id: `ground_enemy${i+1}`,
+            type: 'npc',
+            modelId: 'enemy1',
+            x: x, y: 0, z: z, rotationY: angle,
+            scale: 1,
+            health: 100,
+            maxHealth: 100,
+            speed: 2,
+            attackDamage: 1,
+            state: 'Idle',
+            animationMap: null,
+            behavior: basicEnemyBehavior
+        };
+    }),
     {
         id: 'robokeeper1',      // Original instance
         type: 'npc',

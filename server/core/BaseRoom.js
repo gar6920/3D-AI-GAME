@@ -758,13 +758,21 @@ class BaseRoom extends Room {
                 structure.health = 200; // Example health
                 structure.maxHealth = 200;
                 break;
+            case "city_building_center":
+                console.log(`City building center spawned with health ${structure.health} and maxHealth ${structure.maxHealth}`);
+                structure.width = 10;
+                structure.height = 5;
+                structure.depth = 10;
+                if (structure.health === undefined || structure.health === null) structure.health = 1000;
+                if (structure.maxHealth === undefined || structure.maxHealth === null) structure.maxHealth = 1000;
+                break;
             default:
                 console.warn(`[setStructureDefaults] Unknown structure type: ${structure.structureType}. Using defaults.`);
                 structure.width = 1;
                 structure.height = 1;
                 structure.depth = 1;
-                structure.health = 100;
-                structure.maxHealth = 100;
+                if (structure.health === undefined || structure.health === null) structure.health = 100;
+                if (structure.maxHealth === undefined || structure.maxHealth === null) structure.maxHealth = 100;
         }
     }
 

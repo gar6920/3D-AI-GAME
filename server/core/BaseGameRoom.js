@@ -39,6 +39,12 @@ class BaseGameRoom extends BaseRoom {
             entity.rotationY = def.rotationY || 0;
             entity.state = def.state || 'Idle';
             entity.scale = def.scale !== undefined ? def.scale : 1; // Set scale from definition, default 1
+            entity.attackDamage = def.attackDamage !== undefined ? def.attackDamage : entity.attackDamage;
+            if (def.attackDamage === undefined) {
+                console.warn(`[SPAWN] Enemy ${entity.id} has no attackDamage in definition, using fallback: ${entity.attackDamage}`);
+            } else {
+
+            }
             if (def.behavior) entity.behavior = def.behavior;
 
             // Populate the entity's animationMap from the definition
@@ -88,6 +94,9 @@ class BaseGameRoom extends BaseRoom {
                 s.z = def.position.z;
                 s.rotationY = def.rotationY || 0;
                 s.scale = def.scale || 1;
+                // Ensure health/maxHealth from definition
+                if (def.health !== undefined) s.health = def.health;
+                if (def.maxHealth !== undefined) s.maxHealth = def.maxHealth;
                 this.state.structures.set(s.id, s);
                 this.spawnedStructures.push(s.id);
             }
@@ -158,10 +167,25 @@ class BaseGameRoom extends BaseRoom {
             return;
         }
 
-        this.state.entities.forEach(entity => {
+        this.state.entities.forEach((entity, id) => {
+            // Universal entity death logic
+            if (entity.health !== undefined && entity.health <= 0) {
+                if (entity.state !== 'Dying') {
+                    entity.state = 'Dying';
+                    entity._deathTimer = 1.5; // seconds for dying animation
+                } else if (entity._deathTimer !== undefined) {
+                    entity._deathTimer -= deltaTime;
+                    if (entity._deathTimer <= 0) {
+                        this.state.entities.delete(id);
+                        return; // Skip further updates for this entity
+                    }
+                }
+                return; // Don't process behavior if dying
+            }
             if (typeof entity.behavior === 'function') {
                 const prev = {
                     x: entity.x,
+                    y: entity.y,
                     z: entity.z,
                     rotationY: entity.rotationY,
                     state: entity.state
@@ -215,6 +239,8 @@ class BaseGameRoom extends BaseRoom {
             s.z = cityDef.position.z;
             s.rotationY = cityDef.rotationY || 0;
             s.scale = cityDef.scale || 1;
+            s.health = cityDef.health !== undefined ? cityDef.health : s.health;
+            s.maxHealth = cityDef.maxHealth !== undefined ? cityDef.maxHealth : s.maxHealth;
             this.state.structures.set(s.id, s);
 
             const defSchema = new StructureDefinition();
@@ -246,6 +272,11 @@ class BaseGameRoom extends BaseRoom {
             e.maxHealth = def.maxHealth !== undefined ? def.maxHealth : e.maxHealth;
             e.speed = def.speed !== undefined ? def.speed : e.speed;
             e.attackDamage = def.attackDamage !== undefined ? def.attackDamage : e.attackDamage;
+            if (def.attackDamage === undefined) {
+                console.warn(`[SPAWN] Enemy ${e.id} has no attackDamage in definition, using fallback: ${e.attackDamage}`);
+            } else {
+
+            }
             if (def.behavior) e.behavior = def.behavior;
             if (def.animationMap) {
                 for (const [k, v] of Object.entries(def.animationMap)) {

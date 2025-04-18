@@ -13,7 +13,9 @@ const structureDefinitions = [
     position: { x: 0, y: 0, z: 0 },
     rotationY: 0,
     scale: 10,
-    buildable: false
+    buildable: false,
+    health: 1000,
+    maxHealth: 1000
   },
 
   {
@@ -24,6 +26,18 @@ const structureDefinitions = [
     rotationY: 0,
     scale: 1,
     buildable: true
+  },
+  {
+    id: "castle",
+    structureType: "building",
+    modelId: "castle",
+    modelPath: "assets/models/castle.glb",
+    position: { x: 0, y: 0, z: 0 },
+    rotationY: 0,
+    scale: 10,
+    buildable: true,
+    health: 2000,
+    maxHealth: 2000
   },
   // Add the static house definition here
   {
