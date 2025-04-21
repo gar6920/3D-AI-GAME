@@ -118,7 +118,9 @@ class BaseRoom extends Room {
         // Apply direct client rotation if provided (for immediate, responsive feel)
         if (message.clientRotation) {
             player.rotationY = message.clientRotation.rotationY;
-            player.pitch = message.clientRotation.pitch;
+            if (typeof message.clientRotation.pitch === 'number') {
+                player.pitch = message.clientRotation.pitch;
+            }
         }
     }
     
@@ -175,6 +177,31 @@ class BaseRoom extends Room {
      * Base implementation handles player movement and physics
      */
     update() {
+        // step physics world and sync positions using reusable transform
+        if (this.physicsWorld && this._rigidBodies) {
+            const deltaTime = this.clock.deltaTime / 1000;
+            this.physicsWorld.stepSimulation(deltaTime, 10);
+            const Ammo = this.Ammo;
+            // reuse single transform to avoid Emscripten memory leak
+            if (!this._tmpTransform) {
+                this._tmpTransform = new Ammo.btTransform();
+            }
+            const transform = this._tmpTransform;
+            for (const [id, body] of this._rigidBodies) {
+                if (id === 'ground') continue;
+                const ms = body.getMotionState();
+                if (ms) {
+                    ms.getWorldTransform(transform);
+                    const origin = transform.getOrigin();
+                    const x = origin.x(), y = origin.y(), z = origin.z();
+                    if (this.state.entities.has(id)) {
+                        const e = this.state.entities.get(id);
+                        e.x = x; e.y = y; e.z = z;
+                    }
+                }
+            }
+        }
+        
         // Calculate delta time (using this.clock for accuracy)
         const deltaTime = this.clock.deltaTime / 1000; // Convert ms to seconds
         
@@ -295,6 +322,39 @@ class BaseRoom extends Room {
      */
     implementationUpdate(deltaTime) {
         // Base implementation does nothing
+        this.state.entities.forEach((entity, id) => {
+            // Universal entity death logic
+            // ...
+            if (typeof entity.behavior === 'function') {
+                const prev = {
+                    x: entity.x,
+                    y: entity.y,
+                    z: entity.z,
+                    rotationY: entity.rotationY,
+                    state: entity.state
+                };
+                const updates = entity.behavior(entity, deltaTime, this.state);
+                if (updates) {
+                    // apply physics velocity for NPC movement
+                    const body = this._rigidBodies.get(id);
+                    if (body && updates.x !== undefined && updates.z !== undefined) {
+                        const vx = (updates.x - prev.x) / deltaTime;
+                        const vz = (updates.z - prev.z) / deltaTime;
+                        const vel = body.getLinearVelocity();
+                        vel.setX(vx);
+                        vel.setZ(vz);
+                        body.setLinearVelocity(vel);
+                    }
+                    // Only apply and sync if a property changed (dirty checking)
+                    let dirty = false;
+                    if (updates.x !== undefined && updates.x !== prev.x) { entity.x = updates.x; dirty = true; }
+                    if (updates.y !== undefined && updates.y !== prev.y) { entity.y = updates.y; dirty = true; }
+                    if (updates.z !== undefined && updates.z !== prev.z) { entity.z = updates.z; dirty = true; }
+                    if (updates.rotationY !== undefined && updates.rotationY !== prev.rotationY) { entity.rotationY = updates.rotationY; dirty = true; }
+                    if (updates.state !== undefined && updates.state !== prev.state) { entity.state = updates.state; dirty = true; }
+                }
+            }
+        });
     }
     
     /**
@@ -305,6 +365,40 @@ class BaseRoom extends Room {
      * @param {number} delta Time since last update
      */
     updatePlayerFromInput(playerSessionId, player, input, delta) {
+        // If physics is enabled, apply velocity to the player's rigid body
+        if (this.physicsWorld && this._rigidBodies && this._rigidBodies.has(playerSessionId)) {
+            const body = this._rigidBodies.get(playerSessionId);
+            
+            // compute local input vector
+            const inputX = (input.keys.d ? 1 : 0) - (input.keys.a ? 1 : 0);
+            const inputZ = (input.keys.w ? 1 : 0) - (input.keys.s ? 1 : 0);
+            if (inputX !== 0 || inputZ !== 0) {
+                // rotate to world space based on player yaw
+                const yaw = player.rotationY;
+                const cosY = Math.cos(yaw), sinY = Math.sin(yaw);
+                let worldX = inputX * cosY - inputZ * sinY;
+                let worldZ = -(inputX * sinY + inputZ * cosY); // Invert world Z mapping
+                // normalize direction
+                const len = Math.hypot(worldX, worldZ);
+                worldX /= len; worldZ /= len;
+                // apply horizontal velocity
+                const vel = body.getLinearVelocity();
+                vel.setX(worldX * 5);
+                vel.setZ(worldZ * 5);
+                body.setLinearVelocity(vel);
+                // no server-side rotation; client controls view
+            }
+            
+            // handle jump using physics
+            if (input.keys.space) {
+                const velY = body.getLinearVelocity();
+                velY.setY(0.2);
+                body.setLinearVelocity(velY);
+            }
+            // ensure body stays awake
+            body.activate();
+        }
+        
         // Check if player is being controlled via RTS commands
         if (player.isRTSControlled && player.moveTarget) {
             // Calculate direction to target
@@ -482,10 +576,6 @@ class BaseRoom extends Room {
             if (typeof input.clientRotation.pitch === 'number') {
                 player.pitch = input.clientRotation.pitch;
             }
-            
-            // Don't apply mouse delta after applying client rotation
-            // as that would be double-counting the rotation
-            return;
         }
         
         // Handle mouse movement (rotation) for players not sending direct rotation
@@ -516,10 +606,22 @@ class BaseRoom extends Room {
         // Create a new player instance
         const player = new Player();
         
-        // Set initial player position
-        player.x = 0;
-        player.y = 1;
-        player.z = 0;
+        // Spawn player just outside the city building
+        const city = this.state.structures.get('city_building_center');
+        if (city) {
+            // spawn at 3× building scale away
+            const spawnRadius = city.scale * 3;
+            const angle = Math.random() * Math.PI * 2;
+            player.x = city.x + Math.cos(angle) * spawnRadius;
+            player.y = city.y + 1;
+            player.z = city.z + Math.sin(angle) * spawnRadius;
+        } else {
+            // fallback out to far map edge
+            const mapSize = this.state.gameConfig.mapSize;
+            player.x = mapSize;
+            player.y = 1;
+            player.z = mapSize;
+        }
         
         // Set session ID as player ID
         player.id = client.sessionId;

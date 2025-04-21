@@ -2,6 +2,7 @@ const { BaseRoom } = require("./BaseRoom");
 const { BaseEntity } = require('./schemas/BaseEntity'); 
 const { Structure } = require('./schemas/Structure'); 
 const { StructureDefinition } = require('./schemas/StructureDefinition'); 
+const ammoModule = require('ammo.js');
 
 /**
  * BaseGameRoom
@@ -122,6 +123,129 @@ class BaseGameRoom extends BaseRoom {
         // Setup game timer to reset after 1 hour
         this._elapsedTime = 0;
         this._gameDuration = 3600; // seconds
+
+        // initialize ammo.js physics world and collision bodies
+        this._initPhysics();
+    }
+
+    /**
+     * Initialize ammo.js physics world and create collision bodies.
+     */
+    async _initPhysics() {
+        // load Ammo module (handles both promise or factory function)
+        let Ammo;
+        if (typeof ammoModule === 'function') {
+            Ammo = await ammoModule();
+        } else {
+            Ammo = await ammoModule;
+        }
+        this.Ammo = Ammo;
+        // setup collision world
+        const config = new Ammo.btDefaultCollisionConfiguration();
+        const dispatcher = new Ammo.btCollisionDispatcher(config);
+        const broadphase = new Ammo.btDbvtBroadphase();
+        const solver = new Ammo.btSequentialImpulseConstraintSolver();
+        this.physicsWorld = new Ammo.btDiscreteDynamicsWorld(dispatcher, broadphase, solver, config);
+        this.physicsWorld.setGravity(new Ammo.btVector3(0, -9.8, 0));
+        this._rigidBodies = new Map();
+        // create a static ground plane at y=0
+        const groundShape = new Ammo.btStaticPlaneShape(new Ammo.btVector3(0,1,0), 0);
+        const groundTransform = new Ammo.btTransform();
+        groundTransform.setIdentity();
+        groundTransform.setOrigin(new Ammo.btVector3(0,0,0));
+        const groundMotionState = new Ammo.btDefaultMotionState(groundTransform);
+        const groundInfo = new Ammo.btRigidBodyConstructionInfo(0, groundMotionState, groundShape, new Ammo.btVector3(0,0,0));
+        const groundBody = new Ammo.btRigidBody(groundInfo);
+        groundBody.setFriction(0);
+        this.physicsWorld.addRigidBody(groundBody);
+        this._rigidBodies.set('ground', groundBody);
+        // create static structure bodies
+        for (const def of this._staticStructDefs) {
+            this._createStructureBody(def);
+        }
+        // create dynamic NPC bodies
+        for (const id of this.spawnedNPCs) {
+            const e = this.state.entities.get(id);
+            this._createEntityBody(e);
+        }
+        // create bodies for existing players
+        this.state.players.forEach(p => this._createPlayerBody(p));
+    }
+
+    // create collision body for a structure (box approximation)
+    _createStructureBody(def) {
+        const Ammo = this.Ammo;
+        // use optional collision halfExtents or fallback to uniform scale
+        const size = def.collision?.halfExtents ?? { x: def.scale, y: def.scale, z: def.scale };
+        const halfExtents = new Ammo.btVector3(size.x/2, size.y/2, size.z/2);
+        const shape = new Ammo.btBoxShape(halfExtents);
+        const transform = new Ammo.btTransform();
+        transform.setIdentity();
+        transform.setOrigin(new Ammo.btVector3(def.position.x, def.position.y, def.position.z));
+        const motion = new Ammo.btDefaultMotionState(transform);
+        const info = new Ammo.btRigidBodyConstructionInfo(0, motion, shape, new Ammo.btVector3(0,0,0));
+        const body = new Ammo.btRigidBody(info);
+        this.physicsWorld.addRigidBody(body);
+        this._rigidBodies.set(def.id, body);
+    }
+
+    // sphere collider for NPC/entity
+    _createEntityBody(entity) {
+        const Ammo = this.Ammo;
+        const shape = new Ammo.btSphereShape(entity.scale);
+        const transform = new Ammo.btTransform(); transform.setIdentity();
+        transform.setOrigin(new Ammo.btVector3(entity.x, entity.y, entity.z));
+        const inertia = new Ammo.btVector3(0,0,0);
+        shape.calculateLocalInertia(1, inertia);
+        const motion = new Ammo.btDefaultMotionState(transform);
+        const info = new Ammo.btRigidBodyConstructionInfo(1, motion, shape, inertia);
+        const body = new Ammo.btRigidBody(info);
+        // remove dynamic friction and lock rotation
+        body.setFriction(0);
+        body.setRollingFriction(0);
+        body.setAngularFactor(new Ammo.btVector3(0,0,0));
+        // disable deactivation so it never sleeps
+        body.setActivationState(4);
+        this.physicsWorld.addRigidBody(body);
+        this._rigidBodies.set(entity.id, body);
+    }
+
+    // sphere collider for players
+    _createPlayerBody(player) {
+        const Ammo = this.Ammo;
+        const shape = new Ammo.btSphereShape(player.scale || 1);
+        const transform = new Ammo.btTransform(); transform.setIdentity();
+        transform.setOrigin(new Ammo.btVector3(player.x, player.y, player.z));
+        const inertia = new Ammo.btVector3(0,0,0);
+        shape.calculateLocalInertia(1, inertia);
+        const motion = new Ammo.btDefaultMotionState(transform);
+        const info = new Ammo.btRigidBodyConstructionInfo(1, motion, shape, inertia);
+        const body = new Ammo.btRigidBody(info);
+        // remove dynamic friction and lock rotation
+        body.setFriction(0);
+        body.setRollingFriction(0);
+        body.setAngularFactor(new Ammo.btVector3(0,0,0));
+        // disable deactivation so it never sleeps
+        body.setActivationState(4);
+        this.physicsWorld.addRigidBody(body);
+        this._rigidBodies.set(player.id, body);
+    }
+
+    // add player physics body on join
+    onJoin(client, options) {
+        super.onJoin(client, options);
+        const player = this.state.players.get(client.sessionId);
+        if (player && this.physicsWorld) this._createPlayerBody(player);
+    }
+
+    // remove physics body on leave
+    onLeave(client) {
+        super.onLeave(client);
+        const body = this._rigidBodies.get(client.sessionId);
+        if (body) {
+            this.physicsWorld.removeRigidBody(body);
+            this._rigidBodies.delete(client.sessionId);
+        }
     }
 
     /**
@@ -191,8 +315,17 @@ class BaseGameRoom extends BaseRoom {
                     state: entity.state
                 };
                 const updates = entity.behavior(entity, deltaTime, this.state);
-                // Only apply and sync if a property changed (dirty checking)
                 if (updates) {
+                    // apply physics velocity for NPC movement
+                    const body = this._rigidBodies.get(id);
+                    if (body && updates.x !== undefined && updates.z !== undefined) {
+                        const vx = (updates.x - prev.x) / deltaTime;
+                        const vz = (updates.z - prev.z) / deltaTime;
+                        const vel = body.getLinearVelocity();
+                        vel.setX(vx);
+                        vel.setZ(vz);
+                        body.setLinearVelocity(vel);
+                    }
                     let dirty = false;
                     if (updates.x !== undefined && updates.x !== prev.x) { entity.x = updates.x; dirty = true; }
                     if (updates.y !== undefined && updates.y !== prev.y) { entity.y = updates.y; dirty = true; }
@@ -204,6 +337,34 @@ class BaseGameRoom extends BaseRoom {
                 }
             }
         });
+
+        // step physics simulation and sync positions
+        if (this.physicsWorld) {
+            // alias Ammo from initialized module
+            const Ammo = this.Ammo;
+            this.physicsWorld.stepSimulation(deltaTime, 10);
+            // reuse single transform to prevent Ammo.js memory growth
+            if (!this._tmpTransform) {
+                this._tmpTransform = new Ammo.btTransform();
+            }
+            const tmpTransform = this._tmpTransform;
+            this._rigidBodies.forEach((body, id) => {
+                const ms = body.getMotionState(); if (!ms) return;
+                ms.getWorldTransform(tmpTransform);
+                const t = tmpTransform;
+                const o = t.getOrigin();
+                if (this.state.entities.has(id)) {
+                    const e = this.state.entities.get(id);
+                    e.x = o.x(); e.y = o.y(); e.z = o.z();
+                } else if (this.state.structures.has(id)) {
+                    const s = this.state.structures.get(id);
+                    s.x = o.x(); s.y = o.y(); s.z = o.z();
+                } else if (this.state.players.has(id)) {
+                    const p = this.state.players.get(id);
+                    p.x = o.x(); p.y = o.y(); p.z = o.z();
+                }
+            });
+        }
     }
 
     // ... (other methods remain unchanged)

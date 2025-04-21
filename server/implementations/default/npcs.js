@@ -169,7 +169,7 @@ const npcDefinitions = [
         return {
             id: `ground_enemy${i+1}`,
             type: 'npc',
-            modelId: 'enemy1',
+            modelId: 'robokeeper1',
             x: x, y: 0, z: z, rotationY: angle,
             scale: 1,
             health: 100,
