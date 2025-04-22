@@ -373,27 +373,33 @@ class BaseRoom extends Room {
             const inputX = (input.keys.d ? 1 : 0) - (input.keys.a ? 1 : 0);
             const inputZ = (input.keys.w ? 1 : 0) - (input.keys.s ? 1 : 0);
             if (inputX !== 0 || inputZ !== 0) {
-                // rotate to world space based on player yaw
+                // move: world-space velocity
                 const yaw = player.rotationY;
                 const cosY = Math.cos(yaw), sinY = Math.sin(yaw);
                 let worldX = inputX * cosY - inputZ * sinY;
-                let worldZ = -(inputX * sinY + inputZ * cosY); // Invert world Z mapping
-                // normalize direction
+                let worldZ = -(inputX * sinY + inputZ * cosY);
                 const len = Math.hypot(worldX, worldZ);
                 worldX /= len; worldZ /= len;
-                // apply horizontal velocity
                 const vel = body.getLinearVelocity();
                 vel.setX(worldX * 5);
                 vel.setZ(worldZ * 5);
                 body.setLinearVelocity(vel);
-                // no server-side rotation; client controls view
+            } else {
+                // no input: zero horizontal velocity to stop sliding
+                const velStop = body.getLinearVelocity();
+                velStop.setX(0);
+                velStop.setZ(0);
+                body.setLinearVelocity(velStop);
             }
             
-            // handle jump using physics
+            // handle jump using physics (only when grounded)
             if (input.keys.space) {
-                const velY = body.getLinearVelocity();
-                velY.setY(0.2);
-                body.setLinearVelocity(velY);
+                const vel = body.getLinearVelocity();
+                // check near-zero vertical velocity to approximate grounded
+                if (Math.abs(vel.y()) < 0.01) {
+                    vel.setY(5); // jump impulse
+                    body.setLinearVelocity(vel);
+                }
             }
             // ensure body stays awake
             body.activate();
@@ -734,6 +740,11 @@ class BaseRoom extends Room {
         // Add to state - this automatically broadcasts to all clients
         this.state.structures.set(id, structure);
         
+        // Create physics body for newly placed structure
+        if (this.physicsWorld && typeof this._createStructureBody === 'function') {
+            this._createStructureBody(structure);
+        }
+        
         console.log(`[handlePlaceStructure] Structure ${id} (${structureType}) placed by ${client.sessionId} at (${x}, ${y}, ${z})`);
         
         // Send confirmation to the client who placed it
@@ -771,6 +782,14 @@ class BaseRoom extends Room {
         // Only allow owner to demolish their structures
         if (structure && structure.ownerId === client.sessionId) {
             this.state.structures.delete(structureId);
+            
+            // Remove physics body for demolished structure
+            if (this.physicsWorld && this._rigidBodies.has(structureId)) {
+                const body = this._rigidBodies.get(structureId);
+                this.physicsWorld.removeRigidBody(body);
+                this._rigidBodies.delete(structureId);
+            }
+            
             console.log(`Structure ${structureId} demolished by ${client.sessionId}`);
         }
     }

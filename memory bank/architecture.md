@@ -26,6 +26,10 @@ The 3D AI Game Platform is a modular, multiplayer 3D web game built with Three.j
 - All entity behavior (animation, movement, state) can be defined in the modular definitions.
 - Server is authoritative for all state and entity updates.
 - Dynamic reset logic: `BaseGameRoom.resetGame` clears all NPC entities on city center destruction and flags deferred respawn for the next cycle.
+- Physics-driven player movement using Ammo.js: input keys and jump apply rigid-body velocities, ensuring smooth and responsive movement.
+- Bodies are configured with zero friction and rolling friction, angular rotation locked, and deactivation disabled to prevent unwanted sliding and sleeping.
+- Server authoritative rotation: no server-side yaw override; rotation is controlled by client via synced rotationY and pitch.
+- Horizontal velocity is zeroed immediately when no movement input is present, eliminating residual sliding.
 
 ---
 
@@ -237,6 +241,14 @@ By following this structure, adding new NPCs should primarily involve:
 2.  Adding a correctly structured definition object to the appropriate `npcs.js` file.
 
 This minimizes the need to modify core files like `BaseGameRoom.js` or `NPC.js` for standard NPC additions.
+
+---
+
+## Auto-Collider Implementation
+
+- Integrated NodeIO from `@gltf-transform/core` to automatically compute bounding boxes for static structures on server startup.
+- Current auto-collider produced an oversized bounding box for `city_building_center`, causing the user to reject the recent edits.
+- Goal: Automatically generate accurate collision boxes for all `.glb` models at server start, with correct scale and mesh alignment, while maintaining server authority over collision detection and physics setup.
 
 ---
 

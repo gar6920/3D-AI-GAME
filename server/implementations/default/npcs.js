@@ -176,8 +176,8 @@ const npcDefinitions = [
             maxHealth: 100,
             speed: 2,
             attackDamage: 1,
-            state: 'Idle',
-            animationMap: null,
+            state: 'Walk',
+            animationMap: robokeeperAnimationMap,
             behavior: basicEnemyBehavior
         };
     }),
@@ -186,8 +186,8 @@ const npcDefinitions = [
         type: 'npc',
         modelId: 'robokeeper1', // Model file to load
         x: 5, y: 0, z: 5, rotationY: Math.PI / 2,
-        scale: 0.8, // <<< CHANGED from 0.2
-        state: 'Idle',
+        scale: 0.8, // 
+        state: 'Walk',
         animationMap: robokeeperAnimationMap, // Use reusable map
         behavior: robokeeperBehavior         // Use reusable behavior
     },
@@ -196,8 +196,8 @@ const npcDefinitions = [
         type: 'npc',
         modelId: 'robokeeper1', // Reuse the SAME model
         x: -8, y: 0, z: -3, rotationY: 0, // Different starting position/rotation
-        scale: 0.8, // <<< CHANGED from 0.2
-        state: 'Idle',                  // Start Idle
+        scale: 0.8, // 
+        state: 'Walk',                  // Start Walk
         animationMap: robokeeperAnimationMap, // Reuse the SAME map
         behavior: robokeeperBehavior         // Reuse the SAME behavior
     },

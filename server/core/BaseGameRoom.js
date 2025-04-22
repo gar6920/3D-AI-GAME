@@ -3,6 +3,10 @@ const { BaseEntity } = require('./schemas/BaseEntity');
 const { Structure } = require('./schemas/Structure'); 
 const { StructureDefinition } = require('./schemas/StructureDefinition'); 
 const ammoModule = require('ammo.js');
+// Import NodeIO from glTF-Transform (handles CJS & ESM)
+const transformCore = require('@gltf-transform/core');
+const NodeIO = transformCore.NodeIO || (transformCore.default && transformCore.default.NodeIO) || transformCore.default;
+const path = require('path');
 
 /**
  * BaseGameRoom
@@ -148,6 +152,39 @@ class BaseGameRoom extends BaseRoom {
         this.physicsWorld = new Ammo.btDiscreteDynamicsWorld(dispatcher, broadphase, solver, config);
         this.physicsWorld.setGravity(new Ammo.btVector3(0, -9.8, 0));
         this._rigidBodies = new Map();
+        // Auto-compute collision extents for static structures
+        const io = new NodeIO();
+        for (const def of this._staticStructDefs) {
+            try {
+                const filePath = path.resolve(process.cwd(), 'client', def.modelPath);
+                const document = io.read(filePath);
+                const root = document.getRoot();
+                let minX = Infinity, minY = Infinity, minZ = Infinity;
+                let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+                root.listMeshes().forEach(mesh => {
+                    mesh.listPrimitives().forEach(prim => {
+                        const pos = prim.getAttribute('POSITION').getArray();
+                        for (let i = 0; i < pos.length; i += 3) {
+                            const x = pos[i], y = pos[i+1], z = pos[i+2];
+                            if (x < minX) minX = x; if (y < minY) minY = y; if (z < minZ) minZ = z;
+                            if (x > maxX) maxX = x; if (y > maxY) maxY = y; if (z > maxZ) maxZ = z;
+                        }
+                    });
+                });
+                const sizeX = (maxX - minX) * def.scale;
+                const sizeY = (maxY - minY) * def.scale;
+                const sizeZ = (maxZ - minZ) * def.scale;
+                def.collision = def.collision || {};
+                def.collision.halfExtents = { x: sizeX/2, y: sizeY/2, z: sizeZ/2 };
+                def.position = def.position || {};
+                def.position.x = (def.position.x || 0) + ((minX + maxX)/2) * def.scale;
+                def.position.y = (def.position.y || 0) + ((minY + maxY)/2) * def.scale;
+                def.position.z = (def.position.z || 0) + ((minZ + maxZ)/2) * def.scale;
+                console.log(`[BaseGameRoom] Auto-collider for ${def.id}: halfExtents(${def.collision.halfExtents.x},${def.collision.halfExtents.y},${def.collision.halfExtents.z})`);
+            } catch (e) {
+                console.warn(`[BaseGameRoom] Auto-collider failed for ${def.id}: ${e.message}`);
+            }
+        }
         // create a static ground plane at y=0
         const groundShape = new Ammo.btStaticPlaneShape(new Ammo.btVector3(0,1,0), 0);
         const groundTransform = new Ammo.btTransform();
@@ -172,16 +209,28 @@ class BaseGameRoom extends BaseRoom {
         this.state.players.forEach(p => this._createPlayerBody(p));
     }
 
-    // create collision body for a structure (box approximation)
+    // create collision body for a structure (box approximation), scale-aware and oriented
     _createStructureBody(def) {
         const Ammo = this.Ammo;
-        // use optional collision halfExtents or fallback to uniform scale
-        const size = def.collision?.halfExtents ?? { x: def.scale, y: def.scale, z: def.scale };
+        // Determine base half extents: from explicit collision or defaults
+        const base = def.collision?.halfExtents
+            ?? ((def.width !== undefined && def.height !== undefined && def.depth !== undefined)
+                ? { x: def.width, y: def.height, z: def.depth }
+                : { x: 1, y: 1, z: 1 });
+        // Apply scale factor
+        const size = { x: base.x * def.scale, y: base.y * def.scale, z: base.z * def.scale };
         const halfExtents = new Ammo.btVector3(size.x/2, size.y/2, size.z/2);
         const shape = new Ammo.btBoxShape(halfExtents);
+        // Setup transform with rotation and position
         const transform = new Ammo.btTransform();
         transform.setIdentity();
-        transform.setOrigin(new Ammo.btVector3(def.position.x, def.position.y, def.position.z));
+        const angle = def.rotationY ?? 0;
+        const quat = new Ammo.btQuaternion(0, Math.sin(angle/2), 0, Math.cos(angle/2));
+        transform.setRotation(quat);
+        const px = def.position?.x ?? def.x ?? 0;
+        const py = def.position?.y ?? def.y ?? 0;
+        const pz = def.position?.z ?? def.z ?? 0;
+        transform.setOrigin(new Ammo.btVector3(px, py, pz));
         const motion = new Ammo.btDefaultMotionState(transform);
         const info = new Ammo.btRigidBodyConstructionInfo(0, motion, shape, new Ammo.btVector3(0,0,0));
         const body = new Ammo.btRigidBody(info);
@@ -195,10 +244,14 @@ class BaseGameRoom extends BaseRoom {
         const shape = new Ammo.btSphereShape(entity.scale);
         const transform = new Ammo.btTransform(); transform.setIdentity();
         transform.setOrigin(new Ammo.btVector3(entity.x, entity.y, entity.z));
+        // Determine mass: static blocks and sharks get mass=0 (no gravity), others dynamic
+        const mass = (entity.entityType === 'entity' || (entity.behavior && entity.behavior.name === 'sharkBehavior')) ? 0 : 1;
         const inertia = new Ammo.btVector3(0,0,0);
-        shape.calculateLocalInertia(1, inertia);
+        if (mass > 0) {
+            shape.calculateLocalInertia(mass, inertia);
+        }
         const motion = new Ammo.btDefaultMotionState(transform);
-        const info = new Ammo.btRigidBodyConstructionInfo(1, motion, shape, inertia);
+        const info = new Ammo.btRigidBodyConstructionInfo(mass, motion, shape, inertia);
         const body = new Ammo.btRigidBody(info);
         // remove dynamic friction and lock rotation
         body.setFriction(0);

@@ -60,6 +60,10 @@ class Entity {
                         loadedModel.rotation.set(0, 0, 0);
                         loadedModel.userData.entity = this;
                         group.add(loadedModel);
+                        // Compute and store bounding box collider
+                        const bbox = new THREE.Box3().setFromObject(group);
+                        this.boundingBox = bbox;
+                        console.log(`[Entity ${this.id}] Bounding box computed: min${bbox.min.toArray()}, max${bbox.max.toArray()}`);
                     },
                     undefined,
                     (error) => {

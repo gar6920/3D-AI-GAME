@@ -220,6 +220,11 @@ class NPC extends Entity {
             // Add the loaded model to our placeholder group
             this.modelPlaceholder.add(loadedModel);
 
+            // Compute and store bounding box collider for NPC
+            const bbox = new THREE.Box3().setFromObject(this.modelPlaceholder);
+            this.boundingBox = bbox;
+            console.log(`[NPC ${this.id}] Bounding box computed: min${bbox.min.toArray()}, max${bbox.max.toArray()}`);
+
             // --- ADDED: Log current state scale --- 
             console.log(`NPC ${this.id}: Checking this.state.scale before applying initial scale:`, this.state ? this.state.scale : 'this.state is null/undefined');
             // --- END ADDED ---
@@ -273,22 +278,25 @@ class NPC extends Entity {
             gltf.animations.forEach((clip) => {
                 animationsFoundCount++;
                 const rawName = clip.name;
-                const mappedName = this.animationMap.get(rawName); // Use the instance's map
-
-                if (mappedName) {
-                    if (!this.actions[mappedName]) { // Prevent overwriting if multiple clips map to the same name
-                        this.actions[mappedName] = this.mixer.clipAction(clip);
+                // Determine action name: first via provided map, then fallback by keyword
+                let actionName = this.animationMap.get(rawName);
+                if (!actionName) {
+                    const lower = rawName.toLowerCase();
+                    if (lower.includes('walk')) actionName = 'Walk';
+                    else if (lower.includes('idle')) actionName = 'Idle';
+                    else if (lower.includes('run')) actionName = 'Run';
+                    else if (lower.includes('attack')) actionName = 'Attack';
+                }
+                if (actionName) {
+                    if (!this.actions[actionName]) {
+                        this.actions[actionName] = this.mixer.clipAction(clip);
                         animationsMappedCount++;
-                        console.log(`  - NPC ${this.id}: Mapped animation '${rawName}' to '${mappedName}'`);
-                    } else {
-                        console.warn(`  - NPC ${this.id}: Multiple animations map to '${mappedName}'. Skipping duplicate raw animation '${rawName}'.`);
+                        console.log(`  - NPC ${this.id}: Mapped animation '${rawName}' to '${actionName}'`);
                     }
                 } else {
-                    // Only warn if the map exists but doesn't contain the raw name
-                    if (this.animationMap.size > 0) {
-                        console.warn(`  - NPC ${this.id}: Raw animation '${rawName}' not found in provided animationMap. It will not be playable via standard names.`);
-                    }
-                    // Do NOT store under original name anymore
+                    // Fallback: register under rawName to allow manual play
+                    this.actions[rawName] = this.mixer.clipAction(clip);
+                    console.warn(`  - NPC ${this.id}: Registered fallback animation for raw clip '${rawName}'`);
                 }
             });
              console.log(`[NPC ${this.id} Animations] Processed ${animationsFoundCount} raw animations. Mapped ${animationsMappedCount} to standard names.`);
@@ -300,11 +308,15 @@ class NPC extends Entity {
             if (initialState && this.actions[initialState]) {
                 console.log(`NPC ${this.id}: Initializing animation to server state: '${initialState}'`);
                 initialActionName = initialState;
-            // REMOVED: Fallback to Idle
-            // REMOVED: Fallback to first available animation
+            } else if (this.actions['Walk']) {
+                console.warn(`NPC ${this.id}: No mapped action for initial state '${initialState}', falling back to 'Walk'`);
+                initialActionName = 'Walk';
+            } else if (this.actions['Idle']) {
+                console.warn(`NPC ${this.id}: No mapped action for initial state '${initialState}', falling back to 'Idle'`);
+                initialActionName = 'Idle';
             } else {
-                 console.warn(`NPC ${this.id}: Initial server state ('${initialState}') does not correspond to any mapped animation in this.actions. No initial animation will be played.`);
-                 console.log(`NPC ${this.id}: Available mapped actions:`, Object.keys(this.actions));
+                console.warn(`NPC ${this.id}: Initial server state ('${initialState}') not in actions; no initial animation will play.`);
+                console.log(`NPC ${this.id}: Available actions:`, Object.keys(this.actions));
             }
 
             if (initialActionName) {
@@ -338,13 +350,26 @@ class NPC extends Entity {
     }
 
     playAnimation(name, fadeDuration = 0.3) {
-        if (!this.mixer || !this.actions[name]) {
-            // Don't warn excessively if model/animations just haven't loaded yet
-            console.warn(`NPC ${this.id}: Cannot play animation '${name}'. Mixer or action not ready.`);
+        // Ensure mixer is ready
+        if (!this.mixer) {
+            console.warn(`NPC ${this.id}: Mixer not ready to play animation '${name}'.`);
             return;
         }
-
-        const newAction = this.actions[name];
+        // Fallback if requested action missing
+        let actionName = name;
+        if (!this.actions[actionName]) {
+            if (this.actions['Walk']) {
+                console.warn(`NPC ${this.id}: No action for '${name}', falling back to 'Walk'`);
+                actionName = 'Walk';
+            } else if (this.actions['Idle']) {
+                console.warn(`NPC ${this.id}: No action for '${name}', falling back to 'Idle'`);
+                actionName = 'Idle';
+            } else {
+                console.warn(`NPC ${this.id}: Cannot play animation '${name}'. No fallback available.`);
+                return;
+            }
+        }
+        const newAction = this.actions[actionName];
         let currentAction = null;
         let currentActionName = 'None';
 
