@@ -8,6 +8,8 @@ const transformCore = require('@gltf-transform/core');
 const NodeIO = transformCore.NodeIO || (transformCore.default && transformCore.default.NodeIO) || transformCore.default;
 const path = require('path');
 const { CityCell } = require("./schemas/CityCell"); // Import CityCell
+const CityGrid = require("./CityGrid");
+const axios = require('axios');
 
 /**
  * BaseGameRoom
@@ -54,7 +56,11 @@ class BaseGameRoom extends BaseRoom {
             } else {
 
             }
-            if (def.behavior) entity.behavior = def.behavior;
+            if (def.job === 'cityEngineer') {
+                entity.behavior = this.cityEngineerBehavior.bind(this);
+            } else if (def.behavior) {
+                entity.behavior = def.behavior;
+            }
 
             // Populate the entity's animationMap from the definition
             if (def.animationMap) {
@@ -132,6 +138,10 @@ class BaseGameRoom extends BaseRoom {
         this._elapsedTime = 0;
         this._gameDuration = 3600; // seconds
 
+        // Instantiate LLM grid wrapper
+        const size = this.state.gameConfig.mapSize;
+        this.cityGrid = new CityGrid(size, size, this.state.llmGrid);
+
         // --- Initialize City Grid ---
         this.initializeCityGrid();
 
@@ -142,7 +152,7 @@ class BaseGameRoom extends BaseRoom {
     // --- City Grid Initialization Helper ---
     initializeCityGrid() {
         console.log("[BaseGameRoom] Initializing Sparse City Grid...");
-        this.state.cityGrid.clear(); // Start with an empty grid map
+        this.cityGrid.clear(); // Start with an empty LLM grid map
 
         const mapSize = this.state.gameConfig?.mapSize || 100; // Still needed for context if desired
         const gridSize = 1; // Assuming 1x1 cells
@@ -155,7 +165,6 @@ class BaseGameRoom extends BaseRoom {
             // Check: Only place ground-level structure types
             const groundStructureTypes = ["building", "path_tile", "wall", "structure"]; 
             if (!groundStructureTypes.includes(def.structureType)) {
-                // console.log(`[BaseGameRoom] Skipping grid placement for non-ground structure type: ${def.structureType} (ID: ${def.id})`);
                 return; 
             }
 
@@ -171,81 +180,112 @@ class BaseGameRoom extends BaseRoom {
 
             for (let gx = startX; gx <= endX; gx++) {
                 for (let gz = startZ; gz <= endZ; gz++) {
-                    const gridKey = `${gx}_${gz}`;
-                    // Create and set the cell data ONLY for occupied cells
-                    const cell = new CityCell(
-                        def.structureType || 'structure',
-                        false, // Static structures occupy non-buildable plots
-                        def.id,
-                        "city", 
-                        def.health !== undefined ? def.health : 0,
-                        def.maxHealth !== undefined ? def.maxHealth : 0
-                    );
-                    this.state.cityGrid.set(gridKey, cell);
+                    this.cityGrid.setCell(gx, gz, {
+                        structureType: def.structureType || 'structure',
+                        isBuildablePlot: false,
+                        structureId: def.id,
+                        ownerId: "city",
+                        currentHP: def.health !== undefined ? def.health : 0,
+                        maxHP: def.maxHealth !== undefined ? def.maxHealth : 0,
+                        width: 1,
+                        height: 1
+                    });
                     cellsAdded++;
                 }
             }
         });
         console.log(`[BaseGameRoom] Finished placing static structures. ${cellsAdded} grid cells added.`);
-        console.log(`[BaseGameRoom] Total grid size now: ${this.state.cityGrid.size} entries.`);
-    }
-
-    // --- City Grid Helper Methods ---
-    getGridKey(worldX, worldZ) {
-        const gridSize = 1; // Assuming 1x1 grid cells, match initializeCityGrid
-        return `${Math.floor(worldX / gridSize)}_${Math.floor(worldZ / gridSize)}`;
+        console.log(`[BaseGameRoom] Total grid size now: ${this.cityGrid.schemaMap.size} entries.`);
     }
 
     /**
-     * Gets the state of a city grid cell.
-     * If the cell key doesn't exist in the map, assumes it's empty/buildable.
-     * @param {number} worldX - World X coordinate
-     * @param {number} worldZ - World Z coordinate
-     * @returns {CityCell} The CityCell state for that grid coordinate.
+     * Behavior function for city engineer: query LLM for next build, move to location, and place structure.
+     * TODO: implement LLM integration and building logic.
      */
-    getCityGridCell(worldX, worldZ) {
-        const gridKey = this.getGridKey(worldX, worldZ);
-        if (this.state.cityGrid.has(gridKey)) {
-            return this.state.cityGrid.get(gridKey);
-        } else {
-            // If key doesn't exist, it's an empty, buildable plot by default
-            // Return a new instance representing this default state
-            return new CityCell("empty", true);
+    cityEngineerBehavior(entity, deltaTime, roomState) {
+        // LLM-driven city engineer behavior
+        // Request new task if none pending
+        if (!entity._task && !entity._taskRequest) {
+            entity._taskRequest = this._requestCityTask(entity);
+            return null;
+        }
+        // Wait for LLM response
+        if (entity._taskRequest && !entity._task) {
+            return null;
+        }
+        // Execute task: move to and build structure
+        const { id: defId, x: cellX, y: cellY } = entity._task;
+        const worldX = cellX; const worldZ = cellY;
+        const dx = worldX - entity.x;
+        const dz = worldZ - entity.z;
+        const distSq = dx*dx + dz*dz;
+        const moveThreshold = 0.1;
+        if (distSq > moveThreshold*moveThreshold) {
+            const dist = Math.sqrt(distSq) || 1;
+            const nx = dx/dist; const nz = dz/dist;
+            const newX = entity.x + nx*entity.speed*deltaTime;
+            const newZ = entity.z + nz*entity.speed*deltaTime;
+            const rotationY = Math.atan2(nx,nz);
+            return { x: newX, z: newZ, rotationY, state: 'Walk' };
+        }
+        // At target: place structure
+        this._placeStructure(defId, worldX, worldZ);
+        // Clear task and prepare next
+        entity._task = null; entity._taskRequest = null;
+        return { state: 'Idle' };
+    }
+
+    /** Request next build task from LLM */
+    async _requestCityTask(entity) {
+        try {
+            const structures = this.cityGrid.getStructures();
+            const { structureDefinitions } = require('../implementations/default/structures');
+            const buildableIds = structureDefinitions.filter(d => d.buildable).map(d => d.id);
+            const gridSize = { width: this.cityGrid.width, height: this.cityGrid.height };
+            const systemMsg = `You are the City Architect NPC on a ${gridSize.width}\u00D7${gridSize.height} grid. Available structure IDs: ${JSON.stringify(buildableIds)}. Given existing structures (id,type,x,y), choose one ID and integer coordinates x,y. Reply ONLY with JSON {"id","x","y"}.`;
+            const payload = {
+                model: 'city-architect-v1',
+                messages: [
+                    { role: 'system', content: systemMsg },
+                    { role: 'user', content: `GridSize: ${JSON.stringify(gridSize)}\nExistingStructures: ${JSON.stringify(structures)}\nAvailableIDs: ${JSON.stringify(buildableIds)}` }
+                ]
+            };
+            const resp = await axios.post('http://172.27.160.1:1234/v1/chat/completions', payload);
+            const raw = resp.data.choices[0].message.content;
+            console.log('[CityEngineer] raw LLM reply:', raw);
+            const match = raw.match(/\{[\s\S]*\}/);
+            if (!match) {
+                console.error('[CityEngineer] No JSON found in reply. Reply was:', raw);
+                entity._taskRequest = null;
+                return;
+            }
+            const jsonString = match[0];
+            console.log('[CityEngineer] extracted JSON:', jsonString);
+            const response = JSON.parse(jsonString);
+            entity._task = response; // { id, x, y }
+        } catch (e) {
+            console.error('CityEngineer LLM error:', e);
+            entity._taskRequest = null;
         }
     }
 
-    /**
-     * Updates the state of a city grid cell.
-     * @param {number} worldX - World X coordinate
-     * @param {number} worldZ - World Z coordinate
-     * @param {CityCell} cellData - The new CityCell data to set.
-     */
-    setCityGridCell(worldX, worldZ, cellData) {
-        if (!cellData || !(cellData instanceof CityCell)) {
-             console.error(`[BaseGameRoom.setCityGridCell] Invalid cellData provided for ${worldX},${worldZ}`);
-             return;
-        }
-        const gridKey = this.getGridKey(worldX, worldZ);
-        this.state.cityGrid.set(gridKey, cellData);
-        // console.log(`[BaseGameRoom] Set grid cell ${gridKey} to type: ${cellData.structureType}`);
+    /** Place a new structure at world coords */
+    _placeStructure(defId, x, z) {
+        const { structureDefinitions } = require('../implementations/default/structures');
+        const def = structureDefinitions.find(d => d.id === defId);
+        if (!def) { console.warn(`No buildable def with id ${defId}`); return; }
+        const s = new Structure();
+        s.id = `${def.id}_${Date.now()}`;
+        s.entityType = 'structure'; s.definitionId = def.id; s.modelId = def.modelId||def.id;
+        s.x = x; s.y = def.position?.y||0; s.z = z; s.rotationY = def.rotationY||0; s.scale = def.scale||1;
+        this.state.structures.set(s.id, s);
+        this.cityGrid.setCell(Math.floor(x), Math.floor(z), {
+            structureType: def.structureType, isBuildablePlot: false, structureId: s.id,
+            ownerId: 'city', currentHP: s.health, maxHP: s.maxHealth, width:1, height:1
+        });
     }
 
-    /**
-     * Clears a city grid cell, making it empty and buildable again.
-     * Effectively removes the entry from the sparse map.
-     * @param {number} worldX - World X coordinate
-     * @param {number} worldZ - World Z coordinate
-     */
-    clearCityGridCell(worldX, worldZ) {
-        const gridKey = this.getGridKey(worldX, worldZ);
-        if (this.state.cityGrid.has(gridKey)) {
-            this.state.cityGrid.delete(gridKey);
-            // console.log(`[BaseGameRoom] Cleared grid cell ${gridKey}`);
-        } else {
-            // Cell is already considered empty if key doesn't exist
-             // console.log(`[BaseGameRoom] Attempted to clear already empty grid cell at ${worldX},${worldZ} (Key: ${gridKey})`);
-        }
-    }
+    // ... (other methods remain unchanged)
 
     /**
      * Initialize ammo.js physics world and create collision bodies.
@@ -480,8 +520,6 @@ class BaseGameRoom extends BaseRoom {
 
                         for (let gx = startX; gx <= endX; gx++) {
                             for (let gz = startZ; gz <= endZ; gz++) {
-                                const worldX = gx * gridSize;
-                                const worldZ = gz * gridSize;
                                 this.clearCityGridCell(worldX, worldZ);
                             }
                         }
@@ -611,9 +649,7 @@ class BaseGameRoom extends BaseRoom {
         if (cityDef) {
             const s = new Structure();
             s.id = cityDef.id;
-            s.entityType = 'structure';
-            s.definitionId = cityDef.id;
-            s.modelId = cityDef.modelId || (cityDef.modelPath ? cityDef.modelPath.split('/').pop().replace('.glb', '') : cityDef.id);
+            s.entityType = 'structure'; s.definitionId = cityDef.id; s.modelId = cityDef.modelId||cityDef.id;
             s.x = cityDef.position.x;
             s.y = cityDef.position.y;
             s.z = cityDef.position.z;

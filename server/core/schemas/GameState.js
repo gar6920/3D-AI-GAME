@@ -31,8 +31,8 @@ class GameState extends Schema {
         this.cityCredits = 0;
         this.enemyCredits = 0;
         
-        // City layout grid: Map where key is "x_z" and value is CityCell state
-        this.cityGrid = new MapSchema();
+        // LLM-specific city layout grid: Map where key is "x_z" and value is CityCell state
+        this.llmGrid = new MapSchema();
     }
 }
 
@@ -44,6 +44,6 @@ type({ map: StructureDefinition })(GameState.prototype, "structureDefinitions");
 type(GameConfigSchema)(GameState.prototype, "gameConfig");
 type("number")(GameState.prototype, "cityCredits");
 type("number")(GameState.prototype, "enemyCredits");
-type({ map: CityCell })(GameState.prototype, "cityGrid");
+type({ map: CityCell })(GameState.prototype, "llmGrid");
 
 module.exports = { GameState }; 

@@ -159,8 +159,8 @@ function basicEnemyBehavior(entity, deltaTime, roomState) {
 
 // NPC definitions array
 const npcDefinitions = [
-    // 50 basic ground enemy NPCs coming from all sides
-    ...Array.from({length: 50}, (_, i) => {
+    // 10 basic ground enemy NPCs coming from all sides
+    ...Array.from({length: 10}, (_, i) => {
         // Random angle and distance from center
         const angle = Math.random() * Math.PI * 2;
         const distance = 60 + Math.random() * 20; // 60-80 units from center
@@ -199,7 +199,8 @@ const npcDefinitions = [
         scale: 0.8, // 
         state: 'Walk',                  // Start Walk
         animationMap: robokeeperAnimationMap, // Reuse the SAME map
-        behavior: robokeeperBehavior         // Reuse the SAME behavior
+        behavior: robokeeperBehavior,        // Reuse the SAME behavior
+        job: 'cityEngineer',                 // Assign city engineer role
     },
     /* // Test NPC - Commented out
     {
