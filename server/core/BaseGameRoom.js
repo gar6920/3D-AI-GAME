@@ -7,6 +7,7 @@ const ammoModule = require('ammo.js');
 const transformCore = require('@gltf-transform/core');
 const NodeIO = transformCore.NodeIO || (transformCore.default && transformCore.default.NodeIO) || transformCore.default;
 const path = require('path');
+const { CityCell } = require("./schemas/CityCell"); // Import CityCell
 
 /**
  * BaseGameRoom
@@ -131,8 +132,119 @@ class BaseGameRoom extends BaseRoom {
         this._elapsedTime = 0;
         this._gameDuration = 3600; // seconds
 
+        // --- Initialize City Grid ---
+        this.initializeCityGrid();
+
         // initialize ammo.js physics world and collision bodies
         this._initPhysics();
+    }
+
+    // --- City Grid Initialization Helper ---
+    initializeCityGrid() {
+        console.log("[BaseGameRoom] Initializing Sparse City Grid...");
+        this.state.cityGrid.clear(); // Start with an empty grid map
+
+        const mapSize = this.state.gameConfig?.mapSize || 100; // Still needed for context if desired
+        const gridSize = 1; // Assuming 1x1 cells
+        console.log(`[BaseGameRoom] Map size context: ${mapSize}, Grid Size: ${gridSize}`);
+
+        // Place static structures into the initially empty grid
+        console.log(`[BaseGameRoom] Placing ${this._staticStructDefs.length} static structures into sparse grid...`);
+        let cellsAdded = 0;
+        this._staticStructDefs.forEach(def => {
+            // Check: Only place ground-level structure types
+            const groundStructureTypes = ["building", "path_tile", "wall", "structure"]; 
+            if (!groundStructureTypes.includes(def.structureType)) {
+                // console.log(`[BaseGameRoom] Skipping grid placement for non-ground structure type: ${def.structureType} (ID: ${def.id})`);
+                return; 
+            }
+
+            const structureX = def.position?.x || 0;
+            const structureZ = def.position?.z || 0;
+            const halfExtentsX = def.collision?.halfExtents?.x || gridSize / 2;
+            const halfExtentsZ = def.collision?.halfExtents?.z || gridSize / 2;
+
+            const startX = Math.floor((structureX - halfExtentsX) / gridSize);
+            const endX = Math.floor((structureX + halfExtentsX) / gridSize);
+            const startZ = Math.floor((structureZ - halfExtentsZ) / gridSize);
+            const endZ = Math.floor((structureZ + halfExtentsZ) / gridSize);
+
+            for (let gx = startX; gx <= endX; gx++) {
+                for (let gz = startZ; gz <= endZ; gz++) {
+                    const gridKey = `${gx}_${gz}`;
+                    // Create and set the cell data ONLY for occupied cells
+                    const cell = new CityCell(
+                        def.structureType || 'structure',
+                        false, // Static structures occupy non-buildable plots
+                        def.id,
+                        "city", 
+                        def.health !== undefined ? def.health : 0,
+                        def.maxHealth !== undefined ? def.maxHealth : 0
+                    );
+                    this.state.cityGrid.set(gridKey, cell);
+                    cellsAdded++;
+                }
+            }
+        });
+        console.log(`[BaseGameRoom] Finished placing static structures. ${cellsAdded} grid cells added.`);
+        console.log(`[BaseGameRoom] Total grid size now: ${this.state.cityGrid.size} entries.`);
+    }
+
+    // --- City Grid Helper Methods ---
+    getGridKey(worldX, worldZ) {
+        const gridSize = 1; // Assuming 1x1 grid cells, match initializeCityGrid
+        return `${Math.floor(worldX / gridSize)}_${Math.floor(worldZ / gridSize)}`;
+    }
+
+    /**
+     * Gets the state of a city grid cell.
+     * If the cell key doesn't exist in the map, assumes it's empty/buildable.
+     * @param {number} worldX - World X coordinate
+     * @param {number} worldZ - World Z coordinate
+     * @returns {CityCell} The CityCell state for that grid coordinate.
+     */
+    getCityGridCell(worldX, worldZ) {
+        const gridKey = this.getGridKey(worldX, worldZ);
+        if (this.state.cityGrid.has(gridKey)) {
+            return this.state.cityGrid.get(gridKey);
+        } else {
+            // If key doesn't exist, it's an empty, buildable plot by default
+            // Return a new instance representing this default state
+            return new CityCell("empty", true);
+        }
+    }
+
+    /**
+     * Updates the state of a city grid cell.
+     * @param {number} worldX - World X coordinate
+     * @param {number} worldZ - World Z coordinate
+     * @param {CityCell} cellData - The new CityCell data to set.
+     */
+    setCityGridCell(worldX, worldZ, cellData) {
+        if (!cellData || !(cellData instanceof CityCell)) {
+             console.error(`[BaseGameRoom.setCityGridCell] Invalid cellData provided for ${worldX},${worldZ}`);
+             return;
+        }
+        const gridKey = this.getGridKey(worldX, worldZ);
+        this.state.cityGrid.set(gridKey, cellData);
+        // console.log(`[BaseGameRoom] Set grid cell ${gridKey} to type: ${cellData.structureType}`);
+    }
+
+    /**
+     * Clears a city grid cell, making it empty and buildable again.
+     * Effectively removes the entry from the sparse map.
+     * @param {number} worldX - World X coordinate
+     * @param {number} worldZ - World Z coordinate
+     */
+    clearCityGridCell(worldX, worldZ) {
+        const gridKey = this.getGridKey(worldX, worldZ);
+        if (this.state.cityGrid.has(gridKey)) {
+            this.state.cityGrid.delete(gridKey);
+            // console.log(`[BaseGameRoom] Cleared grid cell ${gridKey}`);
+        } else {
+            // Cell is already considered empty if key doesn't exist
+             // console.log(`[BaseGameRoom] Attempted to clear already empty grid cell at ${worldX},${worldZ} (Key: ${gridKey})`);
+        }
     }
 
     /**
@@ -346,6 +458,57 @@ class BaseGameRoom extends BaseRoom {
             this.resetGame();
             return;
         }
+
+        // --- Structure Health Check and Removal ---
+        const destroyedStructureIds = [];
+        this.state.structures.forEach((structure, id) => {
+            // Check if health exists and is zero or less
+            if (structure.health !== undefined && structure.health <= 0) {
+                console.log(`[BaseGameRoom] Structure ${id} detected as destroyed (health: ${structure.health})`);
+                destroyedStructureIds.push(id);
+
+                // Clear grid cells occupied by this structure
+                if (typeof this.clearCityGridCell === 'function' && typeof this.getGridKey === 'function') {
+                    try {
+                        const gridSize = 1; // Match grid settings
+                        const halfExtentsX = (structure.width / 2) || (gridSize / 2);
+                        const halfExtentsZ = (structure.depth / 2) || (gridSize / 2);
+                        const startX = Math.floor((structure.x - halfExtentsX) / gridSize);
+                        const endX = Math.floor((structure.x + halfExtentsX) / gridSize);
+                        const startZ = Math.floor((structure.z - halfExtentsZ) / gridSize);
+                        const endZ = Math.floor((structure.z + halfExtentsZ) / gridSize);
+
+                        for (let gx = startX; gx <= endX; gx++) {
+                            for (let gz = startZ; gz <= endZ; gz++) {
+                                const worldX = gx * gridSize;
+                                const worldZ = gz * gridSize;
+                                this.clearCityGridCell(worldX, worldZ);
+                            }
+                        }
+                        console.log(`[BaseGameRoom] Cleared city grid cells for destroyed structure ${id}`);
+                    } catch (gridError) {
+                        console.error(`[BaseGameRoom] Error clearing city grid for destroyed structure ${id}:`, gridError);
+                    }
+                } else {
+                    console.warn("[BaseGameRoom] CityGrid helper methods not found. Skipping grid clear for destroyed structure.");
+                }
+
+                // Remove physics body
+                if (this.physicsWorld && this._rigidBodies.has(id)) {
+                    const body = this._rigidBodies.get(id);
+                    this.physicsWorld.removeRigidBody(body);
+                    this._rigidBodies.delete(id);
+                    console.log(`[BaseGameRoom] Removed physics body for destroyed structure ${id}`);
+                }
+            }
+        });
+
+        // Remove destroyed structures from state AFTER iteration
+        destroyedStructureIds.forEach(id => {
+            this.state.structures.delete(id);
+            console.log(`[BaseGameRoom] Removed destroyed structure ${id} from state.`);
+        });
+        // --- End Structure Health Check ---
 
         this.state.entities.forEach((entity, id) => {
             // Universal entity death logic

@@ -3,6 +3,7 @@ const { Player } = require("./Player");
 const { GameConfigSchema } = require("./GameConfigSchema");
 const { Structure } = require("./Structure");
 const { StructureDefinition } = require("./StructureDefinition");
+const { CityCell } = require("./CityCell");
 
 /**
  * Game state schema for the entire game
@@ -29,6 +30,9 @@ class GameState extends Schema {
         // Persistent credit pools
         this.cityCredits = 0;
         this.enemyCredits = 0;
+        
+        // City layout grid: Map where key is "x_z" and value is CityCell state
+        this.cityGrid = new MapSchema();
     }
 }
 
@@ -40,5 +44,6 @@ type({ map: StructureDefinition })(GameState.prototype, "structureDefinitions");
 type(GameConfigSchema)(GameState.prototype, "gameConfig");
 type("number")(GameState.prototype, "cityCredits");
 type("number")(GameState.prototype, "enemyCredits");
+type({ map: CityCell })(GameState.prototype, "cityGrid");
 
 module.exports = { GameState }; 

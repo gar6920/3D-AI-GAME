@@ -3,6 +3,7 @@ const { GameState } = require("./schemas/GameState");
 const { Player, MoveTarget } = require("./schemas/Player");
 const { BaseEntity } = require("./schemas/BaseEntity");
 const { Structure } = require("./schemas/Structure");
+const { CityCell } = require("./schemas/CityCell");
 
 /**
  * Base room class for all game implementations
@@ -755,6 +756,48 @@ class BaseRoom extends Room {
         if (this.physicsWorld && typeof this._createStructureBody === 'function') {
             this._createStructureBody(structure);
         }
+
+        // --- Update City Grid ---
+        // Check if grid helper methods exist before calling them
+        if (typeof this.getGridKey === 'function' && 
+            typeof this.setCityGridCell === 'function' && 
+            typeof CityCell !== 'undefined') 
+        {
+            try {
+                const gridSize = 1; // Match grid settings
+                // Use the structure's dimensions set by setStructureDefaults
+                const halfExtentsX = (structure.width / 2) || (gridSize / 2);
+                const halfExtentsZ = (structure.depth / 2) || (gridSize / 2);
+                const startX = Math.floor((structure.x - halfExtentsX) / gridSize);
+                const endX = Math.floor((structure.x + halfExtentsX) / gridSize);
+                const startZ = Math.floor((structure.z - halfExtentsZ) / gridSize);
+                const endZ = Math.floor((structure.z + halfExtentsZ) / gridSize);
+
+                const cellData = new CityCell(
+                    structure.structureType || 'structure',
+                    false, // Placed structure makes cell non-buildable
+                    structure.id,
+                    structure.ownerId,
+                    structure.health,
+                    structure.maxHealth
+                );
+
+                for (let gx = startX; gx <= endX; gx++) {
+                    for (let gz = startZ; gz <= endZ; gz++) {
+                        // Pass world coordinates directly to the helper method
+                        const worldX = gx * gridSize; // Or gx * gridSize + gridSize / 2 for cell center?
+                        const worldZ = gz * gridSize; // Assuming key uses bottom-left corner logic
+                        this.setCityGridCell(worldX, worldZ, cellData.clone()); 
+                    }
+                }
+                console.log(`[BaseRoom] Updated city grid for placed structure ${structure.id}`);
+            } catch (gridError) {
+                console.error(`[BaseRoom] Error updating city grid for structure ${structure.id}:`, gridError);
+            }
+        } else {
+            console.warn("[BaseRoom] CityGrid helper methods or CityCell not found in this context. Skipping grid update.");
+        }
+        // --- End City Grid Update ---
         
         console.log(`[handlePlaceStructure] Structure ${id} (${structureType}) placed by ${client.sessionId} at (${x}, ${y}, ${z})`);
         
@@ -792,6 +835,37 @@ class BaseRoom extends Room {
         
         // Only allow owner to demolish their structures
         if (structure && structure.ownerId === client.sessionId) {
+
+            // --- Update City Grid (BEFORE removing structure) ---
+            // Check if grid helper methods exist
+            if (typeof this.getGridKey === 'function' && typeof this.clearCityGridCell === 'function') {
+                try {
+                    const gridSize = 1; // Match grid settings
+                    // Use structure dimensions to find occupied cells
+                    const halfExtentsX = (structure.width / 2) || (gridSize / 2);
+                    const halfExtentsZ = (structure.depth / 2) || (gridSize / 2);
+                    const startX = Math.floor((structure.x - halfExtentsX) / gridSize);
+                    const endX = Math.floor((structure.x + halfExtentsX) / gridSize);
+                    const startZ = Math.floor((structure.z - halfExtentsZ) / gridSize);
+                    const endZ = Math.floor((structure.z + halfExtentsZ) / gridSize);
+
+                    for (let gx = startX; gx <= endX; gx++) {
+                        for (let gz = startZ; gz <= endZ; gz++) {
+                            const worldX = gx * gridSize;
+                            const worldZ = gz * gridSize;
+                            this.clearCityGridCell(worldX, worldZ); // Clear the cell
+                        }
+                    }
+                    console.log(`[BaseRoom] Cleared city grid cells for demolished structure ${structureId}`);
+                } catch (gridError) {
+                    console.error(`[BaseRoom] Error clearing city grid for structure ${structureId}:`, gridError);
+                }
+            } else {
+                 console.warn("[BaseRoom] CityGrid helper methods not found in this context. Skipping grid clear.");
+            }
+            // --- End City Grid Update ---
+
+            // Remove structure from state AFTER clearing grid cells
             this.state.structures.delete(structureId);
             
             // Remove physics body for demolished structure

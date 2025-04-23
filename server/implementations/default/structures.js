@@ -49,6 +49,16 @@ const structureDefinitions = [
     rotationY: 0, // Initial rotation
     scale: 8, // Increased scale
     buildable: true // Make it buildable
+  },
+  {
+    id: "concrete_path_buildable",      // Unique ID for this buildable item
+    structureType: "path_tile",        // Type classification
+    modelId: "concrete_path",          // Matches filename concrete_path.glb
+    modelPath: "assets/models/concrete_path.glb", // Client asset path
+    position: { x: 0, y: 0, z: 0 },    // Default position (ignored for buildable)
+    rotationY: 0,                      // Default rotation
+    scale: 1,                          // Default scale
+    buildable: true                    // Make it available in the build menu
   }
 ];
 
