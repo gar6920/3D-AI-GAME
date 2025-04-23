@@ -287,6 +287,36 @@ async function initNetworking() {
             setupMessageHandlers(room); // Setup custom message handlers
             console.log('[InitNetworking] Room listeners setup complete.');
 
+            // Update HUD when local player credits change
+            if (room.state.players.onChange) {
+                const orig = room.state.players.onChange;
+                room.state.players.onChange = (player, sessionId) => {
+                    if (sessionId === room.sessionId) {
+                        window.playerUI.updateHUD({ playerCredits: player.credits });
+                    }
+                    orig(player, sessionId);
+                };
+            }
+            // Initialize HUD with all credit values
+            if (window.playerUI && window.playerUI.updateHUD) {
+                const local = room.state.players.get(room.sessionId);
+                window.playerUI.updateHUD({
+                    playerCredits: local.credits,
+                    cityCredits: room.state.cityCredits,
+                    enemyCredits: room.state.enemyCredits
+                });
+            }
+            // Subscribe to city/enemy credit pool changes
+            room.state.onChange = (changes) => {
+                changes.forEach(change => {
+                    if (change.field === 'cityCredits') {
+                        window.playerUI.updateHUD({ cityCredits: room.state.cityCredits });
+                    } else if (change.field === 'enemyCredits') {
+                        window.playerUI.updateHUD({ enemyCredits: room.state.enemyCredits });
+                    }
+                });
+            };
+
             // Any other setup that depends on initial state can go here
             // For example, initializing UI elements based on state
         });

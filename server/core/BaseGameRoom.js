@@ -17,6 +17,9 @@ const path = require('path');
 class BaseGameRoom extends BaseRoom {
     // Initialize the default room implementation
     initializeImplementation(options) {
+        // Initialize credit pools (persist across game restarts)
+        this.state.cityCredits = 100;
+        this.state.enemyCredits = 100;
         // Add logging for initialization
         console.log('[BaseGameRoom] initializeImplementation called');
         this._initOptions = options; // Save init options for game reset

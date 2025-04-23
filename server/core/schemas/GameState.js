@@ -25,6 +25,10 @@ class GameState extends Schema {
         
         // Game configuration and state - using schema instead of plain object
         this.gameConfig = new GameConfigSchema();
+        
+        // Persistent credit pools
+        this.cityCredits = 0;
+        this.enemyCredits = 0;
     }
 }
 
@@ -34,5 +38,7 @@ type({ map: Schema })(GameState.prototype, "entities");
 type({ map: Structure })(GameState.prototype, "structures");
 type({ map: StructureDefinition })(GameState.prototype, "structureDefinitions");
 type(GameConfigSchema)(GameState.prototype, "gameConfig");
+type("number")(GameState.prototype, "cityCredits");
+type("number")(GameState.prototype, "enemyCredits");
 
 module.exports = { GameState }; 

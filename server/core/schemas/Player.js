@@ -38,6 +38,7 @@ class Player extends BaseEntity {
         // Implementation-specific properties can be added by subclasses
         this.implementationType = ""; // Type of implementation
         this.implementationData = new ImplementationDataSchema(); // Implementation-specific data
+        this.credits = 0;          // Player credit balance
     }
 }
 
@@ -51,5 +52,6 @@ type("boolean")(Player.prototype, "isRTSControlled");
 type("string")(Player.prototype, "currentAnimation");
 type("string")(Player.prototype, "implementationType");
 type(ImplementationDataSchema)(Player.prototype, "implementationData");
+type("number")(Player.prototype, "credits");
 
 module.exports = { Player, MoveTarget }; 

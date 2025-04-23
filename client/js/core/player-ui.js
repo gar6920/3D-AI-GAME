@@ -60,41 +60,48 @@ class PlayerUI {
     
     // *** NEW: Placeholder for updating HUD elements ***
     updateHUD(data = {}) {
-        // Example: Update elements based on data provided
-        // For BuildModeManager, this might involve showing/hiding menus,
-        // updating selected item text, etc.
-        console.log("UIManager: updateHUD called with data:", data);
-
-        // Example implementation (needs refinement based on actual needs):
-        if (data.buildModeActive !== undefined) {
-            const buildMenu = document.getElementById('building-menu');
-            if (buildMenu) {
-                buildMenu.style.display = data.buildModeActive ? 'block' : 'none';
-            }
-            const buildButton = document.getElementById('toggle-build-mode-btn');
-            if (buildButton) {
-                buildButton.textContent = `Build Mode (${data.buildModeActive ? 'ON' : 'OFF'}) (B)`;
-                buildButton.style.backgroundColor = data.buildModeActive ? 'lightgreen' : '';
-            }
+        // Create HUD panel if missing
+        let hud = document.getElementById('credits-hud');
+        if (!hud) {
+            hud = this.addElement('div', {
+                id: 'credits-hud',
+                style: {
+                    position: 'absolute', top: '10px', right: '10px',
+                    color: 'white', background: 'rgba(0,0,0,0.7)',
+                    padding: '4px', borderRadius: '4px', zIndex: '1000', width: '160px'
+                }
+            });
+            // Header (collapsible)
+            const header = this.addElement('div', {
+                id: 'credits-hud-header',
+                html: '<span id="credits-toggle">−</span> Credits',
+                style: { fontWeight: 'bold', cursor: 'pointer', marginBottom: '4px' },
+                parent: hud
+            });
+            // Content wrapper
+            this.addElement('div', { id: 'credits-hud-content', parent: hud });
+            // Credit lines
+            this.addElement('div', { id: 'player-credits', parent: document.getElementById('credits-hud-content'), style: { margin: '2px 0' } });
+            this.addElement('div', { id: 'city-credits', parent: document.getElementById('credits-hud-content'), style: { margin: '2px 0' } });
+            this.addElement('div', { id: 'enemy-credits', parent: document.getElementById('credits-hud-content'), style: { margin: '2px 0' } });
+            // Toggle collapse
+            header.addEventListener('click', () => {
+                const contentEl = document.getElementById('credits-hud-content');
+                const toggle = document.getElementById('credits-toggle');
+                if (contentEl.style.display === 'none') {
+                    contentEl.style.display = 'block'; toggle.textContent = '−';
+                } else { contentEl.style.display = 'none'; toggle.textContent = '+'; }
+            });
         }
-        if (data.selectedStructure !== undefined) {
-            // Find or create an element to display the selected structure
-            let structureDisplay = document.getElementById('selected-structure-display');
-            if (!structureDisplay) {
-                structureDisplay = this.addElement('div', {
-                    id: 'selected-structure-display',
-                    style: {
-                        position: 'absolute',
-                        bottom: '20px', // Adjust position as needed
-                        left: '150px', // Adjust position as needed
-                        zIndex: '100',
-                        color: 'white',
-                        background: 'rgba(0,0,0,0.5)',
-                        padding: '5px'
-                    }
-                });
-            }
-            structureDisplay.textContent = `Selected: ${data.selectedStructure || 'None'}`;
+        // Update displayed values
+        if (data.playerCredits !== undefined) {
+            document.getElementById('player-credits').textContent = `Your Credits: ${data.playerCredits}`;
+        }
+        if (data.cityCredits !== undefined) {
+            document.getElementById('city-credits').textContent = `City Credits: ${data.cityCredits}`;
+        }
+        if (data.enemyCredits !== undefined) {
+            document.getElementById('enemy-credits').textContent = `Enemy Credits: ${data.enemyCredits}`;
         }
     }
 

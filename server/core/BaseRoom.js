@@ -612,6 +612,11 @@ class BaseRoom extends Room {
         // Create a new player instance
         const player = new Player();
         
+        // Allocate starting credits (dynamic value may change later)
+        const startingCredits = 5;
+        player.credits = startingCredits;
+        this.state.cityCredits -= startingCredits;
+        
         // Spawn player just outside the city building
         const city = this.state.structures.get('city_building_center');
         if (city) {
@@ -658,6 +663,12 @@ class BaseRoom extends Room {
      */
     onLeave(client, consented) {
         console.log(`Client left: ${client.sessionId}`);
+        
+        // Return player credits to the city pool
+        const departing = this.state.players.get(client.sessionId);
+        if (departing) {
+            this.state.cityCredits += departing.credits || 0;
+        }
         
         // Remove player from the game state
         this.state.players.delete(client.sessionId);
