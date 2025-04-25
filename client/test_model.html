@@ -160,6 +160,13 @@ Click the green button to select human_man.glb from your Downloads folder.</div>
                     model = gltf.scene;
                     scene.add(model);
                     
+                    // Recenter model to origin
+                    const bbox = new THREE.Box3().setFromObject(model);
+                    const center = bbox.getCenter(new THREE.Vector3());
+                    model.position.sub(center);
+                    controls.target.copy(new THREE.Vector3(0, 0, 0));
+                    controls.update();
+                    
                     log(`✅ Model loaded successfully: ${filename}`);
                     
                     // Apply default scale if model is too big or too small
@@ -391,4 +398,4 @@ Click the green button to select human_man.glb from your Downloads folder.</div>
         animate();
     </script>
 </body>
-</html> 
+</html>

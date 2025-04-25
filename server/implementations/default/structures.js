@@ -4,6 +4,7 @@
  * Each def drives both BuildingMode UI (buildable:true)
  * and static world props (buildable:false).
  */
+
 const structureDefinitions = [
   {
     id: "city_building_center",
@@ -17,7 +18,6 @@ const structureDefinitions = [
     health: 1000,
     maxHealth: 1000
   },
-
   {
     id: "hover_cube",
     structureType: "cube",
@@ -39,26 +39,25 @@ const structureDefinitions = [
     health: 2000,
     maxHealth: 2000
   },
-  // Add the static house definition here
   {
-    id: "house", // Changed ID for buildable type
+    id: "house",
     structureType: "building",
-    modelId: "house", // Matches house.glb
+    modelId: "house",
     modelPath: "assets/models/house.glb",
-    position: { x: 10, y: 0, z: 10 }, // Original position (ignored for buildable)
-    rotationY: 0, // Initial rotation
-    scale: 8, // Increased scale
-    buildable: true // Make it buildable
+    position: { x: 10, y: 0, z: 10 },
+    rotationY: 0,
+    scale: 8,
+    buildable: true
   },
   {
-    id: "concrete_path_buildable",      // Unique ID for this buildable item
-    structureType: "path_tile",        // Type classification
-    modelId: "concrete_path",          // Matches filename concrete_path.glb
-    modelPath: "assets/models/concrete_path.glb", // Client asset path
-    position: { x: 0, y: 0, z: 0 },    // Default position (ignored for buildable)
-    rotationY: 0,                      // Default rotation
-    scale: 1,                          // Default scale
-    buildable: true                    // Make it available in the build menu
+    id: "concrete_path_buildable",
+    structureType: "path_tile",
+    modelId: "concrete_path",
+    modelPath: "assets/models/concrete_path.glb",
+    position: { x: 0, y: 0, z: 0 },
+    rotationY: 0,
+    scale: 1,
+    buildable: true
   }
 ];
 

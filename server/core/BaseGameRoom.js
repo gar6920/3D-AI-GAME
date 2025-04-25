@@ -56,8 +56,14 @@ class BaseGameRoom extends BaseRoom {
             } else {
 
             }
-            if (def.job === 'cityEngineer') {
-                entity.behavior = this.cityEngineerBehavior.bind(this);
+            // Apply custom speed from definition if provided
+            entity.speed = def.speed !== undefined ? def.speed : entity.speed;
+            if (def.job === 'cityArchitect') {
+                entity.behavior = this.cityArchitectBehavior.bind(this);
+                entity._isCityArchitect = true;
+            } else if (def.job === 'cityBuilder') {
+                entity.behavior = this.cityBuilderBehavior.bind(this);
+                entity._isCityBuilder = true;
             } else if (def.behavior) {
                 entity.behavior = def.behavior;
             }
@@ -229,47 +235,96 @@ class BaseGameRoom extends BaseRoom {
             return { x: newX, z: newZ, rotationY, state: 'Walk' };
         }
         // At target: place structure
+        const gridX = Math.floor(worldX);
+        const gridY = Math.floor(worldZ);
+        const key = `${gridX}_${gridY}`;
+        // Skip placement if occupied
+        if (this.cityGrid.schemaMap.get(key)) {
+            console.warn(`[CityEngineer] target cell ${gridX},${gridY} already occupied, skipping placement.`);
+            entity._task = null; entity._taskRequest = null;
+            return { state: 'Idle' };
+        }
         this._placeStructure(defId, worldX, worldZ);
         // Clear task and prepare next
         entity._task = null; entity._taskRequest = null;
         return { state: 'Idle' };
     }
 
-    /** Request next build task from LLM */
-    async _requestCityTask(entity) {
-        try {
-            const structures = this.cityGrid.getStructures();
-            const { structureDefinitions } = require('../implementations/default/structures');
-            const buildableIds = structureDefinitions.filter(d => d.buildable).map(d => d.id);
-            const gridSize = { width: this.cityGrid.width, height: this.cityGrid.height };
-            const systemMsg = `You are the City Architect NPC on a ${gridSize.width}\u00D7${gridSize.height} grid. Available structure IDs: ${JSON.stringify(buildableIds)}. Given existing structures (id,type,x,y), choose one ID and integer coordinates x,y. Reply ONLY with JSON {"id","x","y"}.`;
-            const payload = {
-                model: 'city-architect-v1',
-                messages: [
-                    { role: 'system', content: systemMsg },
-                    { role: 'user', content: `GridSize: ${JSON.stringify(gridSize)}\nExistingStructures: ${JSON.stringify(structures)}\nAvailableIDs: ${JSON.stringify(buildableIds)}` }
-                ]
-            };
-            const resp = await axios.post('http://172.27.160.1:1234/v1/chat/completions', payload);
-            const raw = resp.data.choices[0].message.content;
-            console.log('[CityEngineer] raw LLM reply:', raw);
-            const match = raw.match(/\{[\s\S]*\}/);
-            if (!match) {
-                console.error('[CityEngineer] No JSON found in reply. Reply was:', raw);
-                entity._taskRequest = null;
-                return;
+    // Deterministic road grid planner
+    _generateRoadGridPlan(spacing = 5, radius = 50) {
+        const tasks = [];
+        const seen = new Set();
+        // horizontal roads
+        for (let y = -radius; y <= radius; y += spacing) {
+            for (let x = -radius; x <= radius; x++) {
+                const key = `${x}_${y}`;
+                if (!seen.has(key)) { seen.add(key); tasks.push({ id: 'concrete_path_buildable', x, y }); }
             }
-            const jsonString = match[0];
-            console.log('[CityEngineer] extracted JSON:', jsonString);
-            const response = JSON.parse(jsonString);
-            entity._task = response; // { id, x, y }
-        } catch (e) {
-            console.error('CityEngineer LLM error:', e);
-            entity._taskRequest = null;
         }
+        // vertical roads
+        for (let x = -radius; x <= radius; x += spacing) {
+            for (let y = -radius; y <= radius; y++) {
+                const key = `${x}_${y}`;
+                if (!seen.has(key)) { seen.add(key); tasks.push({ id: 'concrete_path_buildable', x, y }); }
+            }
+        }
+        return tasks;
     }
 
-    /** Place a new structure at world coords */
+    // Behavior for City Architect: queue deterministic road grid plan
+    cityArchitectBehavior(entity, deltaTime, roomState) {
+        if (!entity._planQueued) {
+            const plan = this._generateRoadGridPlan(5, 50);
+            const builder = Array.from(this.state.entities.values()).find(e => e._isCityBuilder);
+            if (builder) {
+                builder._taskQueue = builder._taskQueue || [];
+                for (const task of plan) builder._taskQueue.push(task);
+            }
+            entity._planQueued = true;
+        }
+        return { state: 'Idle' };
+    }
+
+    /**
+     * Behavior function for city builder: process a queue of tasks from architect
+     */
+    cityBuilderBehavior(entity, deltaTime, roomState) {
+        if (!entity._taskQueue || entity._taskQueue.length === 0) return { state: 'Idle' };
+        if (!entity._currentTask) entity._currentTask = entity._taskQueue.shift();
+        const { id: defId, x: cellX, y: cellY } = entity._currentTask;
+        const worldX = cellX, worldZ = cellY;
+        const dx = worldX - entity.x, dz = worldZ - entity.z;
+        const distSq = dx*dx + dz*dz, moveThreshold = 0.1;
+        if (distSq > moveThreshold*moveThreshold) {
+            const dist = Math.sqrt(distSq)||1, nx = dx/dist, nz = dz/dist;
+            const newX = entity.x + nx*entity.speed*deltaTime;
+            const newZ = entity.z + nz*entity.speed*deltaTime;
+            const rotationY = Math.atan2(nx,nz);
+            return { x: newX, z: newZ, rotationY, state: 'Walk' };
+        }
+        // Collision check for entire footprint
+        const { structureDefinitions } = require('../implementations/default/structures');
+        const def = structureDefinitions.find(d => d.id === defId);
+        const baseX = Math.floor(worldX), baseY = Math.floor(worldZ);
+        const widthCells = def.scale || 1, heightCells = def.scale || 1;
+        let overlap = false;
+        for (let ix = 0; ix < widthCells; ix++) {
+            for (let iy = 0; iy < heightCells; iy++) {
+                if (this.cityGrid.schemaMap.get(`${baseX + ix}_${baseY + iy}`)) { overlap = true; break; }
+            }
+            if (overlap) break;
+        }
+        if (overlap) { console.warn(`[CityBuilder] footprint overlap at ${baseX},${baseY}`); entity._currentTask = null; return { state: 'Idle' }; }
+        this._placeStructure(defId, worldX, worldZ);
+        entity._currentTask = null;
+        return { state: 'Idle' };
+    }
+
+    // ... (other methods remain unchanged)
+
+    /**
+     * Place a new structure at world coords
+     */
     _placeStructure(defId, x, z) {
         const { structureDefinitions } = require('../implementations/default/structures');
         const def = structureDefinitions.find(d => d.id === defId);
@@ -279,10 +334,23 @@ class BaseGameRoom extends BaseRoom {
         s.entityType = 'structure'; s.definitionId = def.id; s.modelId = def.modelId||def.id;
         s.x = x; s.y = def.position?.y||0; s.z = z; s.rotationY = def.rotationY||0; s.scale = def.scale||1;
         this.state.structures.set(s.id, s);
-        this.cityGrid.setCell(Math.floor(x), Math.floor(z), {
-            structureType: def.structureType, isBuildablePlot: false, structureId: s.id,
-            ownerId: 'city', currentHP: s.health, maxHP: s.maxHealth, width:1, height:1
-        });
+        // Mark each cell in the footprint region
+        const baseX = Math.floor(x), baseY = Math.floor(z);
+        const widthCells = def.scale || 1, heightCells = def.scale || 1;
+        for (let ix = 0; ix < widthCells; ix++) {
+            for (let iy = 0; iy < heightCells; iy++) {
+                this.cityGrid.setCell(baseX + ix, baseY + iy, {
+                    structureType: def.structureType,
+                    isBuildablePlot: false,
+                    structureId: s.id,
+                    ownerId: 'city',
+                    currentHP: s.health,
+                    maxHP: s.maxHealth,
+                    width: def.scale,
+                    height: def.scale
+                });
+            }
+        }
     }
 
     // ... (other methods remain unchanged)
@@ -395,6 +463,10 @@ class BaseGameRoom extends BaseRoom {
 
     // sphere collider for NPC/entity
     _createEntityBody(entity) {
+        if (entity._isCityArchitect) {
+            // Skip physics for City Architect to avoid collider blockage
+            return;
+        }
         const Ammo = this.Ammo;
         const shape = new Ammo.btSphereShape(entity.scale);
         const transform = new Ammo.btTransform(); transform.setIdentity();

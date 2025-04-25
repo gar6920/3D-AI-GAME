@@ -189,7 +189,7 @@ const npcDefinitions = [
         scale: 0.8, // 
         state: 'Walk',
         animationMap: robokeeperAnimationMap, // Use reusable map
-        behavior: robokeeperBehavior         // Use reusable behavior
+        job: 'cityArchitect'                 // Generates plan
     },
     { // --- NEW INSTANCE ---
         id: 'robokeeper_guard2', // New unique instance ID
@@ -199,8 +199,8 @@ const npcDefinitions = [
         scale: 0.8, // 
         state: 'Walk',                  // Start Walk
         animationMap: robokeeperAnimationMap, // Reuse the SAME map
-        behavior: robokeeperBehavior,        // Reuse the SAME behavior
-        job: 'cityEngineer',                 // Assign city engineer role
+        job: 'cityBuilder',                  // Executes plan
+        speed: 100,                          // Fast builder
     },
     /* // Test NPC - Commented out
     {
