@@ -10,6 +10,9 @@ const path = require('path');
 const { CityCell } = require("./schemas/CityCell"); // Import CityCell
 const CityGrid = require("./CityGrid");
 const axios = require('axios');
+const { cityEngineerBehavior } = require('../implementations/default/cityEngineer');
+const { cityArchitectBehavior } = require('../implementations/default/cityArchitect');
+const { cityBuilderBehavior } = require('../implementations/default/cityBuilder');
 
 /**
  * BaseGameRoom
@@ -59,11 +62,13 @@ class BaseGameRoom extends BaseRoom {
             // Apply custom speed from definition if provided
             entity.speed = def.speed !== undefined ? def.speed : entity.speed;
             if (def.job === 'cityArchitect') {
-                entity.behavior = this.cityArchitectBehavior.bind(this);
+                entity.behavior = cityArchitectBehavior.bind(this);
                 entity._isCityArchitect = true;
             } else if (def.job === 'cityBuilder') {
-                entity.behavior = this.cityBuilderBehavior.bind(this);
+                entity.behavior = cityBuilderBehavior.bind(this);
                 entity._isCityBuilder = true;
+            } else if (def.job === 'cityEngineer') {
+                entity.behavior = cityEngineerBehavior.bind(this);
             } else if (def.behavior) {
                 entity.behavior = def.behavior;
             }
@@ -205,52 +210,8 @@ class BaseGameRoom extends BaseRoom {
     }
 
     /**
-     * Behavior function for city engineer: query LLM for next build, move to location, and place structure.
-     * TODO: implement LLM integration and building logic.
+     * Deterministic road grid planner
      */
-    cityEngineerBehavior(entity, deltaTime, roomState) {
-        // LLM-driven city engineer behavior
-        // Request new task if none pending
-        if (!entity._task && !entity._taskRequest) {
-            entity._taskRequest = this._requestCityTask(entity);
-            return null;
-        }
-        // Wait for LLM response
-        if (entity._taskRequest && !entity._task) {
-            return null;
-        }
-        // Execute task: move to and build structure
-        const { id: defId, x: cellX, y: cellY } = entity._task;
-        const worldX = cellX; const worldZ = cellY;
-        const dx = worldX - entity.x;
-        const dz = worldZ - entity.z;
-        const distSq = dx*dx + dz*dz;
-        const moveThreshold = 0.1;
-        if (distSq > moveThreshold*moveThreshold) {
-            const dist = Math.sqrt(distSq) || 1;
-            const nx = dx/dist; const nz = dz/dist;
-            const newX = entity.x + nx*entity.speed*deltaTime;
-            const newZ = entity.z + nz*entity.speed*deltaTime;
-            const rotationY = Math.atan2(nx,nz);
-            return { x: newX, z: newZ, rotationY, state: 'Walk' };
-        }
-        // At target: place structure
-        const gridX = Math.floor(worldX);
-        const gridY = Math.floor(worldZ);
-        const key = `${gridX}_${gridY}`;
-        // Skip placement if occupied
-        if (this.cityGrid.schemaMap.get(key)) {
-            console.warn(`[CityEngineer] target cell ${gridX},${gridY} already occupied, skipping placement.`);
-            entity._task = null; entity._taskRequest = null;
-            return { state: 'Idle' };
-        }
-        this._placeStructure(defId, worldX, worldZ);
-        // Clear task and prepare next
-        entity._task = null; entity._taskRequest = null;
-        return { state: 'Idle' };
-    }
-
-    // Deterministic road grid planner
     _generateRoadGridPlan(spacing = 5, radius = 50) {
         const tasks = [];
         const seen = new Set();
@@ -270,57 +231,6 @@ class BaseGameRoom extends BaseRoom {
         }
         return tasks;
     }
-
-    // Behavior for City Architect: queue deterministic road grid plan
-    cityArchitectBehavior(entity, deltaTime, roomState) {
-        if (!entity._planQueued) {
-            const plan = this._generateRoadGridPlan(5, 50);
-            const builder = Array.from(this.state.entities.values()).find(e => e._isCityBuilder);
-            if (builder) {
-                builder._taskQueue = builder._taskQueue || [];
-                for (const task of plan) builder._taskQueue.push(task);
-            }
-            entity._planQueued = true;
-        }
-        return { state: 'Idle' };
-    }
-
-    /**
-     * Behavior function for city builder: process a queue of tasks from architect
-     */
-    cityBuilderBehavior(entity, deltaTime, roomState) {
-        if (!entity._taskQueue || entity._taskQueue.length === 0) return { state: 'Idle' };
-        if (!entity._currentTask) entity._currentTask = entity._taskQueue.shift();
-        const { id: defId, x: cellX, y: cellY } = entity._currentTask;
-        const worldX = cellX, worldZ = cellY;
-        const dx = worldX - entity.x, dz = worldZ - entity.z;
-        const distSq = dx*dx + dz*dz, moveThreshold = 0.1;
-        if (distSq > moveThreshold*moveThreshold) {
-            const dist = Math.sqrt(distSq)||1, nx = dx/dist, nz = dz/dist;
-            const newX = entity.x + nx*entity.speed*deltaTime;
-            const newZ = entity.z + nz*entity.speed*deltaTime;
-            const rotationY = Math.atan2(nx,nz);
-            return { x: newX, z: newZ, rotationY, state: 'Walk' };
-        }
-        // Collision check for entire footprint
-        const { structureDefinitions } = require('../implementations/default/structures');
-        const def = structureDefinitions.find(d => d.id === defId);
-        const baseX = Math.floor(worldX), baseY = Math.floor(worldZ);
-        const widthCells = def.scale || 1, heightCells = def.scale || 1;
-        let overlap = false;
-        for (let ix = 0; ix < widthCells; ix++) {
-            for (let iy = 0; iy < heightCells; iy++) {
-                if (this.cityGrid.schemaMap.get(`${baseX + ix}_${baseY + iy}`)) { overlap = true; break; }
-            }
-            if (overlap) break;
-        }
-        if (overlap) { console.warn(`[CityBuilder] footprint overlap at ${baseX},${baseY}`); entity._currentTask = null; return { state: 'Idle' }; }
-        this._placeStructure(defId, worldX, worldZ);
-        entity._currentTask = null;
-        return { state: 'Idle' };
-    }
-
-    // ... (other methods remain unchanged)
 
     /**
      * Place a new structure at world coords
