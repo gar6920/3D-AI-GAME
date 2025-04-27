@@ -20,7 +20,7 @@ const GAMEPAD_POLL_RATE = 16; // ~60fps
 function parseCommandLineArgs() {
   const args = process.argv.slice(1);
   let environment = 'production';
-  let serverUrl = environment === 'development' ? 'http://localhost:3000' : 'http://sea-lion-app-4mc79.ondigitalocean.app:8080';
+  let serverUrl = environment === 'development' ? 'http://localhost:3000' : 'https://sea-lion-app-4mc79.ondigitalocean.app';
   
   args.forEach(arg => {
     if (arg.startsWith('--env=')) {

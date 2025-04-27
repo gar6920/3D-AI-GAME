@@ -26,7 +26,7 @@
         const playerId = urlParams.get('playerId');
         const gamepadIndex = parseInt(urlParams.get('gamepadIndex'), 10);
         const environment = window.location.hostname.includes('localhost') ? 'dev' : 'prod';
-        const gameUrl = urlParams.get('gameUrl') || (environment === 'dev' ? 'http://localhost:3000/game?implementation=default' : 'http://sea-lion-app-4mc79.ondigitalocean.app:8080/game?implementation=default');
+        const gameUrl = urlParams.get('gameUrl') || (environment === 'dev' ? 'http://localhost:3000/game?implementation=default' : 'https://sea-lion-app-4mc79.ondigitalocean.app/game?implementation=default');
         
         // Set the game frame source
         document.getElementById('gameFrame').src = gameUrl;
