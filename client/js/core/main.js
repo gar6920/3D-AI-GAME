@@ -55,8 +55,8 @@ const gameConfig = {
     },
     networkSettings: {
         serverUrl: window.location.hostname.includes('localhost') 
-            ? `ws://${window.location.hostname}:3000` // Local development
-            : `wss://${window.location.hostname}`,    // Production
+            ? `ws://localhost:3000` // Local development
+            : `wss://sea-lion-app-4mc79.ondigitalocean.app:8080`, // Production
         // Room name could potentially depend on implementation in the future
         roomName: 'active'       
     }
