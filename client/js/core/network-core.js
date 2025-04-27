@@ -2,7 +2,7 @@
 
 // Network configuration
 const environment = window.location.hostname.includes('localhost') ? 'dev' : 'prod';
-const endpoint = environment === 'dev' ? 'ws://localhost:3000' : 'wss://sea-lion-app-4mc79.ondigitalocean.app:8080';
+const endpoint = environment === 'dev' ? 'ws://localhost:3000' : 'ws://sea-lion-app-4mc79.ondigitalocean.app:8080';
 console.log(`Connecting to ${endpoint} in ${environment} mode`);
 let client = null;
 let room = null;
