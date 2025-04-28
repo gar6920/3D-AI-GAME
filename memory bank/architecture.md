@@ -33,6 +33,22 @@ The 3D AI Game Platform is a modular, multiplayer 3D web game built with Three.j
 
 ---
 
+### Recent Architectural Changes
+
+#### Removal of City Wall Segments
+- The city wall segments, which previously surrounded the city center as discrete structure entities, have been removed from the default implementation.
+- This change simplifies the city layout, reduces unnecessary collision checks, and streamlines both gameplay and server logic.
+- All wall-related structure definitions and associated placement logic were deleted from `/server/implementations/default/structures.js` and related files.
+
+#### Auto-Collider Implementation at Server Start
+- A new auto-collider system was implemented in `BaseGameRoom._initPhysics()`.
+- At server start, the system scans all static structure models (GLB files) and automatically calculates accurate collider shapes based on the model geometry.
+- Collider data is cached and assigned to each structure definition before any structures are spawned in the game world.
+- This ensures that colliders are always consistent with the actual model size and scale, eliminating manual collider configuration and reducing bugs related to scaling mismatches.
+- The auto-collider is only generated at server start; if a structure's scale or model changes at runtime, additional logic would be needed to update its collider accordingly.
+
+---
+
 ## Client Structure (`/client`)
 
 ### Core Platform (`/client/js/core`)

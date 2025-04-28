@@ -13,7 +13,7 @@ const structureDefinitions = [
     modelPath: "assets/models/city_building.glb",
     position: { x: 0, y: 0, z: 0 },
     rotationY: 0,
-    scale: 10,
+    scale: 1,
     buildable: false,
     health: 1000,
     maxHealth: 1000

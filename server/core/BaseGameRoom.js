@@ -3,9 +3,8 @@ const { BaseEntity } = require('./schemas/BaseEntity');
 const { Structure } = require('./schemas/Structure'); 
 const { StructureDefinition } = require('./schemas/StructureDefinition'); 
 const ammoModule = require('ammo.js');
-// Import NodeIO from glTF-Transform (handles CJS & ESM)
-const transformCore = require('@gltf-transform/core');
-const NodeIO = transformCore.NodeIO || (transformCore.default && transformCore.default.NodeIO) || transformCore.default;
+// Import NodeIO from glTF-Transform (CJS style)
+const { NodeIO } = require('@gltf-transform/core');
 const path = require('path');
 const { CityCell } = require("./schemas/CityCell"); // Import CityCell
 const CityGrid = require("./CityGrid");
@@ -285,12 +284,17 @@ class BaseGameRoom extends BaseRoom {
         this.physicsWorld = new Ammo.btDiscreteDynamicsWorld(dispatcher, broadphase, solver, config);
         this.physicsWorld.setGravity(new Ammo.btVector3(0, -9.8, 0));
         this._rigidBodies = new Map();
-        // Auto-compute collision extents for static structures
+        // --- Auto-collider: Scan all models and cache collider data ---
         const io = new NodeIO();
-        for (const def of this._staticStructDefs) {
+        const fs = require('fs');
+        const modelsDir = path.resolve(process.cwd(), 'client', 'assets', 'models');
+        const colliderCache = {};
+        // Find all .glb files in the models directory
+        const modelFiles = fs.readdirSync(modelsDir).filter(f => f.endsWith('.glb'));
+        for (const modelFile of modelFiles) {
             try {
-                const filePath = path.resolve(process.cwd(), 'client', def.modelPath);
-                const document = io.read(filePath);
+                const filePath = path.join(modelsDir, modelFile);
+                const document = await io.read(filePath);
                 const root = document.getRoot();
                 let minX = Infinity, minY = Infinity, minZ = Infinity;
                 let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
@@ -304,19 +308,32 @@ class BaseGameRoom extends BaseRoom {
                         }
                     });
                 });
-                const sizeX = (maxX - minX) * def.scale;
-                const sizeY = (maxY - minY) * def.scale;
-                const sizeZ = (maxZ - minZ) * def.scale;
-                def.collision = def.collision || {};
-                def.collision.halfExtents = { x: sizeX/2, y: sizeY/2, z: sizeZ/2 };
-                def.position = def.position || {};
-                def.position.x = (def.position.x || 0) + ((minX + maxX)/2) * def.scale;
-                def.position.y = (def.position.y || 0) + ((minY + maxY)/2) * def.scale;
-                def.position.z = (def.position.z || 0) + ((minZ + maxZ)/2) * def.scale;
-                console.log(`[BaseGameRoom] Auto-collider for ${def.id}: halfExtents(${def.collision.halfExtents.x},${def.collision.halfExtents.y},${def.collision.halfExtents.z})`);
+                colliderCache[modelFile] = { minX, minY, minZ, maxX, maxY, maxZ };
+                console.log(`[BaseGameRoom] Cached auto-collider for model ${modelFile}`);
             } catch (e) {
-                console.warn(`[BaseGameRoom] Auto-collider failed for ${def.id}: ${e.message}`);
+                console.warn(`[BaseGameRoom] Auto-collider failed for model ${modelFile}: ${e.message}`);
             }
+        }
+        // Assign cached collider data to each structure definition
+        for (const def of this._staticStructDefs) {
+            if (!def.modelPath) continue;
+            const modelFile = def.modelPath.split('/').pop();
+            const cached = colliderCache[modelFile];
+            if (!cached) {
+                console.warn(`[BaseGameRoom] No collider cached for ${def.id} (${modelFile})`);
+                continue;
+            }
+            const { minX, minY, minZ, maxX, maxY, maxZ } = cached;
+            const sizeX = (maxX - minX) * def.scale;
+            const sizeY = (maxY - minY) * def.scale;
+            const sizeZ = (maxZ - minZ) * def.scale;
+            def.collision = def.collision || {};
+            def.collision.halfExtents = { x: sizeX/2, y: sizeY/2, z: sizeZ/2 };
+            def.position = def.position || {};
+            def.position.x = (def.position.x || 0) + ((minX + maxX)/2) * def.scale;
+            def.position.y = (def.position.y || 0) + ((minY + maxY)/2) * def.scale;
+            def.position.z = (def.position.z || 0) + ((minZ + maxZ)/2) * def.scale;
+            console.log(`[BaseGameRoom] Auto-collider for ${def.id} (model: ${modelFile}): halfExtents(${def.collision.halfExtents.x},${def.collision.halfExtents.y},${def.collision.halfExtents.z})`);
         }
         // create a static ground plane at y=0
         const groundShape = new Ammo.btStaticPlaneShape(new Ammo.btVector3(0,1,0), 0);
