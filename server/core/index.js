@@ -41,7 +41,7 @@ const implementations = loadImplementations();
 
 // Server-side configuration
 const serverConfig = {
-    port: process.env.NODE_ENV === 'production' ? 8080 : parseInt(process.env.PORT || "3000", 10),
+    port: parseInt(process.env.PORT || "8080", 10),
     environment: process.env.NODE_ENV || 'development',
     logLevel: process.env.LOG_LEVEL || 'info'
 };
