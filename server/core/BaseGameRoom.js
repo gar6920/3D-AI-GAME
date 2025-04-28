@@ -53,11 +53,7 @@ class BaseGameRoom extends BaseRoom {
             entity.state = def.state || 'Idle';
             entity.scale = def.scale !== undefined ? def.scale : 1; // Set scale from definition, default 1
             entity.attackDamage = def.attackDamage !== undefined ? def.attackDamage : entity.attackDamage;
-            if (def.attackDamage === undefined) {
-                console.warn(`[SPAWN] Enemy ${entity.id} has no attackDamage in definition, using fallback: ${entity.attackDamage}`);
-            } else {
-
-            }
+            // Removed attackDamage check and log. BaseGameRoom does not care about attackDamage presence.
             // Apply custom speed from definition if provided
             entity.speed = def.speed !== undefined ? def.speed : entity.speed;
             if (def.job === 'cityArchitect') {
