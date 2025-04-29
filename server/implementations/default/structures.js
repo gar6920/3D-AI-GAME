@@ -18,6 +18,20 @@ const structureDefinitions = [
     health: 1000,
     maxHealth: 1000
   },
+  // City Dome: electrical dome wall around city
+  {
+    id: "city_dome_100",
+    structureType: "decor",
+    modelPath: "assets/models/city_dome_100.glb",
+    position: { x: 0, y: 0, z: 0 },
+    rotationY: 0,
+    scale: 1,
+    buildable: false,
+    collision: {
+      sphere: { radius: 100 }
+    },
+    isStatic: true
+  },
   {
     id: "hover_cube",
     structureType: "cube",

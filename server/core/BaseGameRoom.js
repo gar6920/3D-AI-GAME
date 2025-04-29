@@ -358,15 +358,20 @@ class BaseGameRoom extends BaseRoom {
     // create collision body for a structure (box approximation), scale-aware and oriented
     _createStructureBody(def) {
         const Ammo = this.Ammo;
-        // Determine base half extents: from explicit collision or defaults
-        const base = def.collision?.halfExtents
-            ?? ((def.width !== undefined && def.height !== undefined && def.depth !== undefined)
-                ? { x: def.width, y: def.height, z: def.depth }
-                : { x: 1, y: 1, z: 1 });
-        // Apply scale factor
-        const size = { x: base.x * def.scale, y: base.y * def.scale, z: base.z * def.scale };
-        const halfExtents = new Ammo.btVector3(size.x/2, size.y/2, size.z/2);
-        const shape = new Ammo.btBoxShape(halfExtents);
+        let shape;
+        if (def.collision?.sphere?.radius) {
+            shape = new Ammo.btSphereShape(def.collision.sphere.radius * (def.scale || 1));
+        } else {
+            // Determine base half extents: from explicit collision or defaults
+            const base = def.collision?.halfExtents
+                ?? ((def.width !== undefined && def.height !== undefined && def.depth !== undefined)
+                    ? { x: def.width, y: def.height, z: def.depth }
+                    : { x: 1, y: 1, z: 1 });
+            // Apply scale factor
+            const size = { x: base.x * def.scale, y: base.y * def.scale, z: base.z * def.scale };
+            const halfExtents = new Ammo.btVector3(size.x/2, size.y/2, size.z/2);
+            shape = new Ammo.btBoxShape(halfExtents);
+        }
         // Setup transform with rotation and position
         const transform = new Ammo.btTransform();
         transform.setIdentity();
