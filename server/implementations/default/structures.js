@@ -33,6 +33,20 @@ const structureDefinitions = [
     isStatic: true
   },
   {
+    id: "city_dome_150",
+    structureType: "decor",
+    modelId: "city_dome_150",
+    modelPath: "assets/models/city_dome_150.glb",
+    position: { x: 0, y: 0, z: 0 },
+    rotationY: 0,
+    scale: 1,
+    buildable: false,
+    collision: {
+      sphere: { radius: 150 }
+    },
+    isStatic: true
+  },
+  {
     id: "hover_cube",
     structureType: "cube",
     modelPath: "assets/models/hover_cube.glb",

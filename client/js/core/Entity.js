@@ -64,6 +64,37 @@ class Entity {
                         const bbox = new THREE.Box3().setFromObject(group);
                         this.boundingBox = bbox;
                         console.log(`[Entity ${this.id}] Bounding box computed: min${bbox.min.toArray()}, max${bbox.max.toArray()}`);
+
+                        // Apply portal shaders for city_dome_150
+                        if (this.modelId === 'city_dome_150') {
+                            const fileLoader = new THREE.FileLoader();
+                            // Load shaders via Promise.all
+                            Promise.all([
+                                fileLoader.loadAsync('/assets/models/portal_vertex.glsl'),
+                                fileLoader.loadAsync('/assets/models/portal_fragment.glsl')
+                            ])
+                            .then(([vertexShader, fragmentShader]) => {
+                                console.log(`[Entity ${this.id}] Portal shaders loaded`);
+                                const portalMaterial = new THREE.ShaderMaterial({
+                                    uniforms: {
+                                        time: { value: 0 },
+                                        seeds: { value: Array.from({ length: 15 }, () => new THREE.Vector2(Math.random(), Math.random())) }
+                                    },
+                                    vertexShader,
+                                    fragmentShader,
+                                    transparent: true,
+                                    depthWrite: false
+                                });
+                                loadedModel.traverse(child => {
+                                    if (child.isMesh) child.material = portalMaterial;
+                                });
+                                // Animate time uniform each frame
+                                window.registerAnimationCallback(delta => {
+                                    portalMaterial.uniforms.time.value += delta;
+                                });
+                            })
+                            .catch(error => console.error(`[Entity ${this.id}] FAILED loading portal shaders:`, error));
+                        }
                     },
                     undefined,
                     (error) => {
