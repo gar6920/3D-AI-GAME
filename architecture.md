@@ -67,7 +67,16 @@ create_electric_grid_dome(100)  # Generates a 100-radius dome
   - Explore more advanced electrical/effects, possibly with animated or procedural geometry/textures.
   - Consider in-game shader animation for real-time flicker or energy movement.
   - Maintain parametric (radius-based) workflow so size can be adjusted on the fly, with colliders and effects always in sync.
-  - Ensure the system remains performant for large domes or many simultaneous domes.
+- **Shader Integration Pipeline:**
+  - Extended server `StructureDefinition` to include `vertexShaderPath`/`fragmentShaderPath` and sync to clients.
+  - Updated `network-core.js` (`loadAndAddStaticEntity`) to pass shader paths into `Entity` constructor for static structures.
+  - Enhanced `BuildingModeManager.createStructureInWorld` to inject shader paths for dynamically placed structures.
+  - Enhanced `Entity.createMesh()` to load GLSL files and apply a `ShaderMaterial` (with animated `time` uniform).
+- **Pipeline Next Steps:**
+  - Generalize shader application for all models purely via `structures.js`; remove model-specific hacks.
+  - Implement robust fallback to default materials on shader load or compile error.
+  - Document shader path conventions and required uniform definitions in `structures.js`.
+  - Explore build-time shader validation or preview tooling.
 
 ---
 
