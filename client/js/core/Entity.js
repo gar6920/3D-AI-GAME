@@ -83,7 +83,8 @@ class Entity {
                                     vertexShader,
                                     fragmentShader,
                                     transparent: true,
-                                    depthWrite: false
+                                    depthWrite: false,
+                                    side: THREE.DoubleSide
                                 });
                                 loadedModel.traverse(child => {
                                     if (child.isMesh) child.material = portalMaterial;
