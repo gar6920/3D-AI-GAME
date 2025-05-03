@@ -4,6 +4,7 @@
 class PlayerUI {
     constructor() {
         this.initialized = false;
+        this.selectionPanelInitialized = false;
     }
     
     // Initialize the player UI
@@ -54,7 +55,7 @@ class PlayerUI {
             window.inputManager.registerUIElement(element.id, 'click', options.onclick);
         }
 
-        console.log(`UIManager: Added element <${elementType}> with ID: ${options.id || element.id || 'N/A'}`);
+        // console.log(`UIManager: Added element <${elementType}> with ID: ${options.id || element.id || 'N/A'}`);
         return element; // Return the created element
     }
     
@@ -105,12 +106,54 @@ class PlayerUI {
         }
     }
 
+    // Initialize selection panel container
+    initSelectionPanel() {
+        if (this.selectionPanelInitialized) return;
+        this.selectionPanelInitialized = true;
+        this.selectionPanel = this.addElement('div', {
+            id: 'selection-panel',
+            style: {
+                position: 'absolute', bottom: '10px', right: '10px',
+                background: 'rgba(0,0,0,0.7)', color: 'white', padding: '8px',
+                borderRadius: '4px', maxWidth: '300px', maxHeight: '400px', overflowY: 'auto', zIndex: '1000'
+            }
+        });
+        // Header
+        this.addElement('div', { html: '<strong>Selection</strong>', parent: this.selectionPanel, style: { marginBottom: '4px' } });
+        // Content container
+        this.selectionContent = this.addElement('div', { id: 'selection-panel-content', parent: this.selectionPanel });
+    }
+
+    // Update selection panel with server data
+    updateSelectionPanel(data) {
+        this.initSelectionPanel();
+        this.selectionContent.innerHTML = '';
+        if (!data.entities || data.entities.length === 0) {
+            this.selectionContent.innerHTML = '<em>No entity selected</em>';
+            return;
+        }
+        data.entities.forEach(entity => {
+            const card = this.addElement('div', { className: 'entity-card', parent: this.selectionContent, style: { padding: '4px', borderBottom: '1px solid #444', marginBottom: '4px' } });
+            this.addElement('div', { text: entity.name, parent: card, style: { fontWeight: 'bold' } });
+            if (entity.health !== undefined) {
+                const maxH = entity.maxHealth !== undefined ? `/${entity.maxHealth}` : '';
+                this.addElement('div', { text: `Health: ${entity.health}${maxH}`, parent: card });
+            }
+            // Actions
+            const actCont = this.addElement('div', { className: 'actions', parent: card, style: { marginTop: '4px' } });
+            const actions = data.availableActions && data.availableActions[entity.id] ? data.availableActions[entity.id] : [];
+            actions.forEach(actionName => {
+                this.addElement('button', { text: actionName, parent: actCont, style: { marginRight: '4px' }, onclick: () => window.room.send('entity_action', { entityId: entity.id, action: actionName }) });
+            });
+        });
+    }
+
     // Update player list in UI
     updatePlayerListUI() {
         // Get player list container
         const playerList = document.getElementById('player-list');
         if (!playerList) {
-            console.warn("Player list element not found");
+            // console.warn("Player list element not found");
             this.createPlayerListUI(); // Create if missing
             return;
         }
@@ -147,18 +190,18 @@ class PlayerUI {
                     }
                     
                     // Log for debugging
-                    console.log("Added local player to list. Players map size:", window.room.state.players.size);
+                    // console.log("Added local player to list. Players map size:", window.room.state.players.size);
                     
                     // Add other players - directly iterate over the Schema MapSchema
                     window.room.state.players.forEach((player, sessionId) => {
                         if (sessionId !== mySessionId) {
                             this.addPlayerToList(player, sessionId, false);
                             playerCount++;
-                            console.log("Added remote player to list:", sessionId, player);
+                            // console.log("Added remote player to list:", sessionId, player);
                         }
                     });
                 } catch (e) {
-                    console.error("Error iterating through players:", e);
+                    // console.error("Error iterating through players:", e);
                 }
             }
             
@@ -168,7 +211,7 @@ class PlayerUI {
                 playerCountElement.textContent = `(${playerCount})`;
             }
         } catch (error) {
-            console.error("Error updating player list UI:", error);
+            // console.error("Error updating player list UI:", error);
         }
     }
 
@@ -211,7 +254,7 @@ class PlayerUI {
             playerEntry.appendChild(playerInfo);
             playerList.appendChild(playerEntry);
         } catch (error) {
-            console.error("Error adding player to UI list:", error);
+            // console.error("Error adding player to UI list:", error);
         }
     }
 
@@ -224,7 +267,7 @@ class PlayerUI {
                 this.togglePlayerList();
                 
                 // Debug log to confirm function was called
-                console.log("Tab key pressed - toggling player list");
+                // console.log("Tab key pressed - toggling player list");
             }
         });
         
@@ -241,7 +284,7 @@ class PlayerUI {
         const collapseIcon = document.getElementById('collapse-icon');
         
         if (!playerList || !collapseIcon) {
-            console.warn("Player list toggle: Could not find required elements");
+            // console.warn("Player list toggle: Could not find required elements");
             return;
         }
         
@@ -258,7 +301,7 @@ class PlayerUI {
         localStorage.setItem('playerListCollapsed', !isCollapsed);
         
         // Log the toggle event
-        console.log("Player list toggled. Now " + (isCollapsed ? "visible" : "hidden"));
+        // console.log("Player list toggled. Now " + (isCollapsed ? "visible" : "hidden"));
     }
 
     // Initialize player list state from saved preference
@@ -277,7 +320,7 @@ class PlayerUI {
                 collapseIcon.textContent = isCollapsed ? '▶' : '▼';
             }
         } catch (error) {
-            console.warn("Error initializing player list state:", error);
+            // console.warn("Error initializing player list state:", error);
         }
     }
     
@@ -326,13 +369,13 @@ if (typeof window !== 'undefined') {
     
     // Initialize when DOM is ready using InputManager
     window.inputManager.on('domcontentloaded', () => {
-        console.log("DOM loaded via InputManager - initializing player UI");
+        // console.log("DOM loaded via InputManager - initializing player UI");
         playerUI.init();
     });
     
     // Also try to initialize immediately in case DOMContentLoaded already fired
     if (document.readyState === 'interactive' || document.readyState === 'complete') {
-        console.log("Document already loaded - initializing player UI now");
+        // console.log("Document already loaded - initializing player UI now");
         playerUI.init();
     }
 }

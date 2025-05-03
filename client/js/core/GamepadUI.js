@@ -299,7 +299,7 @@ class GamepadUI {
             this.activeInputDisplay.style.border = 'none';
             this.activeInputDisplay.style.boxShadow = 'none';
         }
-        console.log(`[GamepadUI] Updated active input display to: ${this.activeInputDisplay.textContent}`);
+        // console.log(`[GamepadUI] Updated active input display to: ${this.activeInputDisplay.textContent}`);
     }
     
     toggleVisibility(forcedState) {
@@ -328,7 +328,7 @@ class GamepadUI {
     }
     
     onInputTypeChange(data) {
-        console.log(`[GamepadUI] Input type change event received: ${data.type}`);
+        // console.log(`[GamepadUI] Input type change event received: ${data.type}`);
         // Directly update the UI text and style based on the event data
         if (!this.activeInputDisplay) {
             console.warn("[GamepadUI] activeInputDisplay element not found during input type change.");
@@ -347,7 +347,7 @@ class GamepadUI {
             this.activeInputDisplay.style.border = 'none';
             this.activeInputDisplay.style.boxShadow = 'none';
         }
-        console.log(`[GamepadUI] Directly updated active input display to: ${this.activeInputDisplay.textContent}`);
+        // console.log(`[GamepadUI] Directly updated active input display to: ${this.activeInputDisplay.textContent}`);
         
         // We no longer need to call this if we update directly
         // this.updateActiveInputDisplay(); 

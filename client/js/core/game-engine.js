@@ -283,7 +283,7 @@ window.switchToFirstPersonView = function(previousViewMode) {
     // Reset the flag after a delay (matching other transitions)
     setTimeout(() => {
         window.inViewTransition = false;
-        console.log('[GameEngine] Reset inViewTransition flag');
+        // console.log('[GameEngine] Reset inViewTransition flag');
     }, 300);
     
     // Hide player's mesh in first-person
@@ -1109,16 +1109,15 @@ function setupPointerLockControls() {
                 startGameLogic(); 
                 
             } else { // Pointer is unlocked
-                debug('Pointer is unlocked');
                 document.body.style.cursor = 'default'; // Always show system cursor when unlocked
                 
                 // Log current state to debug overlay visibility issues
-                console.log('[GameEngine] Pointer unlock state:', {
-                    activeInputType,
-                    isRTSMode: window.isRTSMode,
-                    isBuildingMode: window.isBuildingMode,
-                    shouldShowLockOverlay: window.shouldShowLockOverlay
-                });
+                // console.log('[GameEngine] Pointer unlock state:', {
+                //     activeInputType,
+                //     isRTSMode: window.isRTSMode,
+                //     isBuildingMode: window.isBuildingMode,
+                //     shouldShowLockOverlay: window.shouldShowLockOverlay
+                // });
                 
                 // Only show instructions overlay if:
                 // 1. Using keyboard/mouse AND
@@ -1236,7 +1235,6 @@ function updatePlayerPhysics(delta) {
                 controlsObject.position.x = player.x;
                 controlsObject.position.z = player.z;
                 controlsObject.position.y = player.y;
-                console.log("Position correction applied");
             }
             
             // Update the player's velocity

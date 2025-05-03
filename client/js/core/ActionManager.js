@@ -9,11 +9,8 @@ class ActionManager {
         // Currently active actions
         this.activeActions = new Set();
         
-        console.log('📋 ActionManager: Created instance');
-        
         // Wait for InputManager to be ready
         if (!window.inputManager) {
-            console.log('⏳ ActionManager: Waiting for InputManager to be ready...');
             setTimeout(() => this.init(), 100);
         } else {
             this.init();
@@ -35,15 +32,11 @@ class ActionManager {
         window.inputManager.on('gamepadaxismove', this.handleGamepadAxis.bind(this));
         window.inputManager.on('inputtypechange', this.handleInputTypeChange.bind(this));
         
-        console.log('🔌 ActionManager: Registered event handlers with InputManager');
-        
         // Register default bindings
         this.registerDefaultBindings();
         
         // Override sendInputUpdate to use InputManager's state
         this.overrideSendInputUpdate();
-        
-        console.log('✅ ActionManager initialized and ready');
     }
     
     registerDefaultBindings() {
@@ -94,9 +87,9 @@ class ActionManager {
         // Note: Analog stick movement is handled directly by polling in InputManager
         // and mapping to WASD keys, so we don't need explicit bindings here
         
-        console.log('🎮 ActionManager: Registered default actions and bindings');
-        console.log('   Total actions:', Object.keys(this.actions).length);
-        console.log('   Total bindings:', Object.keys(this.bindings).length);
+        // console.log('🎮 ActionManager: Registered default actions and bindings');
+        // console.log('   Total actions:', Object.keys(this.actions).length);
+        // console.log('   Total bindings:', Object.keys(this.bindings).length);
     }
     
     overrideSendInputUpdate() {
@@ -121,11 +114,11 @@ class ActionManager {
                     // Log input state periodically (every 3 seconds)
                     if (this._lastLogTime === undefined || (now - this._lastLogTime > 3000)) {
                         this._lastLogTime = now;
-                        console.log('📡 ActionManager: Sending input to server', {
-                            keys: {...window.inputManager.serverInputState.keys},
-                            mouseDelta: {...window.inputManager.serverInputState.mouseDelta},
-                            viewMode: window.inputManager.serverInputState.viewMode
-                        });
+                        // console.log('📡 ActionManager: Sending input to server', {
+                        //     keys: {...window.inputManager.serverInputState.keys},
+                        //     mouseDelta: {...window.inputManager.serverInputState.mouseDelta},
+                        //     viewMode: window.inputManager.serverInputState.viewMode
+                        // });
                     }
                     
                     // Reset mouse delta after sending
@@ -137,7 +130,7 @@ class ActionManager {
             }
         };
         
-        console.log('🔄 ActionManager: Overrode sendInputUpdate');
+        // console.log('🔄 ActionManager: Overrode sendInputUpdate');
     }
     
     registerAction(actionId, description) {
@@ -162,7 +155,7 @@ class ActionManager {
         if (actionId) {
             // Log action triggers (but not for movement keys to avoid spam)
             if (!['move_forward', 'move_backward', 'move_left', 'move_right'].includes(actionId)) {
-                console.log(`🎯 ActionManager: Key ${event.code} triggered action '${actionId}' (${isActive ? 'activated' : 'deactivated'})`);
+                // console.log(`🎯 ActionManager: Key ${event.code} triggered action '${actionId}' (${isActive ? 'activated' : 'deactivated'})`);
             }
             
             // Mirror to existing global state first (for compatibility)
@@ -181,7 +174,7 @@ class ActionManager {
         const actionId = this.bindings[key];
         
         if (actionId) {
-            console.log(`🖱️ ActionManager: Mouse button ${data.button} triggered action '${actionId}' (${isActive ? 'pressed' : 'released'})`);
+            // console.log(`🖱️ ActionManager: Mouse button ${data.button} triggered action '${actionId}' (${isActive ? 'pressed' : 'released'})`);
             
             this.triggerAction(actionId, {
                 active: isActive,
@@ -195,7 +188,7 @@ class ActionManager {
         const actionId = this.bindings[key];
         
         if (actionId) {
-            console.log(`🎮 ActionManager: Gamepad button ${data.buttonIndex} triggered action '${actionId}' (${isActive ? 'pressed' : 'released'})`);
+            // console.log(`🎮 ActionManager: Gamepad button ${data.buttonIndex} triggered action '${actionId}' (${isActive ? 'pressed' : 'released'})`);
             
             // Mirror to existing global state first (for compatibility)
             this.updateGlobalState(actionId, isActive);
@@ -219,7 +212,7 @@ class ActionManager {
     
     handleInputTypeChange(data) {
         // React to changes in input type (keyboard/mouse <-> gamepad)
-        console.log(`🔄 ActionManager: Input type changed to ${data.type}`);
+        // console.log(`🔄 ActionManager: Input type changed to ${data.type}`);
     }
     
     handleMouseMove(data) {
@@ -298,7 +291,7 @@ class ActionManager {
             // For non-movement actions, log when callbacks are triggered
             if (!['move_forward', 'move_backward', 'move_left', 'move_right'].includes(actionId) && 
                 this.actions[actionId].callbacks.length > 0) {
-                console.log(`🔔 ActionManager: Triggering ${this.actions[actionId].callbacks.length} callbacks for '${actionId}'`);
+                // console.log(`🔔 ActionManager: Triggering ${this.actions[actionId].callbacks.length} callbacks for '${actionId}'`);
             }
             
             // Call subscribers
@@ -306,7 +299,7 @@ class ActionManager {
                 try {
                     callback(data);
                 } catch (error) {
-                    console.error(`Error in action callback (${actionId}):`, error);
+                    // console.error(`Error in action callback (${actionId}):`, error);
                 }
             });
         }
@@ -344,7 +337,7 @@ class ActionManager {
             context === 'thirdPerson' ? 'third-person' : 
             context;
         
-        console.log(`🔄 ActionManager: Context changed from '${oldContext}' to '${context}'`);
+        // console.log(`🔄 ActionManager: Context changed from '${oldContext}' to '${context}'`);
     }
 }
 

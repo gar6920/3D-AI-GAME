@@ -52,7 +52,7 @@ class NPC extends Entity {
         ['x', 'y', 'z', 'state', 'rotationY', 'animationMap', 'scale'].forEach(field => {
             if (typeof entity.listen === 'function') {
                 entity.listen(field, (value, prev) => {
-                    console.log(`[NPC ${entityId}][LISTEN] Field '${field}' changed: ${prev} -> ${value}`);
+                    // console.log(`[NPC ${entityId}][LISTEN] Field '${field}' changed: ${prev} -> ${value}`);
                     const npcInstance = NPC.npcs.get(entityId);
                     if (!npcInstance) return;
                     if (field === 'state') {
@@ -68,9 +68,9 @@ class NPC extends Entity {
                         if (npcInstance.mesh) {
                             npcInstance.mesh.position[field] = value;
                             if (field === 'y') {
-                                console.log(`[NPC ${entityId}] Client mesh y updated to: ${value}`);
+                                // console.log(`[NPC ${entityId}] Client mesh y updated to: ${value}`);
                             } else if (field === 'z') {
-                                console.log(`[NPC ${entityId}] Client mesh z updated to: ${value}`);
+                                // console.log(`[NPC ${entityId}] Client mesh z updated to: ${value}`);
                             }
                         }
                     } else if (field === 'animationMap') {
@@ -79,7 +79,7 @@ class NPC extends Entity {
                         value.forEach((mapValue, mapKey) => {
                             npcInstance.animationMap.set(mapKey, mapValue);
                         });
-                        console.log(`[NPC ${entityId}][LISTEN] Updated animationMap:`, npcInstance.animationMap);
+                        // console.log(`[NPC ${entityId}][LISTEN] Updated animationMap:`, npcInstance.animationMap);
                         // Note: Re-mapping animations in _loadModel might be needed if this happens *after* load
                     } else if (field === 'scale') {
                         if (npcInstance.modelPlaceholder) {
@@ -193,7 +193,7 @@ class NPC extends Entity {
         }
 
         this.loader.load(modelPath, (gltf) => {
-            console.log(`NPC model loaded successfully for entity: ${this.id}`);
+            // console.log(`NPC model loaded successfully for entity: ${this.id}`);
             const loadedModel = gltf.scene;
 
             // Optional: Scale or adjust the loaded model if needed
@@ -223,10 +223,10 @@ class NPC extends Entity {
             // Compute and store bounding box collider for NPC
             const bbox = new THREE.Box3().setFromObject(this.modelPlaceholder);
             this.boundingBox = bbox;
-            console.log(`[NPC ${this.id}] Bounding box computed: min${bbox.min.toArray()}, max${bbox.max.toArray()}`);
+            // console.log(`[NPC ${this.id}] Bounding box computed: min${bbox.min.toArray()}, max${bbox.max.toArray()}`);
 
             // --- ADDED: Log current state scale --- 
-            console.log(`NPC ${this.id}: Checking this.state.scale before applying initial scale:`, this.state ? this.state.scale : 'this.state is null/undefined');
+            // console.log(`NPC ${this.id}: Checking this.state.scale before applying initial scale:`, this.state ? this.state.scale : 'this.state is null/undefined');
             // --- END ADDED ---
 
             // --- Apply initial scale from server state ---
@@ -263,7 +263,7 @@ class NPC extends Entity {
             if (!this.modelPlaceholder.parent) {
                 if (NPC.scene) {
                     NPC.scene.add(this.modelPlaceholder);
-                    console.log(`NPC ${this.id}: Added model placeholder to scene.`);
+                    // console.log(`NPC ${this.id}: Added model placeholder to scene.`);
                 } else {
                     console.warn(`NPC ${this.id}: Scene not set, cannot add model to scene.`);
                 }
@@ -291,15 +291,15 @@ class NPC extends Entity {
                     if (!this.actions[actionName]) {
                         this.actions[actionName] = this.mixer.clipAction(clip);
                         animationsMappedCount++;
-                        console.log(`  - NPC ${this.id}: Mapped animation '${rawName}' to '${actionName}'`);
+                        // console.log(`  - NPC ${this.id}: Mapped animation '${rawName}' to '${actionName}'`);
                     }
                 } else {
                     // Fallback: register under rawName to allow manual play
                     this.actions[rawName] = this.mixer.clipAction(clip);
-                    console.warn(`  - NPC ${this.id}: Registered fallback animation for raw clip '${rawName}'`);
+                    // console.warn(`  - NPC ${this.id}: Registered fallback animation for raw clip '${rawName}'`);
                 }
             });
-             console.log(`[NPC ${this.id} Animations] Processed ${animationsFoundCount} raw animations. Mapped ${animationsMappedCount} to standard names.`);
+            // console.log(`[NPC ${this.id} Animations] Processed ${animationsFoundCount} raw animations. Mapped ${animationsMappedCount} to standard names.`);
 
             // --- Initialize Animation State ---
             let initialState = this.state; // Get initial state from server data
@@ -316,7 +316,7 @@ class NPC extends Entity {
                 initialActionName = 'Idle';
             } else {
                 console.warn(`NPC ${this.id}: Initial server state ('${initialState}') not in actions; no initial animation will play.`);
-                console.log(`NPC ${this.id}: Available actions:`, Object.keys(this.actions));
+                // console.log(`NPC ${this.id}: Available actions:`, Object.keys(this.actions));
             }
 
             if (initialActionName) {
@@ -383,15 +383,15 @@ class NPC extends Entity {
             }
         }
         
-        console.log(`[NPC ${this.id} playAnimation] Request: '${name}'. Current: '${currentActionName}'.`);
+        // console.log(`[NPC ${this.id} playAnimation] Request: '${name}'. Current: '${currentActionName}'.`);
 
         if (currentAction === newAction) {
-            console.log(`[NPC ${this.id} playAnimation] Already playing '${name}'. Skipping.`);
+            // console.log(`[NPC ${this.id} playAnimation] Already playing '${name}'. Skipping.`);
             return; // Already playing this animation and it's fully faded in
         }
 
         // Reset and fade in the new action
-        console.log(`[NPC ${this.id} playAnimation] Resetting and playing '${name}' immediately (no fade).`);
+        // console.log(`[NPC ${this.id} playAnimation] Resetting and playing '${name}' immediately (no fade).`);
         newAction.reset();
         newAction.setEffectiveWeight(1); // Ensure full weight
         newAction.time = 0;
@@ -414,7 +414,7 @@ class NPC extends Entity {
                         break;
                     }
                 }
-                console.log(`[NPC ${this.id} Mixer Update] Mixer reports active animation: '${activeActionName}'`);
+                // console.log(`[NPC ${this.id} Mixer Update] Mixer reports active animation: '${activeActionName}'`);
                 this._lastMixerLogTime = Date.now();
             }
         }

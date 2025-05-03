@@ -1227,7 +1227,7 @@ class InputManager {
         
         // Update the internal state
         this.lastActiveInputType = type;
-        console.log(`[InputManager] Active input type set to: ${type} (Previous: ${previousType})`);
+        // console.log(`[InputManager] Active input type set to: ${type} (Previous: ${previousType})`);
 
         // Manage cursor and pointer lock based on the new type
         if (type === 'gamepad') {
@@ -1262,12 +1262,12 @@ class InputManager {
         // CRITICAL: Always dispatch the event to ensure UI listeners update,
         // even if the type string hasn't changed (e.g., confirming KB/M on click)
         this.dispatchEvent('inputtypechange', { type });
-        console.log(`[InputManager] Dispatched inputtypechange event with type: ${type}`);
+        // console.log(`[InputManager] Dispatched inputtypechange event with type: ${type}`);
         
         // DIAGNOSTIC: Directly trigger UI update after setting type
         if (window.gamepadUI && typeof window.gamepadUI.updateActiveInputDisplay === 'function') {
             window.gamepadUI.updateActiveInputDisplay();
-            console.log('[InputManager] Directly triggered GamepadUI update after setting type.');
+            // console.log('[InputManager] Directly triggered GamepadUI update after setting type.');
         }
 
         return true; // Indicate success

@@ -915,3 +915,18 @@ if (window.inputManager) {
     }, 100);
 }
 
+        }
+    }, 100);
+}
+    // Wait for InputManager to be available
+    const checkInterval = setInterval(() => {
+        if (window.inputManager) {
+            clearInterval(checkInterval);
+            setupRTSEventHandlers();
+        }
+    }, 100);
+}
+
+        }
+    }, 100);
+}

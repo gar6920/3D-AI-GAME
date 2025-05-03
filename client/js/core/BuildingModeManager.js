@@ -158,8 +158,6 @@ class BuildingModeManager {
             const key = event.key !== undefined ? event.key : 
                         (event.event ? event.event.key : null);
                         
-            console.log("[BuildingMode] Keydown event:", key, event);
-            
             // Don't process if we're in an input field
             if (document.activeElement.tagName === 'INPUT' || 
                 document.activeElement.tagName === 'TEXTAREA') {
@@ -240,7 +238,7 @@ class BuildingModeManager {
             const key = event.key !== undefined ? event.key : 
                        (event.event ? event.event.key : null);
                        
-            console.log("[BuildingMode] Keyup event:", key, event);
+            // console.log("[BuildingMode] Keyup event:", key, event);
             
             if ((key === 'q' || key === 'Q' || key === 'e' || key === 'E') && this.rotationInterval) {
                 console.log("[BuildingMode] Stopping continuous rotation");
@@ -890,7 +888,7 @@ class BuildingModeManager {
     }
     
     createStructureInWorld(structureData, key) {
-        console.log("[BuildingModeManager] Attempting to create structure entity:", key, structureData);
+        // console.log("[BuildingModeManager] Attempting to create structure entity:", key, structureData);
         
         // Skip if structure entity already exists in our map
         if (this.worldStructuresMap.has(key)) {
@@ -928,7 +926,7 @@ class BuildingModeManager {
             // color: structureData.color, // etc.
         };
         
-        console.log("[BuildingModeManager] Creating entity with params:", entityParams);
+        // console.log("[BuildingModeManager] Creating entity with params:", entityParams);
 
         try {
             // Use EntityFactory to create the structure entity instance
@@ -940,7 +938,7 @@ class BuildingModeManager {
                 this.worldStructuresMap.set(key, structureEntity);
                 
                 // The Entity constructor and its loader callback handle initial positioning and scene addition
-                console.log("[BuildingModeManager] Structure entity created successfully:", key);
+                // console.log("[BuildingModeManager] Structure entity created successfully:", key);
                 
                 return structureEntity;
 
@@ -1023,7 +1021,7 @@ class BuildingModeManager {
         
         // Handler for new structures added by the server
         room.state.structures.onAdd = (structure, key) => {
-            console.log(`[BuildingModeManager] structures.onAdd listener triggered for key: ${key}`, structure);
+            // console.log(`[BuildingModeManager] structures.onAdd listener triggered for key: ${key}`, structure);
             // Ensure the structure data includes an 'id' matching the key for the Entity constructor
              if (!structure.id) structure.id = key; 
             this.createStructureInWorld(structure, key);

@@ -2,9 +2,8 @@
 
 ## Overview
 
-The goal is to implement a robust, extensible system that allows players to select any entity in the game world—structures, NPCs, players, or groups thereof—regardless of camera mode. Once selected, the client and server coordinate to display contextual information and available actions for those entities, and allow players to execute actions (such as teleport, link, upgrade, or command) in a secure, authoritative way.
-
-This system will unify interaction logic across all gameplay views (RTS, first-person, third-person), support multiplayer synchronization, and provide a foundation for future interactive features (like portals, city upgrades, or NPC commands).
+The goal is to implement a robust, extensible system that allows players to select any entity in the game world—structures, NPCs, players, or groups thereof—regardless of camera mode. Once selected, the client and server coordinate to display contextual information and available actions for those entities, and allow players to execute actions specific to the entity type in a secure, authoritative way.
+This system will unify interaction logic across all gameplay views (RTS, first-person, third-person), support multiplayer synchronization, and provide a foundation for future interactive features (like portals, building functionality, NPC functionality, etc).
 
 ## What We Are Trying to Achieve
 
@@ -30,10 +29,51 @@ This system will unify interaction logic across all gameplay views (RTS, first-p
 - The server validates the selection, determines available actions and info for each entity, and sends this back to the client in a `selection_info` message.
 - While the selection is active, the server continues to send updates if selected entities’ states change (health, ownership, links, etc.).
 
+### Step 3a: Define Action Metadata in Implementations
+- In `server/implementations` (e.g., `structures.js`, `npcs.js`), extend each entity definition with an `actions` array of `{ name, label, condition }`.
+  ```js
+  {
+    id: 'house',
+    // ...other properties...
+    actions: [
+      { name: 'upgrade', label: 'Upgrade', condition: (entity, player) => player.resources >= entity.upgradeCost },
+      // ...more actions
+    ]
+  }
+  ```
+- In `server/implementations/default/index.js`, export a `getActionDefinitions()` function that merges structure and NPC defs into a lookup map.
+- In `BaseRoom.handleSelect`, for each selected entity, lookup its action metadata and filter by evaluating `condition(entity, player)` before including it in `selection_info`.
+
 ### Step 4: Client UI for Actions & Action Execution Flow
 - Extend the PlayerUI to display a context-sensitive panel showing selected entities’ info and available actions.
 - When the player chooses an action, send an `entity_action` message to the server (with entity ID, action type, and parameters).
 - The server processes the action, updates state, and broadcasts changes as needed.
+
+### Step 4a: UI Hookup
+- In `client/js/core/network-core.js`, listen for `selection_info` and forward to UI:
+  ```js
+  room.onMessage('selection_info', data => playerUI.updateSelectionPanel(data));
+  ```
+- Rely on `PlayerUI.initSelectionPanel()` and `PlayerUI.updateSelectionPanel(data)` to render stats and action buttons.
+- Action buttons send placeholder `entity_action` messages (no real logic yet).
+
+### Step 4b: Server Stub for Action Acknowledgement
+- In `server/core/BaseRoom.js.onCreate`, add:
+  ```js
+  this.onMessage('entity_action', (client, { entityId, action }) => {
+    console.log(`Action requested: ${action} on ${entityId}`);
+    client.send('action_ack', { entityId, action });
+  });
+  ```
+- In `client/js/core/network-core.js`, listen for `action_ack` to show acknowledgement:
+  ```js
+  room.onMessage('action_ack', data => showInfoMessage(`Action ${data.action} on ${data.entityId} acknowledged`));
+  ```
+
+### Step 5: Testing & Validation
+- Select an entity in any view: ensure the selection panel appears with entity stats and action buttons.
+- Click an action button: verify console logs and info message show acknowledgment.
+- Test deselect, reselect, and multiple selections to confirm UI updates correctly.
 
 ## Rationale
 - **Consistency:** Unifying selection and interaction logic across views improves usability and code maintainability.

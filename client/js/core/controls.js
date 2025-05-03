@@ -84,7 +84,7 @@ window.initControls = function(camera, domElement) {
     });
     
     controls.addEventListener('unlock', () => {
-        console.log("Pointer unlocked");
+        // console.log("Pointer unlocked");
         window.isControlsEnabled = false;
         document.body.classList.remove('controls-enabled');
         
@@ -166,7 +166,7 @@ window.initControls = function(camera, domElement) {
                 window.thirdPersonCameraMaxDistance
             );
             
-            console.log(`Third-person camera zoom: ${window.thirdPersonCameraDistance.toFixed(1)}`);
+            // console.log(`Third-person camera zoom: ${window.thirdPersonCameraDistance.toFixed(1)}`);
         }
     });
 
@@ -184,7 +184,7 @@ function updateMouseSensitivity() {
     } else if (window.viewMode === 'rtsView') {
         window.mouseSensitivity.current = window.mouseSensitivity.rtsView;
     }
-    console.log(`Updated mouse sensitivity to ${window.mouseSensitivity.current} (${window.viewMode} mode)`);
+    // console.log(`Updated mouse sensitivity to ${window.mouseSensitivity.current} (${window.viewMode} mode)`);
 }
 
 // Function to get the forward direction based on camera orientation in third-person mode
@@ -297,7 +297,7 @@ function onKeyDown(event) {
             // Prevent possible duplicate V key events
             if (!window.isViewToggleKeyDown) {
                 window.isViewToggleKeyDown = true;
-                console.log("[V KEY] Toggling view from:", window.viewMode);
+                // console.log("[V KEY] Toggling view from:", window.viewMode);
                 window.toggleCameraView(); // Call the global toggleCameraView function
             }
             break;
@@ -309,7 +309,7 @@ function onKeyDown(event) {
         
         // Add Escape key handler to exit gameplay
         case 'Escape':
-            console.log("[ESC KEY] Setting shouldShowLockOverlay flag and exiting pointer lock");
+            // console.log("[ESC KEY] Setting shouldShowLockOverlay flag and exiting pointer lock");
             window.shouldShowLockOverlay = true;
             if (document.pointerLockElement) {
                 document.exitPointerLock();
@@ -409,7 +409,7 @@ window.updateControls = function(controls, delta) {
             const gamepadScaleFactor = 15; // Back to a more reasonable value
             deltaX *= gamepadScaleFactor;
             deltaY *= gamepadScaleFactor;
-            console.log(`[Controls] Scaled Gamepad Delta: x=${deltaX.toFixed(2)}, y=${deltaY.toFixed(2)}`);
+            // console.log(`[Controls] Scaled Gamepad Delta: x=${deltaX.toFixed(2)}, y=${deltaY.toFixed(2)}`);
         }
         // *** END SCALING ***
 
@@ -431,7 +431,7 @@ window.updateControls = function(controls, delta) {
             const rotationY = deltaX * lookSensitivityFactor * sensitivity; // Yaw
             
             // Log before applying rotation
-            console.log(`[Controls Update FP] Before Rotate: deltaX=${deltaX.toFixed(3)}, deltaY=${deltaY.toFixed(3)}, rotationX=${rotationX.toFixed(3)}, rotationY=${rotationY.toFixed(3)}, curPitch=${window.firstPersonCameraPitch?.toFixed(3)}, curYaw=${window.playerRotationY?.toFixed(3)}`);
+            // console.log(`[Controls Update FP] Before Rotate: deltaX=${deltaX.toFixed(3)}, deltaY=${deltaY.toFixed(3)}, rotationX=${rotationX.toFixed(3)}, rotationY=${rotationY.toFixed(3)}, curPitch=${window.firstPersonCameraPitch?.toFixed(3)}, curYaw=${window.playerRotationY?.toFixed(3)}`);
 
             window.firstPersonCameraPitch = window.firstPersonCameraPitch || 0;
             window.firstPersonCameraPitch -= rotationX;
@@ -443,7 +443,7 @@ window.updateControls = function(controls, delta) {
             window.playerRotationY -= rotationY;
             
             // Log after calculating new rotation
-            console.log(`[Controls Update FP] After Calc: newPitch=${window.firstPersonCameraPitch.toFixed(3)}, newYaw=${window.playerRotationY.toFixed(3)}`);
+            // console.log(`[Controls Update FP] After Calc: newPitch=${window.firstPersonCameraPitch.toFixed(3)}, newYaw=${window.playerRotationY.toFixed(3)}`);
 
             // Apply to camera
             window.camera.quaternion.setFromEuler(new THREE.Euler(
@@ -456,7 +456,7 @@ window.updateControls = function(controls, delta) {
                 window.playerEntity.mesh.rotation.y = window.playerRotationY;
             }
             // Log after applying to camera/mesh
-            console.log(`[Controls Update FP] Applied: Camera Quat W=${window.camera.quaternion.w.toFixed(3)}, Mesh Y=${window.playerEntity?.mesh?.rotation.y.toFixed(3)}`);
+            // console.log(`[Controls Update FP] Applied: Camera Quat W=${window.camera.quaternion.w.toFixed(3)}, Mesh Y=${window.playerEntity?.mesh?.rotation.y.toFixed(3)}`);
         } else if (!window.isFirstPerson && !window.isFreeCameraMode) { // Third-person
              // Only apply third-person orbit from stick/locked mouse if appropriate
              if (activeInputType === 'gamepad' || (document.pointerLockElement && (window.rightMouseDown || window.middleMouseDown)) ) { 
@@ -469,7 +469,7 @@ window.updateControls = function(controls, delta) {
                      window.thirdPersonCameraOrbitY, window.thirdPersonCameraMinY, window.thirdPersonCameraMaxY
                  );
                  // Log after applying orbit
-                 console.log(`[Controls Update TP Orbit] deltaX=${deltaX.toFixed(3)}, deltaY=${deltaY.toFixed(3)}, OrbitX: ${prevOrbitX.toFixed(3)} -> ${window.thirdPersonCameraOrbitX.toFixed(3)}, OrbitY: ${prevOrbitY.toFixed(3)} -> ${window.thirdPersonCameraOrbitY.toFixed(3)}`);
+                 // console.log(`[Controls Update TP Orbit] deltaX=${deltaX.toFixed(3)}, deltaY=${deltaY.toFixed(3)}, OrbitX: ${prevOrbitX.toFixed(3)} -> ${window.thirdPersonCameraOrbitX.toFixed(3)}, OrbitY: ${prevOrbitY.toFixed(3)} -> ${window.thirdPersonCameraOrbitY.toFixed(3)}`);
              }
         } else if (window.isFreeCameraMode) { // Free Camera
             window.freeCameraYaw -= deltaX * window.freeCameraRotationSpeed;
@@ -561,7 +561,7 @@ window.updateControls = function(controls, delta) {
         
         // IMPORTANT: Explicitly exit pointer lock if gamepad is active
         if (document.pointerLockElement) {
-            console.log("[Controls] Exiting pointer lock because gamepad is active.");
+            // console.log("[Controls] Exiting pointer lock because gamepad is active.");
             document.exitPointerLock();
         }
         
@@ -674,7 +674,7 @@ function updateRTSCameraMovement(delta) {
 window.toggleCameraView = function() {
     // Add a guard to prevent double-toggling
     if (window.isViewToggleActive) {
-        console.log("[TOGGLE] View toggle already in progress, ignoring");
+        // console.log("[TOGGLE] View toggle already in progress, ignoring");
         return;
     }
     
@@ -683,12 +683,12 @@ window.toggleCameraView = function() {
     
     // Set a flag to prevent overlay display during transition
     window.inViewTransition = true;
-    console.log("[TOGGLE] Set inViewTransition flag to prevent overlay flashing");
+    // console.log("[TOGGLE] Set inViewTransition flag to prevent overlay flashing");
     
     // Reset view transition flag after delay (should match our other timeouts)
     setTimeout(() => {
         window.inViewTransition = false;
-        console.log("[TOGGLE] Reset inViewTransition flag");
+        // console.log("[TOGGLE] Reset inViewTransition flag");
     }, 300);
     
     // Reset the guard after a short delay
@@ -697,7 +697,7 @@ window.toggleCameraView = function() {
     }, 300); // 300ms should be enough to prevent double-triggering
 
     const previousViewMode = window.viewMode;
-    console.log("[TOGGLE] Current mode:", previousViewMode);
+    // console.log("[TOGGLE] Current mode:", previousViewMode);
     
     if (window.viewMode === 'firstPerson') {
         window.viewMode = 'thirdPerson';
@@ -707,12 +707,12 @@ window.toggleCameraView = function() {
         try {
             if (typeof window.switchToThirdPersonView === 'function') {
                 window.switchToThirdPersonView();
-                console.log("[DEBUG] Switched to third-person view");
+                // console.log("[DEBUG] Switched to third-person view");
             } else {
-                console.error("[ERROR] switchToThirdPersonView function not found");
+                // console.error("[ERROR] switchToThirdPersonView function not found");
             }
         } catch (error) {
-            console.error("[ERROR] Error switching to third-person view:", error);
+            // console.error("[ERROR] Error switching to third-person view:", error);
             // Fall back to first-person if third-person fails
             window.viewMode = 'firstPerson';
             window.isFirstPerson = true;
@@ -731,12 +731,12 @@ window.toggleCameraView = function() {
         try {
             if (typeof window.switchToFreeCameraView === 'function') {
                 window.switchToFreeCameraView();
-                console.log("[DEBUG] Switched to free camera view");
+                // console.log("[DEBUG] Switched to free camera view");
             } else {
-                console.error("[ERROR] switchToFreeCameraView function not found");
+                // console.error("[ERROR] switchToFreeCameraView function not found");
             }
         } catch (error) {
-            console.error("[ERROR] Error switching to free camera view:", error);
+            // console.error("[ERROR] Error switching to free camera view:", error);
             // Fall back to first-person if free camera fails
             window.viewMode = 'firstPerson';
             window.isFirstPerson = true;
@@ -750,12 +750,12 @@ window.toggleCameraView = function() {
         try {
             if (typeof window.switchToRTSView === 'function') {
                 window.switchToRTSView();
-                console.log("[DEBUG] Switched to RTS view");
+                // console.log("[DEBUG] Switched to RTS view");
             } else {
-                console.error("[ERROR] switchToRTSView function not found");
+                // console.error("[ERROR] switchToRTSView function not found");
             }
         } catch (error) {
-            console.error("[ERROR] Error switching to RTS view:", error);
+            // console.error("[ERROR] Error switching to RTS view:", error);
             // Fall back to first-person if RTS fails
             window.viewMode = 'firstPerson';
             window.isFirstPerson = true;
@@ -769,12 +769,12 @@ window.toggleCameraView = function() {
         try {
             if (typeof window.switchToFirstPersonView === 'function') {
                 window.switchToFirstPersonView(previousViewMode); // Pass previous mode
-                console.log("[DEBUG] Switched back to first-person view");
+                // console.log("[DEBUG] Switched back to first-person view");
             } else {
-                console.error("[ERROR] switchToFirstPersonView function not found");
+                // console.error("[ERROR] switchToFirstPersonView function not found");
             }
         } catch (error) {
-            console.error("[ERROR] Error switching to first-person view:", error);
+            // console.error("[ERROR] Error switching to first-person view:", error);
         }
     }
     
@@ -798,7 +798,7 @@ window.toggleCameraView = function() {
         }
     }
     
-    console.log("[TOGGLE] Changed from", previousViewMode, "to", window.viewMode);
+    // console.log("[TOGGLE] Changed from", previousViewMode, "to", window.viewMode);
     
     // Return to prevent recursion
     return window.viewMode;

@@ -31,7 +31,7 @@ class Entity {
         // Add to scene
         if (window.scene) {
             window.scene.add(this.mesh);
-            console.log(`[Entity ${this.id}] Added mesh group (ID: ${this.mesh.id}) to scene.`);
+            // console.log(`[Entity ${this.id}] Added mesh group (ID: ${this.mesh.id}) to scene.`);
         } else {
             console.warn(`[Entity ${this.id}] window.scene not available during constructor.`);
         }
@@ -49,7 +49,7 @@ class Entity {
             if (!THREE.GLTFLoader) {
                 console.warn(`[Entity ${this.id}] THREE.GLTFLoader not available; using placeholder group for ${modelPath}`);
             } else {
-                console.log(`[Entity ${this.id}] Loading model: ${modelPath}`);
+                // console.log(`[Entity ${this.id}] Loading model: ${modelPath}`);
                 const loader = new THREE.GLTFLoader();
                 loader.load(
                     modelPath,
@@ -63,7 +63,7 @@ class Entity {
                         // Compute and store bounding box collider
                         const bbox = new THREE.Box3().setFromObject(group);
                         this.boundingBox = bbox;
-                        console.log(`[Entity ${this.id}] Bounding box computed: min${bbox.min.toArray()}, max${bbox.max.toArray()}`);
+                        // console.log(`[Entity ${this.id}] Bounding box computed: min${bbox.min.toArray()}, max${bbox.max.toArray()}`);
 
                         // Apply portal shaders for city_dome_150
                         if (this.modelId === 'city_dome_150') {
