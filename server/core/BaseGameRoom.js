@@ -344,6 +344,42 @@ class BaseGameRoom extends BaseRoom {
         this._rigidBodies.set('ground', groundBody);
         // create static structure bodies
         for (const def of this._staticStructDefs) {
+            if (def.id === 'city_dome_150') {
+                // triangle-mesh collider for dome
+                try {
+                    const filename = def.modelPath.split('/').pop();
+                    const filePath = path.join(process.cwd(), 'client', 'assets', 'models', filename);
+                    const document = await io.read(filePath);
+                    const triMesh = new Ammo.btTriangleMesh();
+                    document.getRoot().listMeshes().forEach(mesh => {
+                        mesh.listPrimitives().forEach(prim => {
+                            const pos = prim.getAttribute('POSITION').getArray();
+                            const idx = prim.getIndices().getArray();
+                            for (let i = 0; i < idx.length; i += 3) {
+                                const a = idx[i] * 3, b = idx[i+1] * 3, c = idx[i+2] * 3;
+                                triMesh.addTriangle(
+                                    new Ammo.btVector3(pos[a], pos[a+1], pos[a+2]),
+                                    new Ammo.btVector3(pos[b], pos[b+1], pos[b+2]),
+                                    new Ammo.btVector3(pos[c], pos[c+1], pos[c+2]),
+                                    true
+                                );
+                            }
+                        });
+                    });
+                    const shape = new Ammo.btBvhTriangleMeshShape(triMesh, true, true);
+                    const transform = new Ammo.btTransform(); transform.setIdentity();
+                    transform.setOrigin(new Ammo.btVector3(def.position.x, def.position.y, def.position.z));
+                    const motion = new Ammo.btDefaultMotionState(transform);
+                    const info = new Ammo.btRigidBodyConstructionInfo(0, motion, shape, new Ammo.btVector3(0,0,0));
+                    const body = new Ammo.btRigidBody(info);
+                    this.physicsWorld.addRigidBody(body);
+                    this._rigidBodies.set(def.id, body);
+                } catch (e) {
+                    console.error(`[BaseGameRoom] Dome mesh collider failed: ${e}`);
+                    this._createStructureBody(def);
+                }
+                continue;
+            }
             this._createStructureBody(def);
         }
         // create dynamic NPC bodies
