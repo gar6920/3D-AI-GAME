@@ -113,9 +113,9 @@ class PlayerUI {
         this.selectionPanel = this.addElement('div', {
             id: 'selection-panel',
             style: {
-                position: 'absolute', bottom: '10px', right: '10px',
+                position: 'absolute', top: '100px', left: '10px',
                 background: 'rgba(0,0,0,0.7)', color: 'white', padding: '8px',
-                borderRadius: '4px', maxWidth: '300px', maxHeight: '400px', overflowY: 'auto', zIndex: '1000'
+                borderRadius: '4px', width: '220px', maxHeight: '50%', overflowY: 'auto', zIndex: '10000'
             }
         });
         // Header

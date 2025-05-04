@@ -1,4 +1,4 @@
-const { Schema, type, MapSchema } = require("@colyseus/schema");
+const { Schema, type, MapSchema, ArraySchema } = require("@colyseus/schema");
 
 /**
  * Base entity schema for all game entities
@@ -24,6 +24,14 @@ class BaseEntity extends Schema {
         this.maxHealth = 100;
         this.speed = 1;
         this.attackDamage = 10;
+
+        // --- Collider description (optional, sent to clients for accurate selection) ---
+        // colliderType: "sphere" | "box" | undefined
+        // For sphere: colliderRadius (number)
+        // For box: colliderHalfExtents (Float32Array length 3 [hx,hy,hz])
+        this.colliderType = "";       // Empty string means not yet set
+        this.colliderRadius = 0;
+        this.colliderHalfExtents = new ArraySchema(); // length 3
     }
 }
 
@@ -45,5 +53,8 @@ type("number")(BaseEntity.prototype, "health");
 type("number")(BaseEntity.prototype, "maxHealth");
 type("number")(BaseEntity.prototype, "speed");
 type("number")(BaseEntity.prototype, "attackDamage");
+type("string")(BaseEntity.prototype, "colliderType");
+type("number")(BaseEntity.prototype, "colliderRadius");
+type({ array: "number" })(BaseEntity.prototype, "colliderHalfExtents");
 
 module.exports = { BaseEntity }; 

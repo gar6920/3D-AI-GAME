@@ -831,7 +831,7 @@ async function setupRoomListeners(room) {
     
     // Initial entities check
     room.state.entities.forEach((entity, entityId) => {
-        console.log(`[NetworkCore Setup Initial Entity] Received entityId: ${entityId}, entityType: ${entity.entityType}`);
+        // console.log(`[NetworkCore Setup Initial Entity] Received entityId: ${entityId}, entityType: ${entity.entityType}`);
         
         if (entity.entityType === 'player' && entityId !== room.sessionId) {
             // Handle existing players (visuals might be created by GameEngine on join)
@@ -850,7 +850,7 @@ async function setupRoomListeners(room) {
             }
         } else if (entity.entityType === 'npc') {
             // Handle NPC entities
-            console.log(`Attempting to create visual for NPC: ${entityId}`);
+            // console.log(`Attempting to create visual for NPC: ${entityId}`);
             if (typeof window.createNpcVisual === 'function') {
                 window.createNpcVisual(entity, entityId);
             } else {
@@ -917,7 +917,7 @@ async function setupRoomListeners(room) {
             }
         } else if (entity.entityType === 'npc') {
             // Handle NPC entities
-            console.log(`Attempting to create visual for NPC: ${entityId}`);
+            // console.log(`Attempting to create visual for NPC: ${entityId}`);
             if (typeof window.createNpcVisual === 'function') {
                 window.createNpcVisual(entity, entityId);
             } else {
@@ -1013,7 +1013,7 @@ async function setupRoomListeners(room) {
                 }
             } else if (entity.entityType === 'npc') {
                 // Handle NPC entity removal
-                console.log(`Attempting to remove visual for NPC: ${entityId}`);
+                // console.log(`Attempting to remove visual for NPC: ${entityId}`);
                 if (typeof window.removeNpcVisual === 'function') {
                     window.removeNpcVisual(entityId);
                 } else {
@@ -1047,7 +1047,7 @@ async function setupRoomListeners(room) {
     
     // --- Initialize Structure Listeners --- 
     if (window.buildingModeManager && typeof window.buildingModeManager.initializeStructureListeners === 'function') {
-        console.log("[setupRoomListeners] Initializing structure listeners via BuildingModeManager...");
+        // console.log("[setupRoomListeners] Initializing structure listeners via BuildingModeManager...");
         // Check if structures map exists before initializing
         if (room.state.structures) {
             window.buildingModeManager.initializeStructureListeners(room);

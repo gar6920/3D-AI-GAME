@@ -42,10 +42,10 @@ class NPC extends Entity {
         }
 
         // --- DEBUG LOGGING ---
-        console.log(`[NPC Class] [DEBUG] Creating visual for NPC: ${entityId}`);
-        console.log(`[NPC Class] [DEBUG] Entity object:`, entity);
-        console.log(`[NPC Class] [DEBUG] Entity prototype:`, Object.getPrototypeOf(entity));
-        console.log(`[NPC Class] [DEBUG] Entity keys:`, Object.keys(entity));
+        // console.log(`[NPC Class] [DEBUG] Creating visual for NPC: ${entityId}`);
+        // console.log(`[NPC Class] [DEBUG] Entity object:`, entity);
+        // console.log(`[NPC Class] [DEBUG] Entity prototype:`, Object.getPrototypeOf(entity));
+        // console.log(`[NPC Class] [DEBUG] Entity keys:`, Object.keys(entity));
         // --- END DEBUG LOGGING ---
 
         // Attach Colyseus .listen handlers for all fields we care about
@@ -96,7 +96,7 @@ class NPC extends Entity {
         try {
             const npcInstance = new NPC(entity, entityId); 
             NPC.npcs.set(entityId, npcInstance);
-            console.log(`[NPC Class] Successfully created and stored NPC: ${entityId}`);
+            // console.log(`[NPC Class] Successfully created and stored NPC: ${entityId}`);
         } catch (error) {
             console.error(`[NPC Class] Failed to create NPC ${entityId}:`, error);
         }
@@ -156,14 +156,14 @@ class NPC extends Entity {
             params.animationMap.forEach((value, key) => {
                 this.animationMap.set(key, value);
             });
-            console.log(`[NPC ${this.id} Constructor] Copied animationMap from server (${this.animationMap.size} entries):`, this.animationMap);
+            // console.log(`[NPC ${this.id} Constructor] Copied animationMap from server (${this.animationMap.size} entries):`, this.animationMap);
         } else {
             console.warn(`[NPC ${this.id} Constructor] No animationMap received from server.`);
         }
         // --- End Copy ---
 
         this.modelId = params.modelId; // Store modelId received from server
-        console.log(`[NPC ${this.id}] Created. InstanceID: ${this.id}, ModelID: ${this.modelId}`);
+        // console.log(`[NPC ${this.id}] Created. InstanceID: ${this.id}, ModelID: ${this.modelId}`);
 
         // Behavior/Animation state
         this.mixer = null;
@@ -186,7 +186,7 @@ class NPC extends Entity {
             return;
         }
         const modelPath = `assets/models/${this.modelId}.glb`; // Use modelId here
-        console.log(`[NPC ${this.id}] Loading model from path: ${modelPath}`);
+        // console.log(`[NPC ${this.id}] Loading model from path: ${modelPath}`);
 
         if (!this.loader) {
             this.loader = new THREE.GLTFLoader(); // Use static loader
@@ -216,6 +216,9 @@ class NPC extends Entity {
                     child.receiveShadow = true;
                 }
             });
+
+            // Tag meshes for selection
+            loadedModel.traverse(child=>{ if(child.isMesh) child.userData.entity = this; });
 
             // Add the loaded model to our placeholder group
             this.modelPlaceholder.add(loadedModel);
@@ -321,6 +324,10 @@ class NPC extends Entity {
 
             if (initialActionName) {
                 this.playAnimation(initialActionName, 0); // Play immediately, no fade-in
+            }
+
+            if(typeof addSelectionColliderFromEntity==='function'){
+                addSelectionColliderFromEntity(this, this.modelPlaceholder);
             }
 
         }, 

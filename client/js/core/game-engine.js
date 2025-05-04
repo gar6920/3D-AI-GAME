@@ -545,6 +545,9 @@ window.switchToFreeCameraView = function() {
 
 // RTS view setup
 window.switchToRTSView = function() {
+    // Sync RTS active flags
+    if (!window.isRTSMode) window.isRTSMode = true; // ensure flag
+    window.isRTSViewActive = true;
     // Show player mesh since we're viewing from above
     if (window.playerEntity && window.playerEntity.mesh) {
         window.playerEntity.mesh.visible = true;
@@ -717,7 +720,24 @@ window.switchToRTSView = function() {
     }
     
     console.log("Switched to RTS view");
-};
+    
+    // Add global click handler for RTS selection
+    if (!window._rtsGlobalClickAdded) {
+        window._rtsGlobalClickAdded = true;
+        document.addEventListener('click', (evt) => {
+            if (!window.isRTSMode) return;
+            // Only handle left button
+            if (evt.button !== 0) return;
+            // Update rtsMouse for raycasting
+            window.rtsMouse = {
+                x: (evt.clientX / window.innerWidth) * 2 - 1,
+                y: -(evt.clientY / window.innerHeight) * 2 + 1
+            };
+            console.log('[RTS DEBUG] Global click handler firing selectUnitInRTSMode');
+            selectUnitInRTSMode();
+        });
+    }
+}
 
 // Handle mouse movement for free camera
 function onMouseMove(event) {
@@ -1767,222 +1787,216 @@ function onMouseMove(event) {
 }
 
 // Perform unit selection in RTS mode using raycasting
-function selectUnitInRTSMode() {
+function selectUnitInRTSMode(clickX = null, clickY = null) {
     if (!window.isRTSMode) return;
-    
+    // Ensure arrays exist
+    window.rtsSelectedUnits = window.rtsSelectedUnits || [];
+    window.rtsSelectionBoxes = window.rtsSelectionBoxes || [];
+
     // Ensure pointer is unlocked in RTS mode
     if (controls && controls.isLocked) {
         controls.unlock();
     }
-    
-    // Get the current mouse position
-    const cursor = document.getElementById('rts-cursor');
-    if (!cursor) return;
-    
-    // Get cursor position and renderer bounds
+
+    // Determine screen coordinates
     const rect = renderer.domElement.getBoundingClientRect();
-    const cursorX = parseInt(cursor.style.left);
-    const cursorY = parseInt(cursor.style.top);
-    
-    // Create a raycaster for the cursor position
+    let cursorX, cursorY;
+    if (clickX !== null && clickY !== null) {
+        cursorX = clickX;
+        cursorY = clickY;
+    } else {
+        const cursor = document.getElementById('rts-cursor');
+        if (!cursor) return;
+        cursorX = parseInt(cursor.style.left);
+        cursorY = parseInt(cursor.style.top);
+    }
+
+    // Build a ray from camera through cursor
     const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
-    
-    // Calculate mouse position in normalized device coordinates
-    // (-1 to +1) for both components
-    mouse.x = ((cursorX - rect.left) / rect.width) * 2 - 1;
-    mouse.y = -((cursorY - rect.top) / rect.height) * 2 + 1;
-    
-    // Update the raycaster with the camera and mouse position
+    const mouse = new THREE.Vector2(
+        ((cursorX - rect.left) / rect.width) * 2 - 1,
+        -((cursorY - rect.top) / rect.height) * 2 + 1
+    );
     raycaster.setFromCamera(mouse, window.camera);
-    
-    // Get all objects that could be selected
-    const selectableObjects = [];
-    
-    // Add the player's mesh
-    if (window.playerEntity && window.playerEntity.mesh) {
-        selectableObjects.push(window.playerEntity.mesh);
+
+    // Rebuild selectable mesh cache to ensure newly loaded meshes are accounted for
+    rebuildSelectableMeshCache();
+    // Raycast only against selectable entity meshes for precision
+    const intersects = raycaster.intersectObjects(window._rtsSelectableMeshes, true);
+
+    const isShiftPressed = window.inputManager ? window.inputManager.isKeyPressed('shift') : false;
+    if (!isShiftPressed) clearAllSelections();
+
+    if (intersects.length === 0) {
+        console.log('[RTS Select] Nothing selectable under cursor');
+        return;
     }
-    
-    // For future: Add enemy units, resources, buildings, etc.
-    
-    // Perform the raycast
-    const intersects = raycaster.intersectObjects(selectableObjects, true);
-    
-    // If an object was hit, select it
-    if (intersects.length > 0) {
-        let selectedMesh = intersects[0].object;
-        
-        // Find the top-level mesh (for models with nested meshes)
-        while (selectedMesh.parent && selectedMesh.parent !== scene) {
-            selectedMesh = selectedMesh.parent;
-        }
-        
-        // Determine which entity this belongs to
-        let selectedEntity = null;
-        
-        // Check if it's the player
-        if (window.playerEntity && window.playerEntity.mesh && 
-            (window.playerEntity.mesh === selectedMesh || 
-            window.playerEntity.mesh.id === selectedMesh.id)) {
-            selectedEntity = window.playerEntity;
-        }
-        
-        // If we found a valid entity, select it
-        if (selectedEntity) {
-            // Add to the selected units array
-            window.rtsSelectedUnits.push(selectedEntity);
-            
-            // Also maintain backward compatibility with single-selection
-            window.rtsSelectedUnit = selectedEntity;
-            
-            // Apply visual highlight
-            highlightSelectedUnit(selectedEntity);
-            
-            console.log("[RTS] Selected unit:", selectedEntity);
-        }
-    } else {
-        console.log("[RTS] No unit selected");
+
+    const entity = getEntityFromIntersect(intersects[0].object);
+    if (!entity) {
+        console.log('[RTS Select] Intersected hierarchy without entity link');
+        return;
     }
-    
-    // Ensure cursor is up to date after selection
-    // This prevents cursor from "freezing" after clicking
-    requestAnimationFrame(() => {
-        updateRTSCursorPosition({
-            clientX: window.lastMouseX || window.innerWidth / 2,
-            clientY: window.lastMouseY || window.innerHeight / 2
-        });
-    });
+
+    // Toggle selection if Shift pressed and already selected
+    const alreadySelected = window.rtsSelectedUnits.includes(entity);
+    if (alreadySelected && isShiftPressed) {
+        // Deselect
+        removeSelectionBoxForUnit(entity);
+        window.rtsSelectedUnits = window.rtsSelectedUnits.filter(e => e !== entity);
+        console.log('[RTS Select] Deselected entity', entity.name || entity.id);
+        refreshRTSSelectionPanel();
+        return;
+    }
+
+    if (!alreadySelected) {
+        window.rtsSelectedUnits.push(entity);
+        highlightSelectedUnit(entity);
+        console.log('[RTS Select] Selected entity', entity.name || entity.id);
+    }
+    // After processing selection, refresh UI panel
+    refreshRTSSelectionPanel();
 }
 
-// Create a selection ring for a specific unit
-function createSelectionRingForUnit(unit) {
-    if (!unit || !unit.mesh) return;
-    
-    // Create a ring geometry
-    const radius = 1.2; // Slightly larger than the unit
-    const innerRadius = radius * 0.8;
-    const segments = 32;
-    
-    const ringGeometry = new THREE.RingGeometry(innerRadius, radius, segments);
-    const ringMaterial = new THREE.MeshBasicMaterial({
-        color: 0x00ff00,
-        side: THREE.DoubleSide,
-        transparent: true,
-        opacity: 0.7
+// Utility: find primary mesh inside an object (first Mesh child or self)
+function getPrimaryMesh(obj) {
+    if (!obj) return null;
+    if (obj.isMesh && !obj.userData.isCollider) return obj;
+    let found = null;
+    obj.traverse(child => {
+        if (!found && child.isMesh && !child.userData.isCollider) {
+            found = child;
+        }
     });
-    
-    // Create the ring mesh
-    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-    
-    // Position it flat on the ground but slightly above to avoid z-fighting
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.02;
-    ring.position.x = unit.mesh.position.x;
-    ring.position.z = unit.mesh.position.z;
-    
-    // Add the ring to the scene
-    scene.add(ring);
-    
-    // Get a reliable ID for the unit - try different possible sources
-    let unitId;
-    if (unit.id) {
-        unitId = unit.id;
-    } else if (unit.mesh.id) {
-        unitId = unit.mesh.id;
-    } else if (unit.sessionId) {
-        unitId = unit.sessionId;
-    } else if (unit === window.playerEntity) {
-        unitId = window.room ? window.room.sessionId : 'player';
-    } else {
-        // Use object reference as last resort
-        unitId = unit.mesh;
-        console.warn("[RTS] Could not find proper ID for unit", unit);
-    }
-    
-    // Save reference to the unit this ring belongs to
-    ring.userData.unitId = unitId;
-    ring.userData.unitReference = unit; // Also store direct reference
-    
-    // Add to the ring array for management
-    if (!window.rtsSelectionRings) {
-        window.rtsSelectionRings = [];
-    }
-    window.rtsSelectionRings.push(ring);
-    
-    // Register animation callback for the ring if it doesn't exist
-    if (!window.rtsRingAnimationAdded) {
-        window.registerAnimationCallback(animateSelectionRings);
-        window.rtsRingAnimationAdded = true;
-    }
-    
-    console.log("[RTS] Created selection ring for unit with ID:", unitId);
+    return found;
 }
 
-// Animate all selection rings
-function animateSelectionRings(delta) {
-    // Skip if no rings
-    if (!window.rtsSelectionRings || window.rtsSelectionRings.length === 0) return;
-    
-    // Animation time
-    const time = performance.now() * 0.001;
-    
-    // Update all rings
-    window.rtsSelectionRings.forEach(ring => {
-        // Skip if ring was deleted
-        if (!ring || !ring.material) return;
-        
-        let unitMesh = null;
-        
-        // First try using direct reference (most reliable)
-        if (ring.userData.unitReference && ring.userData.unitReference.mesh) {
-            unitMesh = ring.userData.unitReference.mesh;
-        }
-        
-        // If direct reference failed, try ID matching
-        if (!unitMesh) {
-            const unitId = ring.userData.unitId;
-            
-            // Check if it's the player
-            if (window.playerEntity && window.playerEntity.mesh) {
-                // Match by ID or direct reference
-                const meshId = window.playerEntity.mesh.id || window.playerEntity.id;
-                if (meshId === unitId || 
-                    window.playerEntity.mesh === unitId) {
-                    unitMesh = window.playerEntity.mesh;
-                }
-            }
-            
-            // Check selected units list too
-            if (!unitMesh && window.rtsSelectedUnits && window.rtsSelectedUnits.length > 0) {
-                for (const selectedUnit of window.rtsSelectedUnits) {
-                    if (selectedUnit && selectedUnit.mesh) {
-                        const meshId = selectedUnit.mesh.id || selectedUnit.id;
-                        if (meshId === unitId || selectedUnit.mesh === unitId) {
-                            unitMesh = selectedUnit.mesh;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Update ring position to follow unit
-        if (unitMesh) {
-            ring.position.x = unitMesh.position.x;
-            ring.position.z = unitMesh.position.z;
+// Refresh the left-side selection panel using playerUI
+function refreshRTSSelectionPanel() {
+    if (!window.playerUI || !window.playerUI.updateSelectionPanel) return;
+    const entitiesPayload = (window.rtsSelectedUnits || []).map(u => ({
+        id: u.id,
+        name: u.name || u.id,
+        health: u.health,
+        maxHealth: u.maxHealth
+    }));
+    window.playerUI.updateSelectionPanel({ entities: entitiesPayload });
+}
+
+// Create / update selection box for an entity (green outline)
+function createSelectionBoxForUnit(unit) {
+    if (!unit || !unit.mesh || unit._selectionBox) return;
+
+    const targetMesh = getPrimaryMesh(unit.mesh);
+    if (!targetMesh) return;
+
+    // Ensure geometry bounding box is computed for tight fit
+    if (targetMesh.geometry && !targetMesh.geometry.boundingBox) {
+        targetMesh.geometry.computeBoundingBox();
+    }
+
+    // Compute tight bounding box (geometry-based, fallback to world)
+    let size = new THREE.Vector3();
+    let center = new THREE.Vector3();
+    if (targetMesh.geometry && targetMesh.geometry.boundingBox) {
+        const gBox = targetMesh.geometry.boundingBox;
+        gBox.getSize(size);
+        gBox.getCenter(center);
+        size.multiply(targetMesh.scale);
+        center.multiply(targetMesh.scale);
+        targetMesh.updateWorldMatrix(true, false);
+        center.applyMatrix4(targetMesh.matrixWorld);
+    } else {
+        const worldBox = new THREE.Box3().setFromObject(targetMesh);
+        worldBox.getSize(size);
+        worldBox.getCenter(center);
+    }
+
+    // Build green outline
+    const geom = new THREE.BoxGeometry(size.x, size.y, size.z);
+    const edges = new THREE.EdgesGeometry(geom);
+    const mat = new THREE.LineBasicMaterial({ color: 0x00ff00, depthTest: false });
+    const outline = new THREE.LineSegments(edges, mat);
+    outline.position.copy(center);
+    outline.quaternion.copy(targetMesh.getWorldQuaternion(new THREE.Quaternion()));
+    outline.renderOrder = 9999;
+    mat.depthWrite = false;
+
+    scene.add(outline);
+
+    outline.userData._size = size.clone();
+    unit._selectionBox = outline;
+    window.rtsSelectionBoxes.push({ helper: outline, entity: unit });
+}
+
+// Remove existing selection box for a unit
+function removeSelectionBoxForUnit(unit) {
+    if (!unit || !unit._selectionBox) return;
+    const outline = unit._selectionBox;
+    scene.remove(outline);
+    if (outline.geometry) outline.geometry.dispose();
+    if (outline.material) outline.material.dispose();
+    window.rtsSelectionBoxes = (window.rtsSelectionBoxes || []).filter(obj => obj.helper !== outline);
+    delete unit._selectionBox;
+}
+
+// Update selection outline positions each frame
+function animateSelectionBoxes(delta) {
+    if (!window.rtsSelectionBoxes || window.rtsSelectionBoxes.length === 0) return;
+    window.rtsSelectionBoxes.forEach(item => {
+        const { helper, entity } = item;
+        if (!helper || !entity || !entity.mesh) return;
+
+        const targetMesh = getPrimaryMesh(entity.mesh);
+        if (!targetMesh) return;
+
+        // Recalculate bounding box (geometry-based)
+        let size = new THREE.Vector3();
+        let center = new THREE.Vector3();
+        if (targetMesh.geometry && targetMesh.geometry.boundingBox) {
+            const gBBox2 = targetMesh.geometry.boundingBox;
+            gBBox2.getSize(size);
+            gBBox2.getCenter(center);
+            size.multiply(targetMesh.scale);
+            center.multiply(targetMesh.scale);
+            targetMesh.updateWorldMatrix(true, false);
+            center.applyMatrix4(targetMesh.matrixWorld);
         } else {
-            // If we couldn't find the unit, the selection might be stale
-            // Make the ring pulse more dramatically to indicate an issue
-            ring.material.opacity = 0.3 + 0.5 * Math.sin(time * 4);
+            const worldBBox2 = new THREE.Box3().setFromObject(targetMesh);
+            worldBBox2.getSize(size);
+            worldBBox2.getCenter(center);
         }
-        
-        // Rotate and pulse opacity for effect
-        ring.rotation.z += delta * 0.5;
-        if (unitMesh) {
-            ring.material.opacity = 0.5 + 0.3 * Math.sin(time * 2);
+
+        helper.position.copy(center);
+        helper.quaternion.copy(targetMesh.getWorldQuaternion(new THREE.Quaternion()));
+
+        const currentSize = helper.userData._size || { x: 0, y: 0, z: 0 };
+        if (Math.abs(currentSize.x - size.x) > 0.01 || Math.abs(currentSize.y - size.y) > 0.01 || Math.abs(currentSize.z - size.z) > 0.01) {
+            if (helper.geometry) helper.geometry.dispose();
+            helper.geometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(size.x, size.y, size.z));
+            helper.userData._size = size.clone();
         }
     });
+}
+
+// After selection changes, refresh UI
+function highlightSelectedUnit(unit) {
+    createSelectionBoxForUnit(unit);
+    refreshRTSSelectionPanel();
+}
+
+function clearAllSelections() {
+    if (window.rtsSelectedUnits && window.rtsSelectedUnits.length > 0) {
+        window.rtsSelectedUnits.forEach(u => removeSelectionBoxForUnit(u));
+    }
+    window.rtsSelectedUnits = [];
+    refreshRTSSelectionPanel();
+}
+
+// Register once
+if (!window._rtsSelectionBoxAnimRegistered && typeof window.registerAnimationCallback === 'function') {
+    window.registerAnimationCallback(animateSelectionBoxes);
+    window._rtsSelectionBoxAnimRegistered = true;
 }
 
 // Move selected units to clicked position in RTS mode
@@ -2297,70 +2311,7 @@ function selectUnitsInBoxRTSMode() {
     });
     
     console.log("[RTS] Total units selected:", window.rtsSelectedUnits.length);
-}
-
-// Clear all current selections
-function clearAllSelections() {
-    // Clear the single selected unit reference
-    window.rtsSelectedUnit = null;
-    
-    // Remove highlights from all previously selected units
-    if (window.rtsSelectedUnits && window.rtsSelectedUnits.length > 0) {
-        window.rtsSelectedUnits.forEach(unit => {
-            // Restore original material if saved
-            if (unit.rtsMaterial && unit.mesh) {
-                unit.mesh.material = unit.rtsMaterial;
-            }
-        });
-    }
-    
-    // Clear the selection array
-    window.rtsSelectedUnits = [];
-    
-    // Remove any selection rings
-    if (window.rtsSelectionRing) {
-        scene.remove(window.rtsSelectionRing);
-        if (window.rtsSelectionRing.geometry) window.rtsSelectionRing.geometry.dispose();
-        if (window.rtsSelectionRing.material) window.rtsSelectionRing.material.dispose();
-    }
-    
-    // Remove all selection rings from the ring array
-    if (window.rtsSelectionRings && window.rtsSelectionRings.length > 0) {
-        window.rtsSelectionRings.forEach(ring => {
-            scene.remove(ring);
-            if (ring.geometry) ring.geometry.dispose();
-            if (ring.material) ring.material.dispose();
-        });
-    }
-    
-    // Initialize the selection rings array if it doesn't exist
-    window.rtsSelectionRings = [];
-}
-
-// Apply visual highlight to a selected unit
-function highlightSelectedUnit(unit) {
-    if (!unit || !unit.mesh) return;
-
-    // Ensure the material exists before cloning
-    if (unit.mesh.material) {
-        // Save original material for later restoration only if it hasn't been saved yet
-        if (!unit.rtsMaterial) {
-            unit.rtsMaterial = unit.mesh.material.clone();
-        }
-
-        // Create highlight material only if the original exists
-        const highlightMaterial = unit.mesh.material.clone();
-        highlightMaterial.emissive = new THREE.Color(0x333333);
-        highlightMaterial.emissiveIntensity = 0.5;
-
-        // Apply highlight to indicate selection
-        unit.mesh.material = highlightMaterial;
-    } else {
-        console.warn("[highlightSelectedUnit] Unit mesh has no material:", unit);
-    }
-
-    // Create a selection ring for this unit
-    createSelectionRingForUnit(unit);
+    refreshRTSSelectionPanel();
 }
 
 // Fix the setThirdPersonCameraOrientation function to only control the camera, not player rotation
@@ -2487,4 +2438,36 @@ function startGameLogic() {
         console.log("Starting animation loop from startGameLogic.");
         animate(performance.now()); // Pass initial timestamp
     }
+}
+
+// Cache of meshes that belong to selectable entities (player, NPCs, buildings)
+window._rtsSelectableMeshes = window._rtsSelectableMeshes || [];
+
+function rebuildSelectableMeshCache() {
+    window._rtsSelectableMeshes = [];
+    scene.traverse(obj => {
+        if (!obj.isMesh) return;
+        if (obj.name === 'ground' || obj.material?.userData?.ignoreRTS) return; // skip floor or flagged meshes
+        if (obj.userData && obj.userData.entity) {
+            window._rtsSelectableMeshes.push(obj);
+        }
+    });
+}
+
+// Call rebuild once after scene ready
+if (!window._rtsSelectableCacheBuilt && typeof scene !== 'undefined') {
+    rebuildSelectableMeshCache();
+    window._rtsSelectableCacheBuilt = true;
+}
+
+// Helper: ascend object hierarchy to find linked entity
+function getEntityFromIntersect(intersectObj) {
+    let o = intersectObj;
+    while (o) {
+        if (o.userData && o.userData.entity) {
+            return o.userData.entity;
+        }
+        o = o.parent;
+    }
+    return null;
 }

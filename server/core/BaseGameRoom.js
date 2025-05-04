@@ -408,6 +408,18 @@ class BaseGameRoom extends BaseRoom {
             const halfExtents = new Ammo.btVector3(size.x/2, size.y/2, size.z/2);
             shape = new Ammo.btBoxShape(halfExtents);
         }
+        // Store collider info for clients
+        if (def.collision?.sphere?.radius) {
+            def.colliderType = "sphere";
+            def.colliderRadius = def.collision.sphere.radius * (def.scale || 1);
+            def.colliderHalfExtents = [];
+        } else {
+            def.colliderType = "box";
+            def.colliderRadius = 0;
+            const size = def.collision?.halfExtents ?? {x:1,y:1,z:1};
+            def.colliderHalfExtents = [size.x, size.y, size.z];
+        }
+
         // Setup transform with rotation and position
         const transform = new Ammo.btTransform();
         transform.setIdentity();
@@ -452,6 +464,13 @@ class BaseGameRoom extends BaseRoom {
         body.setActivationState(4);
         this.physicsWorld.addRigidBody(body);
         this._rigidBodies.set(entity.id, body);
+
+        // Populate collider details for clients
+        entity.colliderType = "sphere";
+        entity.colliderRadius = entity.scale;
+        if (entity.colliderHalfExtents && entity.colliderHalfExtents.length) {
+            entity.colliderHalfExtents.splice(0, entity.colliderHalfExtents.length);
+        }
     }
 
     // sphere collider for players
@@ -473,6 +492,13 @@ class BaseGameRoom extends BaseRoom {
         body.setActivationState(4);
         this.physicsWorld.addRigidBody(body);
         this._rigidBodies.set(player.id, body);
+
+        // Collider info for clients
+        player.colliderType = "sphere";
+        player.colliderRadius = player.scale || 1;
+        if (player.colliderHalfExtents && player.colliderHalfExtents.length) {
+            player.colliderHalfExtents.splice(0, player.colliderHalfExtents.length);
+        }
     }
 
     // add player physics body on join

@@ -18,6 +18,9 @@ window.initRTSView = function() {
     window.inputManager.on('mousemove', handleRTSMouseMove);
     window.inputManager.on('mousedown', handleRTSMouseDown);
     
+    // Also add a direct DOM listener as fallback
+    document.addEventListener('mousedown', handleRTSMouseDown);
+    
     // Create minimap
     createRTSMinimap();
     
@@ -170,14 +173,38 @@ function handleRTSMouseMove(event) {
 
 // Handle RTS mouse clicks
 function handleRTSMouseDown(event) {
-    if (!window.isRTSViewActive || !window.scene || !window.camera) return;
+    console.log('[RTS DEBUG] handleRTSMouseDown called', event);
+    if (!window.isRTSViewActive) return;
+    
+    // Normalize event from InputManager or native
+    let button, clientX, clientY;
+    if (event.button !== undefined) {
+        // Native
+        button = event.button;
+        clientX = event.clientX;
+        clientY = event.clientY;
+    } else if (event.position) {
+        // Wrapped from InputManager
+        button = event.button;
+        clientX = event.position.x;
+        clientY = event.position.y;
+    }
+    if (button === undefined) return;
     
     // Left click - unit selection
-    if (event.button === 0) {
+    if (button === 0) {
+        // Update global rtsMouse for raycaster
+        window.rtsMouse = {
+            x: (clientX / window.innerWidth) * 2 - 1,
+            y: -(clientY / window.innerHeight) * 2 + 1
+        };
         selectUnitUnderMouse();
-    }
-    // Right click - movement command
-    else if (event.button === 2) {
+    } else if (button === 2) {
+        // Update rtsMouse too
+        window.rtsMouse = {
+            x: (clientX / window.innerWidth) * 2 - 1,
+            y: -(clientY / window.innerHeight) * 2 + 1
+        };
         moveSelectedUnitToTarget();
     }
 }
@@ -185,96 +212,94 @@ function handleRTSMouseDown(event) {
 // Select unit under mouse
 function selectUnitUnderMouse() {
     if (!window.isRTSViewActive || !window.rtsMouse) return;
-    
-    // Raycasting for unit selection
+
+    // Ensure arrays
+    window.rtsSelectedEntities = window.rtsSelectedEntities || [];
+    window.rtsSelectionBoxes = window.rtsSelectionBoxes || [];
+
+    // Build raycaster
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(window.rtsMouse, window.camera);
-    
-    // Get all unit meshes
-    const selectableUnits = [];
-    
-    // Add player entities
-    if (window.room && window.room.state && window.room.state.players) {
-        window.room.state.players.forEach(player => {
-            if (player.id && window.visuals && window.visuals.players[player.id] && 
-                window.visuals.players[player.id].mesh) {
-                selectableUnits.push(window.visuals.players[player.id].mesh);
-            }
-        });
+
+    const intersects = raycaster.intersectObjects(window.scene.children, true);
+    console.log('[RTS Select] Intersections:', intersects.length);
+
+    // Shift for multi-select
+    const isShift = window.inputManager ? window.inputManager.isKeyPressed('shift') : false;
+    if (!isShift) {
+        clearRTSSelections();
     }
-    
-    // Check for intersections
-    const intersects = raycaster.intersectObjects(selectableUnits, true);
-    
-    if (intersects.length > 0) {
-        // Find the player that owns this mesh
-        if (window.room && window.room.state && window.room.state.players) {
-            window.room.state.players.forEach(player => {
-                if (player.id && window.visuals && window.visuals.players[player.id] && 
-                    window.visuals.players[player.id].mesh === intersects[0].object ||
-                    window.visuals.players[player.id].mesh.children.includes(intersects[0].object)) {
-                    
-                    // Select this unit
-                    window.rtsSelectedUnit = player.id;
-                    console.log("Selected unit:", player.id);
-                    
-                    // Visual feedback for selection
-                    highlightSelectedUnit();
-                }
-            });
+
+    if (intersects.length === 0) {
+        console.log('[RTS Select] Nothing hit.');
+        return;
+    }
+
+    // Find first intersect obj with userData.entity
+    let entity = null;
+    for (const hit of intersects) {
+        let o = hit.object;
+        while (o && o !== window.scene) {
+            if (o.userData && o.userData.entity) { entity = o.userData.entity; break; }
+            o = o.parent;
         }
-    } else {
-        // Deselect if clicking empty space
-        window.rtsSelectedUnit = null;
-        clearUnitHighlights();
+        if (entity) break;
+    }
+
+    if (!entity) {
+        console.log('[RTS Select] No entity found in hierarchy');
+        return;
+    }
+
+    const already = window.rtsSelectedEntities.includes(entity);
+    if (already && isShift) {
+        // deselect
+        removeRTSSelectionBox(entity);
+        window.rtsSelectedEntities = window.rtsSelectedEntities.filter(e=>e!==entity);
+        console.log('[RTS Select] Deselected', entity.name||entity.id);
+        return;
+    }
+
+    if (!already) {
+        window.rtsSelectedEntities.push(entity);
+        createRTSSelectionBox(entity);
+        console.log('[RTS Select] Selected', entity.name||entity.id);
     }
 }
 
-// Highlight the currently selected unit
-function highlightSelectedUnit() {
-    // Clear previous highlights
-    clearUnitHighlights();
-    
-    // Add highlight to selected unit
-    if (window.rtsSelectedUnit && window.visuals && window.visuals.players[window.rtsSelectedUnit]) {
-        const selectedMesh = window.visuals.players[window.rtsSelectedUnit].mesh;
-        
-        // Create selection box
-        const boxSize = 2.5; // Slightly larger than the unit
-        const geometry = new THREE.BoxGeometry(boxSize, boxSize, boxSize);
-        
-        // Create wireframe material
-        const material = new THREE.MeshBasicMaterial({
-            color: 0xffffff,
-            wireframe: true,
-            transparent: true,
-            opacity: 0.8
-        });
-        
-        const highlight = new THREE.Mesh(geometry, material);
-        highlight.name = 'selection-highlight';
-        
-        // Position at same height as unit
-        highlight.position.y = 0;
-        
-        selectedMesh.add(highlight);
-        
-        console.log("Added highlight to unit:", window.rtsSelectedUnit);
-    }
+function createRTSSelectionBox(entity){
+    if (!entity || !entity.mesh || entity._rtsBox) return;
+    const helper = new THREE.BoxHelper(entity.mesh, 0xffff00);
+    helper.material.depthTest=false;
+    helper.material.transparent=true;
+    helper.material.opacity=0.85;
+    window.scene.add(helper);
+    entity._rtsBox = helper;
+    window.rtsSelectionBoxes.push(helper);
 }
-
-// Clear all unit highlights
-function clearUnitHighlights() {
-    if (window.visuals) {
-        Object.values(window.visuals.players).forEach(player => {
-            if (player.mesh) {
-                const highlight = player.mesh.getObjectByName('selection-highlight');
-                if (highlight) {
-                    player.mesh.remove(highlight);
-                }
-            }
-        });
+function removeRTSSelectionBox(entity){
+    if (!entity || !entity._rtsBox) return;
+    const h=entity._rtsBox;
+    window.scene.remove(h);
+    if(h.geometry)h.geometry.dispose();
+    if(h.material)h.material.dispose();
+    window.rtsSelectionBoxes=window.rtsSelectionBoxes.filter(b=>b!==h);
+    delete entity._rtsBox;
+}
+function clearRTSSelections(){
+    if(window.rtsSelectedEntities){
+        window.rtsSelectedEntities.forEach(e=>removeRTSSelectionBox(e));
     }
+    window.rtsSelectedEntities=[];
+}
+// keep boxes updated
+function updateRTSSelectionBoxes(){
+    if(!window.rtsSelectionBoxes) return;
+    window.rtsSelectionBoxes.forEach(b=>b.update && b.update());
+}
+if(!window._rtsBoxesAnim && window.registerAnimationCallback){
+    window.registerAnimationCallback(()=>updateRTSSelectionBoxes());
+    window._rtsBoxesAnim=true;
 }
 
 // Move selected unit to target position
@@ -887,6 +912,7 @@ if (typeof window.registerAnimationCallback === 'function') {
 }
 // Add this at the top of the file - a wrapper function for establishing event handlers
 function setupRTSEventHandlers() {
+    console.log('[RTS DEBUG] Registering RTS mouse handlers with InputManager');
     // Use InputManager for mouse movement in RTS mode
     window.inputManager.on('mousemove', handleRTSMouseMove);
     window.inputManager.on('mousedown', handleRTSMouseDown);
@@ -911,22 +937,6 @@ if (window.inputManager) {
         if (window.inputManager) {
             clearInterval(checkInterval);
             setupRTSEventHandlers();
-        }
-    }, 100);
-}
-
-        }
-    }, 100);
-}
-    // Wait for InputManager to be available
-    const checkInterval = setInterval(() => {
-        if (window.inputManager) {
-            clearInterval(checkInterval);
-            setupRTSEventHandlers();
-        }
-    }, 100);
-}
-
         }
     }, 100);
 }

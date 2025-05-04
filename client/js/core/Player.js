@@ -88,6 +88,7 @@ class Player extends Entity {
                 if (child.isMesh) {
                     child.castShadow = true;
                     child.receiveShadow = true;
+                    child.userData.entity = this; // enable RTS selection
                 }
             });
             
@@ -138,6 +139,10 @@ class Player extends Entity {
             // Set visibility based on player type and view mode
             this.updateVisibility();
             console.log(`[Player ${this.id}] Model setup complete.`);
+            
+            if(typeof addSelectionColliderFromEntity==='function'){
+                addSelectionColliderFromEntity(this, modelContainer);
+            }
             
         } catch (error) {
             console.error(`[Player ${this.id}] Error loading model:`, error);

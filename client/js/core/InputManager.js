@@ -630,7 +630,7 @@ class InputManager {
         }
         
         this.uiElementCallbacks[elementId][eventType] = callback;
-        console.log(`Registered UI element handler: ${elementId} for ${eventType} event`);
+        // console.log(`Registered UI element handler: ${elementId} for ${eventType} event`);
         return true;
     }
     

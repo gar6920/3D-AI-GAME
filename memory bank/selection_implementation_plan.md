@@ -17,17 +17,17 @@ This system will unify interaction logic across all gameplay views (RTS, first-p
 ### Step 1: Unified Selection & UI Controls Across Views
 - Refactor selection logic (raycast/click/box select) from RTS view into a shared module accessible from all camera modes.
 - Trigger selection on appropriate input events (mouse click, drag, etc.) in any view.
-- Visually highlight selected entities and update the client’s selection state.
+- Visually highlight selected entities and update the client's selection state.
 - Fire a selection change event on the client.
 
 ### Step 2: Client-to-Server Selection Communication
 - When the selection changes, send a message to the server (e.g., `select_entities`) with the IDs of the selected entities.
 - Implement this as a new message type in the network layer, ensuring it is sent reliably and efficiently.
-- The server is now aware of each client’s current selection(s).
+- The server is now aware of each client's current selection(s).
 
 ### Step 3: Server-Side Selection Acknowledgement & Info/Action Options
 - The server validates the selection, determines available actions and info for each entity, and sends this back to the client in a `selection_info` message.
-- While the selection is active, the server continues to send updates if selected entities’ states change (health, ownership, links, etc.).
+- While the selection is active, the server continues to send updates if selected entities' states change (health, ownership, links, etc.).
 
 ### Step 3a: Define Action Metadata in Implementations
 - In `server/implementations` (e.g., `structures.js`, `npcs.js`), extend each entity definition with an `actions` array of `{ name, label, condition }`.
@@ -45,7 +45,7 @@ This system will unify interaction logic across all gameplay views (RTS, first-p
 - In `BaseRoom.handleSelect`, for each selected entity, lookup its action metadata and filter by evaluating `condition(entity, player)` before including it in `selection_info`.
 
 ### Step 4: Client UI for Actions & Action Execution Flow
-- Extend the PlayerUI to display a context-sensitive panel showing selected entities’ info and available actions.
+- Extend the PlayerUI to display a context-sensitive panel showing selected entities' info and available actions.
 - When the player chooses an action, send an `entity_action` message to the server (with entity ID, action type, and parameters).
 - The server processes the action, updates state, and broadcasts changes as needed.
 
@@ -84,3 +84,44 @@ This system will unify interaction logic across all gameplay views (RTS, first-p
 ---
 
 This plan is the foundation for all advanced world interactions in the 3D AI Game, enabling features like portals, city upgrades, NPC commands, and more, while maintaining a clean separation of concerns between input, UI, networking, and server logic.
+
+## Update (Collider-Based Selection Integration) – YYYY-MM-DD
+
+### What we added in this session
+1. **Schema fields** (server/core/schemas/BaseEntity.js)
+   * `colliderType` ("sphere" | "box")
+   * `colliderRadius`
+   * `colliderHalfExtents` (ArraySchema length 3)
+   These are replicated to every client so each entity now carries an authoritative, physics-matching collider description.
+
+2. **Server population of collider data** (server/core/BaseGameRoom.js)
+   * `_createEntityBody` & `_createPlayerBody` now fill `colliderType="sphere"` and `colliderRadius = scale`.
+   * `_createStructureBody` sets `colliderType` / `colliderRadius` / `colliderHalfExtents` based on the half-extents or sphere data already computed for Ammo bodies.
+
+3. **Client-side reconstruction**
+   * `client/js/core/collider-utils.js` helper `addSelectionColliderFromEntity` builds an invisible Three.js `Mesh` matching the collider:
+     * `SphereGeometry(radius)` or `BoxGeometry(hx*2,hy*2,hz*2)`
+     * marks it with `isCollider` & `userData.entity` so selection ray-casts see it but outline builder ignores it.
+   * Player.js and NPC.js call the helper right after the GLB finishes loading; structures can do the same when spawned.
+   * `getPrimaryMesh` in game-engine skips meshes with `isCollider` when calculating green outline.
+
+4. **Selectable-mesh cache** still uses the `userData.entity` test, so these new invisible collider meshes are automatically part of `_rtsSelectableMeshes`.
+
+### Current dilemma
+Even after the collider data flows from server → client and invisible colliders are being attached, clicking directly on some skinned NPCs (e.g. **robokeeper** and the player model) still fails, while clicking nearby grass sometimes selects them.  This suggests at least one of:
+* Collider mesh not created (helper never executed because model not yet loaded when called, or no parent passed).
+* Collider geometry size/position incorrect (half-extents zero or wrong scale → collider misses visible model).
+* Rebuild of `_rtsSelectableMeshes` excludes collider meshes (e.g. early return if `!obj.isMesh` or if colliders have `material.userData.ignoreRTS`).
+* Raycaster still hitting non-collider skinned triangles in bind pose first and returning them, then `getEntityFromIntersect` ascends but finds no `userData.entity` (if colliders lack it).
+
+### Next debugging steps
+1. **Verify collider creation on client**
+   ```js
+   scene.traverse(o=>{ if(o.userData.isCollider) console.log(o.userData.entity?.id, o.geometry.boundingBox); });
+   ```
+2. **Check collider size** – compare `colliderHalfExtents` vs visual model bbox.
+3. **Ensure selectable cache** – after `rebuildSelectableMeshCache()` log how many meshes & whether colliders are included.
+4. **Confirm `getEntityFromIntersect` finds entity for collider meshes**.
+5. If colliders are correct but first click still hits original SkinnedMesh, change ray-cast list to *only* colliders by filtering `isCollider` true.
+
+---

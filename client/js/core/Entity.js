@@ -96,6 +96,11 @@ class Entity {
                             })
                             .catch(error => console.error(`[Entity ${this.id}] FAILED loading portal shaders:`, error));
                         }
+
+                        // Tag every mesh so raycaster can pick up selectable entity
+                        loadedModel.traverse(child => {
+                            if (child.isMesh) child.userData.entity = this;
+                        });
                     },
                     undefined,
                     (error) => {

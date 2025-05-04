@@ -1017,7 +1017,7 @@ class BuildingModeManager {
             return;
         }
 
-        console.log("[BuildingModeManager] Initializing structure listeners for room:", room.id);
+        // console.log("[BuildingModeManager] Initializing structure listeners for room:", room.id);
         
         // Handler for new structures added by the server
         room.state.structures.onAdd = (structure, key) => {
@@ -1043,7 +1043,7 @@ class BuildingModeManager {
         
         // Process any structures that might have already been added before listeners were attached
         if (room.state.structures.size > 0) {
-            console.log("[BuildingModeManager] Processing existing structures (", room.state.structures.size, ")");
+            // console.log("[BuildingModeManager] Processing existing structures (", room.state.structures.size, ")");
             room.state.structures.forEach((structure, key) => {
                 // Use createStructureInWorld which handles updates if already exists
                  // Ensure the structure data includes an 'id' matching the key
@@ -1052,7 +1052,7 @@ class BuildingModeManager {
             });
         }
         
-        console.log("[BuildingModeManager] Structure listeners setup complete.");
+        // console.log("[BuildingModeManager] Structure listeners setup complete.");
         // Refresh build menu now that definitions are synced
         this.loadStructureTypes();
     }
