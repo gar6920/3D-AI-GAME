@@ -711,6 +711,16 @@ class InputManager {
             case 'KeyV': 
                 this.keys.v = true;
                 break;
+            case 'KeyH':
+                // Toggle the global flag
+                window.showSelectionColliders = !window.showSelectionColliders;
+                // Immediately update visibility
+                if (typeof window.updateColliderVisibility === 'function') {
+                    window.updateColliderVisibility();
+                } else {
+                    console.warn("[InputManager KeyH] updateColliderVisibility function not found.");
+                }
+                break;
         }
         
         // Create standardized event with all necessary properties

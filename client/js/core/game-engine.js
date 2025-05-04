@@ -83,6 +83,11 @@ window.lastInputTime = 0;
 // Array to store animation callbacks
 window.animationCallbacks = [];
 
+// <<< ADDED >>>
+// Global flag to control collider visibility
+window.showSelectionColliders = false; 
+// <<< END ADDED >>>
+
 // Function to register callbacks to be executed during the animation loop
 window.registerAnimationCallback = function(callback) {
     if (typeof callback === 'function' && !window.animationCallbacks.includes(callback)) {
@@ -1821,20 +1826,43 @@ function selectUnitInRTSMode(clickX = null, clickY = null) {
 
     // Rebuild selectable mesh cache to ensure newly loaded meshes are accounted for
     rebuildSelectableMeshCache();
+    
+    // <<< Filter selectable meshes to ONLY include colliders >>>
+    const colliderMeshes = window._rtsSelectableMeshes.filter(mesh => mesh.userData && mesh.userData.isCollider === true);
+    console.log(`[RTS Select Raycast] Targeting ${colliderMeshes.length} collider meshes for intersection.`);
+    // <<<
+    
     // Raycast only against selectable entity meshes for precision
-    const intersects = raycaster.intersectObjects(window._rtsSelectableMeshes, true);
+    // <<< Use the filtered list >>>
+    const intersects = raycaster.intersectObjects(colliderMeshes, true); 
+
+    // <<< Log Intersections >>>
+    if (intersects.length > 0) {
+        console.log(`[RTS Select Raycast] Hit ${intersects.length} objects. First hit:`, intersects[0].object, `Distance: ${intersects[0].distance}, userData:`, intersects[0].object.userData);
+    } else {
+        console.log("[RTS Select Raycast] No intersections with selectable meshes.");
+    }
+    // <<<
 
     const isShiftPressed = window.inputManager ? window.inputManager.isKeyPressed('shift') : false;
     if (!isShiftPressed) clearAllSelections();
 
     if (intersects.length === 0) {
-        console.log('[RTS Select] Nothing selectable under cursor');
+        console.log('[RTS Select] Nothing selectable under cursor (after intersect check)');
         return;
     }
 
+    // <<< Log before calling getEntityFromIntersect >>>
+    console.log(`[RTS Select] Calling getEntityFromIntersect with object:`, intersects[0].object);
+    // <<<
     const entity = getEntityFromIntersect(intersects[0].object);
+    
+    // <<< Log result of getEntityFromIntersect >>>
+    console.log(`[RTS Select] getEntityFromIntersect returned:`, entity);
+    // <<<
+    
     if (!entity) {
-        console.log('[RTS Select] Intersected hierarchy without entity link');
+        console.log('[RTS Select] Intersected hierarchy without entity link (after getEntityFromIntersect)');
         return;
     }
 
@@ -2444,14 +2472,27 @@ function startGameLogic() {
 window._rtsSelectableMeshes = window._rtsSelectableMeshes || [];
 
 function rebuildSelectableMeshCache() {
+    console.log("[SelectCache] Rebuilding selectable mesh cache..."); // <<< Added Log
     window._rtsSelectableMeshes = [];
+    let count = 0; // <<< Added counter
     scene.traverse(obj => {
+        // <<< Log candidate object >>>
+        // console.log(`[SelectCache Traverse] Checking obj: ${obj.name} (type: ${obj.type}, isMesh: ${obj.isMesh}), userData:`, obj.userData);
+        
         if (!obj.isMesh) return;
-        if (obj.name === 'ground' || obj.material?.userData?.ignoreRTS) return; // skip floor or flagged meshes
+        if (obj.name === 'ground' || obj.material?.userData?.ignoreRTS) {
+            // console.log(`[SelectCache Traverse] Ignoring ground or ignoreRTS mesh: ${obj.name}`); // <<< Added Log
+            return; // skip floor or flagged meshes
+        }
         if (obj.userData && obj.userData.entity) {
+             // <<< Log added object and if it's a collider >>>
+             console.log(`[SelectCache] Adding mesh to cache: ${obj.name || '(no name)'} (UUID: ${obj.uuid}), isCollider: ${!!obj.userData.isCollider}, EntityID: ${obj.userData.entity.id}`);
+             // <<<
             window._rtsSelectableMeshes.push(obj);
+            count++; // <<< Increment counter
         }
     });
+    console.log(`[SelectCache] Rebuild complete. Added ${count} meshes.`); // <<< Added Log
 }
 
 // Call rebuild once after scene ready
@@ -2462,12 +2503,45 @@ if (!window._rtsSelectableCacheBuilt && typeof scene !== 'undefined') {
 
 // Helper: ascend object hierarchy to find linked entity
 function getEntityFromIntersect(intersectObj) {
+    // <<< Log entry >>>
+    console.log(`[getEntityFromIntersect] Checking object:`, intersectObj);
+    // <<<
     let o = intersectObj;
     while (o) {
+        // <<< Log current object in loop >>>
+        console.log(`[getEntityFromIntersect] Looping... current 'o':`, o, `userData:`, o.userData);
+        // <<<
         if (o.userData && o.userData.entity) {
+            // <<< Log entity found >>>
+            console.log(`[getEntityFromIntersect] Found entity! Returning:`, o.userData.entity);
+            // <<<
             return o.userData.entity;
         }
         o = o.parent;
     }
+    // <<< Log not found >>>
+    console.log(`[getEntityFromIntersect] Reached root without finding entity.`);
+    // <<<
     return null;
 }
+
+// <<< ADDED >>>
+// Function to update the visibility of all selection colliders
+window.updateColliderVisibility = function() {
+    const visibility = window.showSelectionColliders;
+    console.log(`Setting collider visibility to: ${visibility}`);
+    window.scene.traverse(obj => {
+        // Check specifically for the flag added by addSelectionColliderFromEntity
+        if (obj.userData && obj.userData.isCollider === true) { 
+            // <<< Log when a collider is found >>>
+            console.log(`[UpdateVisibility] Found collider (UUID: ${obj.uuid}, Visible: ${obj.visible}) for entity: ${obj.userData.entity?.id}. Setting visibility to: ${visibility}`);
+            // <<<
+            obj.visible = visibility;
+            // Optional: Log the entity ID for confirmation
+            // if (obj.userData.entity) {
+            //     console.log(`  - Collider for ${obj.userData.entity.id}: ${visibility}`);
+            // }
+        }
+    });
+};
+// <<< END ADDED >>>

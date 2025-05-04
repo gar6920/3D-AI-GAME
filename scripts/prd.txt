@@ -1,0 +1,95 @@
+# Entity Selection System PRD
+
+## Project Overview
+The 3D AI Game requires a robust and extensible entity selection system that works across all camera modes and supports various entity types. This system is fundamental to player interaction with the game world.
+
+## Core Requirements
+
+### Universal Selection System
+- Players must be able to select any entity (structures, NPCs, players) in any camera mode
+- Support for both single-click and box selection methods
+- Selection must work consistently across RTS, first-person, and third-person views
+- Visual feedback must clearly indicate selected entities
+
+### Technical Architecture
+- Client-server architecture with server authority
+- Real-time synchronization of selection state
+- Efficient handling of multiple simultaneous selections
+- Integration with the physics system for precise collision detection
+
+### Selection Features
+1. Selection Methods
+   - Single-click selection via raycasting
+   - Box/drag selection for multiple entities
+   - Support for selecting entities through colliders
+   - Proper handling of skinned meshes and complex models
+
+2. Visual Feedback
+   - Clear highlighting of selected entities
+   - Different highlight styles for different entity types
+   - Real-time updates of selection state
+   - Support for showing selection radius/bounds
+
+3. Selection Data Management
+   - Efficient caching of selectable meshes
+   - Proper handling of entity hierarchies
+   - Support for entity groups and mass selection
+
+### UI Requirements
+1. Context Panel
+   - Display selected entity information
+   - Show available actions based on entity type
+   - Real-time updates of entity state
+   - Support for multiple selected entities
+
+2. Action System
+   - Contextual actions based on entity type
+   - Action validation on both client and server
+   - Visual feedback for action execution
+   - Support for action queuing
+
+### Networking Requirements
+1. Client-Server Communication
+   - Efficient selection state synchronization
+   - Server validation of selection requests
+   - Real-time updates of entity states
+   - Handling of network latency and disconnections
+
+2. Security
+   - Server authority over all selections
+   - Validation of action requests
+   - Anti-cheat measures for selection
+
+## Technical Specifications
+
+### Entity Components
+- Collider system for precise selection
+- Support for both sphere and box colliders
+- Integration with existing physics system
+- Proper scaling and positioning of colliders
+
+### Performance Requirements
+- Support for 100+ selectable entities
+- Maximum 16ms processing time for selection operations
+- Efficient handling of continuous selection updates
+- Optimized network message size
+
+### Integration Points
+- Physics system integration
+- UI system integration
+- Networking system integration
+- Entity management system integration
+
+## Success Criteria
+1. Players can reliably select any valid entity in any view mode
+2. Selection feedback is clear and immediate
+3. Selection state remains consistent across network conditions
+4. System handles complex models and skinned meshes correctly
+5. Performance meets specified requirements
+6. All selection-related actions are properly validated
+
+## Future Considerations
+- Support for new entity types
+- Advanced selection patterns (double-click, hotkeys)
+- Custom selection rules per entity type
+- Enhanced visual feedback options 

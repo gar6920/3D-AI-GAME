@@ -139,10 +139,24 @@ class Player extends Entity {
             // Set visibility based on player type and view mode
             this.updateVisibility();
             console.log(`[Player ${this.id}] Model setup complete.`);
-            
-            if(typeof addSelectionColliderFromEntity==='function'){
-                addSelectionColliderFromEntity(this, modelContainer);
+
+            // <<< Explicitly check window property >>>
+            // console.log(`[Player ${this.id}] Checking window.addSelectionColliderFromEntity:`, window.addSelectionColliderFromEntity, '(Type:', typeof window.addSelectionColliderFromEntity, ')');
+            // <<<
+
+            // <<< REMOVE Collider Creation Call - Moved to network-core.js >>>
+            /*
+            if(typeof window.addSelectionColliderFromEntity==='function'){ 
+                console.log(`[Player ${this.id}] BEFORE calling addSelectionCollider. Entity Data: type=${this.colliderType}, radius=${this.colliderRadius}, extents=${JSON.stringify(this.colliderHalfExtents)}. Parent Group:`, modelContainer);
+                if (!modelContainer || typeof modelContainer.add !== 'function') {
+                     console.error(`[Player ${this.id}] Invalid parent group passed to addSelectionCollider!`);
+                }
+                window.addSelectionColliderFromEntity(this, modelContainer); 
+            } else {
+                 console.error(`[Player ${this.id}] window.addSelectionColliderFromEntity function NOT FOUND!`);
             }
+            */
+            // <<<
             
         } catch (error) {
             console.error(`[Player ${this.id}] Error loading model:`, error);

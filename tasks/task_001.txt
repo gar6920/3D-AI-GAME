@@ -1,0 +1,86 @@
+# Task ID: 1
+# Title: Comprehensive Entity Selection System Implementation
+# Status: pending
+# Dependencies: None
+# Priority: medium
+# Description: Implement an entity selection system supporting click and box selection for structures, NPCs, and players across RTS, first-person, and third-person cameras.
+# Details:
+Following the guidelines in selection_implementation_plan.md, architect a modular selection module that integrates with all three camera controllers. Create a unified input handler that routes both single-click and drag-box inputs to a core SelectionManager. Use raycasts in first-/third-person modes and viewport-to-world projections in RTS mode to detect entities. Encapsulate entity eligibility logic in an interface (ISelectable) implemented by structures, NPCs, and player characters. Provide customizable visual feedback (e.g., highlight outlines, bounding box overlays) via Shader and UI layers. Implement client-side provisional selection states and communicate with the server over the existing network API to validate and confirm selections, handling latency and error cases gracefully. Ensure the module hooks into the game’s event system to broadcast selection changes to UI and gameplay subsystems.
+
+# Test Strategy:
+Unit-test the SelectionManager to verify correct entity detection for clicks and box regions in mock camera scenarios. Write integration tests that simulate user input across RTS, first-/third-person views and assert that ISelectable targets receive selection events. Create automated playtests to validate visual feedback appears and updates correctly upon selection/deselection. Conduct multiplayer tests with a local server to ensure client-server selection validation succeeds and that invalid selections are properly rejected. Perform edge-case tests for overlapping entities, rapid input sequences, and camera transitions to confirm robustness.
+
+# Subtasks:
+## 1. Initialize Selection Module Architecture [in-progress]
+### Dependencies: None
+### Description: Create the basic folder and namespace structure for the selection system module. Define core class stubs for SelectionManager, InputHandler, and CameraSelectionService, and register the module with the game’s dependency injection or service locator during initialization.
+### Details:
+- Create a SelectionSystem folder under GameModules.
+- Add stub classes: SelectionManager, InputHandler, CameraSelectionService.
+- Expose an ISelectionModule interface and register it in the game bootstrap.
+- Ensure other systems can reference the module via the game’s service locator.
+
+## 2. Define ISelectable Interface and Implement on Entities [pending]
+### Dependencies: 1.1
+### Description: Design the ISelectable interface that encapsulates eligibility logic (e.g., IsSelectable(), TeamId, Type). Implement this interface on Structure, NPC, and PlayerCharacter classes according to selection rules.
+### Details:
+- In SelectionSystem.Interfaces, create ISelectable with properties/methods: bool IsSelectable(), int GetTeamId(), SelectionType GetSelectionType().
+- Update Structure, NPC, PlayerCharacter classes to implement ISelectable.
+- Include logic for alive/dead, faction, visibility, and custom lock-out flags.
+
+## 3. Implement Camera-Based Hit Testing [pending]
+### Dependencies: 1.1, 1.2
+### Description: Develop camera-specific detection methods to find ISelectable entities. For first- and third-person modes use physics raycasts; for RTS mode use viewport-to-world frustum projection and overlap queries.
+### Details:
+- In CameraSelectionService, add methods: RaycastSelect(screenPoint) for FP/TP, BoxSelectRTS(screenRect) for RTS.
+- FP/TP: Physics.Raycast from camera through cursor, filtering hits by ISelectable component.
+- RTS: Convert screenRect to world frustum; use Physics.OverlapBox or GeometryUtility.TestPlanesAABB to collect ISelectable within.
+- Return lists of ISelectable hits.
+
+## 4. Create Unified Input Handler [pending]
+### Dependencies: 1.1
+### Description: Capture mouse/touch events and distinguish between single-click and drag-box gestures. Normalize input data and forward selection intents to SelectionManager.
+### Details:
+- In InputHandler, subscribe to platform input API for pointer down/up/move.
+- On pointer down, record start position and time.
+- On pointer move beyond drag threshold, enter box-drag mode and track current rect.
+- On pointer up, determine click vs box gesture, package into SelectionRequest {mode, screenPoint or screenRect, modifiers}, and call SelectionManager.RequestSelection(request).
+
+## 5. Develop Core SelectionManager Logic [pending]
+### Dependencies: 1.2, 1.3, 1.4
+### Description: Implement the main selection workflow: process requests, call CameraSelectionService, apply ISelectable filters, manage multi-select and deselect logic, and maintain provisional selection state.
+### Details:
+- In SelectionManager.RequestSelection: switch on request.mode (click vs box).
+- Call camera service to get hit entities.
+- Filter results by ISelectable.IsSelectable() and any team/modifier rules.
+- Update internal currentSelection list (add/remove based on shift/control modifiers).
+- Mark new selection as provisional and trigger visual feedback.
+- Expose ConfirmSelection() and CancelSelection() methods.
+
+## 6. Implement Visual Selection Feedback [pending]
+### Dependencies: 1.5
+### Description: Provide real-time visual cues for provisional and confirmed selections using shader outlines and UI overlays. Display dynamic bounding boxes for box-drag region.
+### Details:
+- Integrate a highlight shader and apply to ISelectable renderers on selection change.
+- Create a UI Canvas overlay to draw the drag-box rectangle using Unity UI or similar.
+- Handle provisional vs confirmed states: e.g., dashed outline for provisional, solid for confirmed.
+- Clear visuals on deselect.
+
+## 7. Integrate Network Validation and Confirmation [pending]
+### Dependencies: 1.5
+### Description: Implement client-side provisional selection synchronization with the server via existing network API. Handle success, latency, retries, and failure states gracefully.
+### Details:
+- On provisional selection event, send SelectionRequestMessage to server.
+- Listen for SelectionResponseMessage: on success, call SelectionManager.ConfirmSelection(); on error, call CancelSelection() and display UI error.
+- Implement retry/backoff or fallback if no response in threshold.
+- Ensure network messages include entity IDs and selection timestamps.
+
+## 8. Broadcast Selection Events to Game Systems [pending]
+### Dependencies: 1.5, 1.7
+### Description: Hook into the game’s global event system to emit events on selection changes so UI and gameplay subsystems can react appropriately.
+### Details:
+- In SelectionManager, publish events: OnSelectionProvisional(IList<ISelectable>), OnSelectionConfirmed(IList<ISelectable>), OnSelectionCleared().
+- Subscribe UI panels to update unit info displays.
+- Subscribe gameplay manager to trigger context actions (e.g., attack commands).
+- Ensure event unsubscription on module shutdown.
+

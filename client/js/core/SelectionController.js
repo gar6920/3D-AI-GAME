@@ -29,11 +29,17 @@ class SelectionController {
 
         this.raycaster.setFromCamera(mouse, this.camera);
 
-        // We need the actual mesh objects associated with entities
-        // For now, let's assume entities have a '.mesh' property
-        const meshesToIntersect = this.selectableEntities
-            .map(entity => entity.mesh) // Get the mesh from each entity
-            .filter(mesh => mesh); // Filter out any entities without a mesh
+        // Gather all collider meshes (children with userData.isCollider === true) for raycasting
+        let meshesToIntersect = [];
+        this.selectableEntities.forEach(entity => {
+            if (entity.mesh) {
+                entity.mesh.traverse(child => {
+                    if (child.userData && child.userData.isCollider) {
+                        meshesToIntersect.push(child);
+                    }
+                });
+            }
+        });
 
         if (meshesToIntersect.length === 0) {
             // console.log("No meshes available for intersection test.");

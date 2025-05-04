@@ -28,6 +28,9 @@ class BaseGameRoom extends BaseRoom {
         // Add logging for initialization
         console.log('[BaseGameRoom] initializeImplementation called');
         this._initOptions = options; // Save init options for game reset
+        // Use a single, shared structureDefinitions array for all static/buildable structure logic
+        const { structureDefinitions } = require('../implementations/default/structures');
+        this._staticStructDefs = structureDefinitions;
         // Try to require npcDefinitions from the implementation if not already present
         let npcDefs;
         try {
@@ -118,6 +121,13 @@ class BaseGameRoom extends BaseRoom {
                 // Ensure health/maxHealth from definition
                 if (def.health !== undefined) s.health = def.health;
                 if (def.maxHealth !== undefined) s.maxHealth = def.maxHealth;
+                // Copy collider data from definition to structure instance
+                s.colliderType = def.colliderType || "";
+                s.colliderRadius = def.colliderRadius || 0;
+                s.colliderHalfExtents = Array.isArray(def.colliderHalfExtents) ? [...def.colliderHalfExtents] : (def.colliderHalfExtents ? [...def.colliderHalfExtents] : []);
+                if (!s.colliderType || (s.colliderType === "box" && (!s.colliderHalfExtents || !s.colliderHalfExtents.length))) {
+                    console.warn(`[BaseGameRoom] WARNING: Static structure ${s.id} is missing collider data! colliderType=${s.colliderType}, colliderHalfExtents=${JSON.stringify(s.colliderHalfExtents)}`);
+                }
                 this.state.structures.set(s.id, s);
                 this.spawnedStructures.push(s.id);
             }
@@ -231,13 +241,19 @@ class BaseGameRoom extends BaseRoom {
      * Place a new structure at world coords
      */
     _placeStructure(defId, x, z) {
-        const { structureDefinitions } = require('../implementations/default/structures');
-        const def = structureDefinitions.find(d => d.id === defId);
+        const def = this._staticStructDefs.find(d => d.id === defId);
         if (!def) { console.warn(`No buildable def with id ${defId}`); return; }
         const s = new Structure();
         s.id = `${def.id}_${Date.now()}`;
         s.entityType = 'structure'; s.definitionId = def.id; s.modelId = def.modelId||def.id;
         s.x = x; s.y = def.position?.y||0; s.z = z; s.rotationY = def.rotationY||0; s.scale = def.scale||1;
+        // Copy collider data from definition to instance
+        s.colliderType = def.colliderType || "";
+        s.colliderRadius = def.colliderRadius || 0;
+        s.colliderHalfExtents = Array.isArray(def.colliderHalfExtents) ? [...def.colliderHalfExtents] : (def.colliderHalfExtents ? [...def.colliderHalfExtents] : []);
+        if (!s.colliderType || (s.colliderType === "box" && (!s.colliderHalfExtents || !s.colliderHalfExtents.length))) {
+            console.warn(`[BaseGameRoom] WARNING: Placed structure ${s.id} is missing collider data! colliderType=${s.colliderType}, colliderHalfExtents=${JSON.stringify(s.colliderHalfExtents)}`);
+        }
         this.state.structures.set(s.id, s);
         // Mark each cell in the footprint region
         const baseX = Math.floor(x), baseY = Math.floor(z);
@@ -389,6 +405,20 @@ class BaseGameRoom extends BaseRoom {
         }
         // create bodies for existing players
         this.state.players.forEach(p => this._createPlayerBody(p));
+
+        // --- PATCH: Copy collider data from definitions to structure instances after colliders are generated ---
+        for (const [id, s] of this.state.structures.entries()) {
+            // Try both static and buildable definitions
+            const def = (this._staticStructDefs.find(d => d.id === s.definitionId) ||
+                        (this._staticStructDefs.length < 1 && this._buildableStructDefs && this._buildableStructDefs.find(d => d.id === s.definitionId)));
+            if (!def) continue;
+            s.colliderType = def.colliderType || "";
+            s.colliderRadius = def.colliderRadius || 0;
+            s.colliderHalfExtents = Array.isArray(def.colliderHalfExtents) ? [...def.colliderHalfExtents] : (def.colliderHalfExtents ? [...def.colliderHalfExtents] : []);
+            if (!s.colliderType || (s.colliderType === "box" && (!s.colliderHalfExtents || !s.colliderHalfExtents.length))) {
+                console.warn(`[BaseGameRoom] WARNING: Structure ${s.id} is still missing collider data after patch! colliderType=${s.colliderType}, colliderHalfExtents=${JSON.stringify(s.colliderHalfExtents)}`);
+            }
+        }
     }
 
     // create collision body for a structure (box approximation), scale-aware and oriented

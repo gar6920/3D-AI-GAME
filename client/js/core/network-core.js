@@ -339,6 +339,53 @@ async function initNetworking() {
     return room; // Return the room object on success
 }
 
+// <<< HELPER FUNCTION to add collider >>>
+function tryAddCollider(entityFromServer, clientInstance) {
+    if (!clientInstance || clientInstance._colliderAdded || !clientInstance.modelLoaded || !clientInstance.mesh) {
+        // console.log(`[TryAddCollider ${entityFromServer.id}] Skipping: Instance: ${!!clientInstance}, Added: ${clientInstance?._colliderAdded}, Loaded: ${clientInstance?.modelLoaded}, Mesh: ${!!clientInstance?.mesh}`);
+        return; // Exit if no client instance, collider already added, model not loaded, or no mesh group
+    }
+    
+    // Use data from the server entity object
+    const colliderData = {
+        colliderType: entityFromServer.colliderType,
+        colliderRadius: entityFromServer.colliderRadius,
+        colliderHalfExtents: entityFromServer.colliderHalfExtents ? Array.from(entityFromServer.colliderHalfExtents) : undefined
+    };
+    
+    console.log(`[TryAddCollider ${entityFromServer.id}] Attempting to add collider. Data:`, colliderData, `Client Instance:`, clientInstance);
+    
+    if (typeof window.addSelectionColliderFromEntity === 'function') {
+        // Pass the clientInstance for context, but the SERVER data for collider props
+        // We need to temporarily add the server data to the client instance for the helper
+        const originalData = {
+            colliderType: clientInstance.colliderType,
+            colliderRadius: clientInstance.colliderRadius,
+            colliderHalfExtents: clientInstance.colliderHalfExtents
+        };
+        
+        clientInstance.colliderType = colliderData.colliderType;
+        clientInstance.colliderRadius = colliderData.colliderRadius;
+        clientInstance.colliderHalfExtents = colliderData.colliderHalfExtents;
+        
+        try {
+            window.addSelectionColliderFromEntity(clientInstance, clientInstance.mesh); 
+            clientInstance._colliderAdded = true; // Set flag after successful addition
+            console.log(`[TryAddCollider ${entityFromServer.id}] Collider added successfully.`);
+        } catch (error) {
+             console.error(`[TryAddCollider ${entityFromServer.id}] Error calling addSelectionColliderFromEntity:`, error);
+        } finally {
+             // Restore original data on client instance (if any)
+             clientInstance.colliderType = originalData.colliderType;
+             clientInstance.colliderRadius = originalData.colliderRadius;
+             clientInstance.colliderHalfExtents = originalData.colliderHalfExtents;
+        }
+    } else {
+        console.error(`[TryAddCollider ${entityFromServer.id}] window.addSelectionColliderFromEntity function NOT FOUND!`);
+    }
+}
+// <<< END HELPER >>>
+
 // Setup message handlers
 function setupMessageHandlers() {
     if (!room) return;
@@ -709,6 +756,20 @@ function setupRoomPlayerListeners(room) {
             updatePlayerListUI();
         }
         
+        // <<< TRY ADD COLLIDER for existing players >>>
+        room.state.players.forEach((playerData, sessionId) => {
+            if (sessionId === room.sessionId) { // Local player
+                if (window.playerEntity) {
+                    tryAddCollider(playerData, window.playerEntity);
+                }
+            } else { // Remote player
+                 if (window.otherPlayers && window.otherPlayers[sessionId]) {
+                    tryAddCollider(playerData, window.otherPlayers[sessionId]);
+                 }
+            }
+        });
+        // <<<
+        
         // Listen for player added events
         room.state.players.onAdd = (player, sessionId) => {
             // Skip invalid sessionIds or local player
@@ -720,7 +781,14 @@ function setupRoomPlayerListeners(room) {
             const playerWithId = {...player, sessionId: sessionId};
             
             // Create remote player object
-            createRemotePlayerObject(playerWithId);
+            const remotePlayerInstance = createRemotePlayerObject(playerWithId);
+            
+            // <<< TRY ADD COLLIDER for new remote player >>>
+            if (remotePlayerInstance) {
+                // Need to wait slightly for model to potentially load
+                setTimeout(() => tryAddCollider(player, remotePlayerInstance), 500); 
+            }
+            // <<<
             
             // Update UI
             if (window.playerUI && typeof window.playerUI.updatePlayerListUI === 'function') {
@@ -729,6 +797,27 @@ function setupRoomPlayerListeners(room) {
                 updatePlayerListUI();
             }
         };
+        
+        // <<< TRY ADD COLLIDER for local player on first state change (after playerEntity exists) >>>
+        room.onStateChange.once((state) => {
+             if (window.playerEntity) {
+                const localPlayerData = state.players.get(room.sessionId);
+                if (localPlayerData) {
+                    // Delay slightly to increase chance model is loaded
+                    setTimeout(() => tryAddCollider(localPlayerData, window.playerEntity), 500);
+                }
+             }
+             // Also try for existing NPCs
+             state.entities.forEach((entityData, entityId) => {
+                 if (entityData.entityType === 'npc') {
+                     const npcInstance = NPC.npcs.get(entityId);
+                     if (npcInstance) {
+                         setTimeout(() => tryAddCollider(entityData, npcInstance), 500);
+                     }
+                 }
+             });
+        });
+        // <<<
         
         // Listen for player removed events
         room.state.players.onRemove = (player, sessionId) => {
@@ -853,6 +942,13 @@ async function setupRoomListeners(room) {
             // console.log(`Attempting to create visual for NPC: ${entityId}`);
             if (typeof window.createNpcVisual === 'function') {
                 window.createNpcVisual(entity, entityId);
+                // <<< TRY ADD COLLIDER for new NPC >>>
+                const npcInstance = NPC.npcs.get(entityId);
+                if (npcInstance) {
+                    // Delay slightly for model loading
+                    setTimeout(() => tryAddCollider(entity, npcInstance), 500);
+                }
+                // <<<
             } else {
                 console.warn(`window.createNpcVisual function not found for NPC ${entityId}`);
             }
@@ -895,6 +991,7 @@ async function setupRoomListeners(room) {
     
     room.state.entities.onAdd = (entity, entityId) => {
         console.log(`[NetworkCore onAdd] Received entityId: ${entityId}, entityType: ${entity.entityType}`);
+        console.log(`[NetworkCore onAdd ${entityId}] Collider Data: type=${entity.colliderType}, radius=${entity.colliderRadius}, extents=${entity.colliderHalfExtents?.toArray()}`);
         console.log(`[NetworkCore] Entity added: ID=${entityId}, entityType=${entity.entityType}`);
 
         // Skip adding visual for the local player, handled by GameEngine
@@ -920,6 +1017,13 @@ async function setupRoomListeners(room) {
             // console.log(`Attempting to create visual for NPC: ${entityId}`);
             if (typeof window.createNpcVisual === 'function') {
                 window.createNpcVisual(entity, entityId);
+                // <<< TRY ADD COLLIDER for new NPC >>>
+                const npcInstance = NPC.npcs.get(entityId);
+                if (npcInstance) {
+                    // Delay slightly for model loading
+                    setTimeout(() => tryAddCollider(entity, npcInstance), 500);
+                }
+                // <<<
             } else {
                 console.warn(`window.createNpcVisual function not found for NPC ${entityId}`);
             }
@@ -959,6 +1063,9 @@ async function setupRoomListeners(room) {
     // Listen for entity changes (for existing NPCs)
     if (typeof room.state.entities.onChange === 'function') {
         room.state.entities.onChange = (entity, entityId) => {
+            if (Math.random() < 0.01) {
+                console.log(`[NetworkCore onChange ${entityId}] Collider Data: type=${entity.colliderType}, radius=${entity.colliderRadius}, extents=${entity.colliderHalfExtents?.toArray()}`);
+            }
             if (entity.entityType === 'npc') {
                 const npcInstance = window.NPC?.npcs?.get(entityId);
                 if (npcInstance && npcInstance.mesh) {

@@ -93,6 +93,7 @@ function loadCoreModules() {
     console.log('Loading core modules...');
     const corePath = 'js/core/';
     const coreModules = [
+        'collider-utils.js',
         'Entity.js',
         'Player.js',
         'NPC.js',

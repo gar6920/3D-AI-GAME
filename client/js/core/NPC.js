@@ -326,9 +326,10 @@ class NPC extends Entity {
                 this.playAnimation(initialActionName, 0); // Play immediately, no fade-in
             }
 
-            if(typeof addSelectionColliderFromEntity==='function'){
-                addSelectionColliderFromEntity(this, this.modelPlaceholder);
-            }
+            // <<< SET modelLoaded FLAG >>>
+            this.modelLoaded = true;
+            console.log(`[NPC ${this.id}] Model setup complete (modelLoaded set to true).`);
+            // <<<
 
         }, 
         undefined, // Progress callback (optional)

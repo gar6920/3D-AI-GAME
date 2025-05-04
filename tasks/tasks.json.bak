@@ -1,0 +1,18 @@
+{
+  "tasks": [
+    {
+      "id": 1,
+      "title": "Comprehensive Entity Selection System Implementation",
+      "description": "Implement an entity selection system supporting click and box selection for structures, NPCs, and players across RTS, first-person, and third-person cameras.",
+      "details": "Following the guidelines in selection_implementation_plan.md, architect a modular selection module that integrates with all three camera controllers. Create a unified input handler that routes both single-click and drag-box inputs to a core SelectionManager. Use raycasts in first-/third-person modes and viewport-to-world projections in RTS mode to detect entities. Encapsulate entity eligibility logic in an interface (ISelectable) implemented by structures, NPCs, and player characters. Provide customizable visual feedback (e.g., highlight outlines, bounding box overlays) via Shader and UI layers. Implement client-side provisional selection states and communicate with the server over the existing network API to validate and confirm selections, handling latency and error cases gracefully. Ensure the module hooks into the game’s event system to broadcast selection changes to UI and gameplay subsystems.",
+      "testStrategy": "Unit-test the SelectionManager to verify correct entity detection for clicks and box regions in mock camera scenarios. Write integration tests that simulate user input across RTS, first-/third-person views and assert that ISelectable targets receive selection events. Create automated playtests to validate visual feedback appears and updates correctly upon selection/deselection. Conduct multiplayer tests with a local server to ensure client-server selection validation succeeds and that invalid selections are properly rejected. Perform edge-case tests for overlapping entities, rapid input sequences, and camera transitions to confirm robustness.",
+      "status": "pending",
+      "dependencies": [],
+      "priority": "medium",
+      "subtasks": []
+    }
+  ],
+  "version": "1.0.0",
+  "projectName": "3D AI Game",
+  "lastUpdated": "2024-04-19T00:00:00Z"
+}

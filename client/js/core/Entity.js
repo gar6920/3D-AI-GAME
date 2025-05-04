@@ -1,7 +1,7 @@
 // 3D AI Game Platform - Base Entity class for all game entities
 
 class Entity {
-    constructor({id, name, value, color, x, y, z, rotationY, type, modelId, scale}) {
+    constructor({id, name, value, color, x, y, z, rotationY, type, modelId, scale, colliderType, colliderRadius, colliderHalfExtents}) {
         this.id = id;
         this.name = name || id;
         this.value = value || 1;
@@ -13,6 +13,13 @@ class Entity {
         this.y = (y !== undefined) ? y : 1; // FIX: Use provided y if defined, otherwise default to 1
         this.z = z || 0;
         this.rotationY = rotationY || 0;
+        
+        // <<< Store collider properties >>>
+        this.colliderType = colliderType;
+        this.colliderRadius = colliderRadius;
+        // Note: Colyseus ArraySchema needs conversion if used directly
+        this.colliderHalfExtents = colliderHalfExtents ? Array.from(colliderHalfExtents) : undefined; 
+        // <<<
         
         // Initialize THREE.Vector3 position *before* calling createMesh
         this.position = new THREE.Vector3(this.x, this.y, this.z);
@@ -31,7 +38,13 @@ class Entity {
         // Add to scene
         if (window.scene) {
             window.scene.add(this.mesh);
-            // console.log(`[Entity ${this.id}] Added mesh group (ID: ${this.mesh.id}) to scene.`);
+            // Ensure a selection collider is created for this entity
+            if (typeof window.addSelectionColliderFromEntity === 'function') {
+                window.addSelectionColliderFromEntity(this, this.mesh);
+                // console.log(`[Entity ${this.id}] Selection collider added during scene addition.`);
+            } else {
+                console.warn(`[Entity ${this.id}] window.addSelectionColliderFromEntity function not available during scene addition.`);
+            }
         } else {
             console.warn(`[Entity ${this.id}] window.scene not available during constructor.`);
         }
@@ -64,6 +77,23 @@ class Entity {
                         const bbox = new THREE.Box3().setFromObject(group);
                         this.boundingBox = bbox;
                         // console.log(`[Entity ${this.id}] Bounding box computed: min${bbox.min.toArray()}, max${bbox.max.toArray()}`);
+
+                        // <<< Call helper to add the selection collider AFTER model is loaded >>>
+                        // <<< Use window. prefix for check and call >>>
+                        if (typeof window.addSelectionColliderFromEntity === 'function') { 
+                            // <<< Log before calling the helper >>>
+                            console.log(`[Entity ${this.id}] BEFORE calling addSelectionCollider. Entity Data: type=${this.colliderType}, radius=${this.colliderRadius}, extents=${JSON.stringify(this.colliderHalfExtents)}. Parent Group:`, group);
+                            if (!group || typeof group.add !== 'function') {
+                                console.error(`[Entity ${this.id}] Invalid parent group passed to addSelectionCollider!`);
+                            }
+                            // <<<
+                            // <<< Pass entity and the group >>>
+                            window.addSelectionColliderFromEntity(this, group); 
+                        } else {
+                            // <<< Log explicit error >>>
+                            console.error(`[Entity ${this.id}] window.addSelectionColliderFromEntity function NOT FOUND!`); 
+                        }
+                        // <<<
 
                         // Apply portal shaders for city_dome_150
                         if (this.modelId === 'city_dome_150') {
@@ -119,7 +149,33 @@ class Entity {
             // mesh.position.copy(this.position);
             // mesh.rotation.y = this.rotationY;
             mesh.userData.entity = this;
-            return mesh;
+
+            // <<< Add collider for placeholder mesh as well >>>
+            const group = new THREE.Group(); // Use a group even for placeholder for consistency
+            group.add(mesh);
+            group.userData.entity = this;
+            
+            // Compute and store bounding box collider
+            const bbox = new THREE.Box3().setFromObject(group);
+            this.boundingBox = bbox;
+
+            // <<< Use window. prefix for check and call >>>
+            if (typeof window.addSelectionColliderFromEntity === 'function') { 
+                 // <<< Log before calling the helper (placeholder) >>>
+                 console.log(`[Entity ${this.id}] BEFORE calling addSelectionCollider (placeholder). Entity Data: type=${this.colliderType}, radius=${this.colliderRadius}, extents=${JSON.stringify(this.colliderHalfExtents)}. Parent Group:`, group);
+                 if (!group || typeof group.add !== 'function') {
+                     console.error(`[Entity ${this.id}] Invalid parent group passed to addSelectionCollider (placeholder)!`);
+                 }
+                 // <<<
+                 // <<< Pass entity and the group >>>
+                 window.addSelectionColliderFromEntity(this, group);
+            } else {
+                 // <<< Log explicit error >>>
+                 console.error(`[Entity ${this.id}] window.addSelectionColliderFromEntity function NOT FOUND for placeholder!`); 
+            }
+            // <<<
+            
+            return group; // <<< Return the group
         }
     }
 
