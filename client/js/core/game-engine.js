@@ -2525,23 +2525,181 @@ function getEntityFromIntersect(intersectObj) {
     return null;
 }
 
-// <<< ADDED >>>
 // Function to update the visibility of all selection colliders
 window.updateColliderVisibility = function() {
     const visibility = window.showSelectionColliders;
     console.log(`Setting collider visibility to: ${visibility}`);
+    
+    // Add counters to track different types of colliders
+    let playerColliders = 0;
+    let npcColliders = 0;
+    let structureColliders = 0;
+    let otherColliders = 0;
+    
     window.scene.traverse(obj => {
         // Check specifically for the flag added by addSelectionColliderFromEntity
         if (obj.userData && obj.userData.isCollider === true) { 
-            // <<< Log when a collider is found >>>
-            console.log(`[UpdateVisibility] Found collider (UUID: ${obj.uuid}, Visible: ${obj.visible}) for entity: ${obj.userData.entity?.id}. Setting visibility to: ${visibility}`);
-            // <<<
+            // Track the entity type
+            const entityType = obj.userData.entity?.type || 'unknown';
+            const entityId = obj.userData.entity?.id || 'unknown';
+            
+            // Set visibility based on global setting
             obj.visible = visibility;
-            // Optional: Log the entity ID for confirmation
-            // if (obj.userData.entity) {
-            //     console.log(`  - Collider for ${obj.userData.entity.id}: ${visibility}`);
-            // }
+            
+            // Count collider types
+            if (entityType === 'player' || obj.userData.entity?._isPlayer) {
+                playerColliders++;
+            } else if (entityType === 'npc') {
+                npcColliders++;
+            } else if (entityType === 'entity') {
+                structureColliders++;
+                console.log(`[UpdateVisibility] Structure collider for entity: ${entityId}, UUID: ${obj.uuid}, Type: ${entityType}, Now visible: ${obj.visible}`);
+            } else {
+                otherColliders++;
+            }
         }
     });
+    
+    // Log summary of colliders found
+    console.log(`[UpdateVisibility] Collider counts - Players: ${playerColliders}, NPCs: ${npcColliders}, Structures: ${structureColliders}, Other: ${otherColliders}`);
 };
-// <<< END ADDED >>>
+
+// <<< ADD THIS: Function to toggle collider visibility >>>
+// Make sure we register a keyboard listener for toggling colliders if not already done
+if (!window._colliderToggleListenerAdded) {
+    window._colliderToggleListenerAdded = true;
+    
+    window.toggleColliderVisibility = function() {
+        // Toggle the global flag
+        window.showSelectionColliders = !window.showSelectionColliders;
+        console.log(`[ColliderToggle] Toggling collider visibility to: ${window.showSelectionColliders}`);
+        
+        // Force structure collider update - this helps ensure all entity types are handled
+        if (window.visuals && window.visuals.staticEntities) {
+            console.log(`[ColliderToggle] Checking ${Object.keys(window.visuals.staticEntities).length} structure entities`);
+            
+            // Loop through all static entities and force collider refresh
+            Object.values(window.visuals.staticEntities).forEach(entity => {
+                if (entity && entity.mesh) {
+                    // Try to find collider within this entity's mesh hierarchy
+                    entity.mesh.traverse(child => {
+                        if (child.userData && child.userData.isCollider) {
+                            child.visible = window.showSelectionColliders;
+                            console.log(`[ColliderToggle] Explicitly set structure ${entity.id} collider to ${child.visible}`);
+                        }
+                    });
+                }
+            });
+        }
+        
+        // Update all colliders using the standard function
+        window.updateColliderVisibility();
+    };
+    
+    // Explicitly register with inputManager if available, or add a direct key listener
+    if (window.inputManager && typeof window.inputManager.on === 'function') {
+        window.inputManager.on('keydown', (event) => {
+            if (event.code === 'KeyH') {
+                window.toggleColliderVisibility();
+            }
+        });
+        console.log("[ColliderToggle] Registered 'H' key handler with InputManager");
+    } else {
+        // Fallback to direct document listener
+        document.addEventListener('keydown', (event) => {
+            if (event.code === 'KeyH') {
+                window.toggleColliderVisibility();
+            }
+        });
+        console.log("[ColliderToggle] Added direct 'H' key listener (InputManager not available)");
+    }
+}
+// <<< END ADDED CODE >>>
+
+// <<< ADD THIS: Debug function specifically for structure colliders >>>
+if (!window._structureColliderDebugAdded) {
+    window._structureColliderDebugAdded = true;
+    
+    // Function to highlight structure colliders with bright colors and larger size
+    window.debugStructureColliders = function() {
+        console.log("[StructureColliderDebug] Starting structure collider debug mode");
+        
+        // Force all colliders to be visible first
+        window.showSelectionColliders = true;
+        window.updateColliderVisibility();
+        
+        // Find all structure entities
+        let structureCount = 0;
+        let colliderCount = 0;
+        
+        if (window.visuals && window.visuals.staticEntities) {
+            console.log(`[StructureColliderDebug] Found ${Object.keys(window.visuals.staticEntities).length} structure entities to check`);
+            
+            // Loop through each structure entity
+            Object.values(window.visuals.staticEntities).forEach(entity => {
+                if (!entity || !entity.mesh) return;
+                structureCount++;
+                
+                // First, check if there's already a collider
+                let existingCollider = null;
+                entity.mesh.traverse(child => {
+                    if (child.userData && child.userData.isCollider) {
+                        existingCollider = child;
+                        colliderCount++;
+                    }
+                });
+                
+                if (existingCollider) {
+                    // Make existing collider super visible
+                    existingCollider.material.color.set(0xff00ff); // Bright magenta
+                    existingCollider.material.wireframe = true;
+                    existingCollider.material.opacity = 1.0;
+                    existingCollider.material.transparent = true;
+                    existingCollider.material.depthTest = false;
+                    existingCollider.renderOrder = 9999;
+                    existingCollider.visible = true;
+                    
+                    // Make it slightly larger
+                    existingCollider.scale.set(1.05, 1.05, 1.05);
+                    
+                    console.log(`[StructureColliderDebug] Enhanced existing collider for entity: ${entity.id}`);
+                } else {
+                    // If no collider exists, create a special debug one
+                    console.log(`[StructureColliderDebug] No collider found for entity: ${entity.id}, creating debug collider`);
+                    
+                    // Force create a new debug collider by calling addSelectionColliderFromEntity
+                    // First, ensure needed properties exist
+                    if (!entity.colliderType) entity.colliderType = 'box';
+                    if (!entity.colliderHalfExtents) entity.colliderHalfExtents = [1, 1, 1];
+                    
+                    // Try to add a new debug collider
+                    if (typeof window.addSelectionColliderFromEntity === 'function') {
+                        window.addSelectionColliderFromEntity(entity, entity.mesh);
+                        console.log(`[StructureColliderDebug] Attempted to create debug collider for: ${entity.id}`);
+                    }
+                }
+            });
+        }
+        
+        console.log(`[StructureColliderDebug] Processed ${structureCount} structures, found ${colliderCount} existing colliders`);
+    };
+    
+    // Register J key to trigger structure collider debug mode
+    if (window.inputManager && typeof window.inputManager.on === 'function') {
+        window.inputManager.on('keydown', (event) => {
+            if (event.code === 'KeyJ') {
+                window.debugStructureColliders();
+            }
+        });
+        console.log("[StructureColliderDebug] Registered 'J' key handler with InputManager");
+    } else {
+        // Fallback to direct document listener
+        document.addEventListener('keydown', (event) => {
+            if (event.code === 'KeyJ') {
+                window.debugStructureColliders();
+            }
+        });
+        console.log("[StructureColliderDebug] Added direct 'J' key listener (InputManager not available)");
+    }
+}
+// <<< END ADDED CODE >>>

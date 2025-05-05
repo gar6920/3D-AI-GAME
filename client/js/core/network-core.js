@@ -1249,6 +1249,13 @@ function loadAndAddStaticEntity(entity, entityId) {
         // Store the full entity instance, not just the mesh, for collider access and toggling
         window.visuals.staticEntities[entityId] = entityInstance;
         console.log(`[loadAndAddStaticEntity] ${entityId} added to scene and visuals using EntityFactory. [Full entity instance stored]`);
+
+        // <<< ADD THIS: Explicitly add collider with delay for structure entities >>>
+        setTimeout(() => {
+            tryAddCollider(entity, entityInstance);
+            console.log(`[loadAndAddStaticEntity] Delayed collider creation attempted for ${entityId}`);
+        }, 500);
+        // <<< END ADDED CODE >>>
     } else {
         console.error(`[loadAndAddStaticEntity] Failed to create or add mesh for ${entityId}.`);
     }

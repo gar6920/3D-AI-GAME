@@ -6,7 +6,7 @@ class Entity {
         this.name = name || id;
         this.value = value || 1;
         this.color = color; 
-        this.type = type; // Type of visual representation
+        this.type = type || 'entity'; // Type of visual representation
         this.modelId = modelId; // <-- assign modelId
         this.scale = scale;     // <-- assign scale
         this.x = x || 0;
@@ -15,10 +15,10 @@ class Entity {
         this.rotationY = rotationY || 0;
         
         // <<< Store collider properties >>>
-        this.colliderType = colliderType;
-        this.colliderRadius = colliderRadius;
+        this.colliderType = colliderType || 'box'; // Default to box if not specified
+        this.colliderRadius = colliderRadius || 1;
         // Note: Colyseus ArraySchema needs conversion if used directly
-        this.colliderHalfExtents = colliderHalfExtents ? Array.from(colliderHalfExtents) : undefined; 
+        this.colliderHalfExtents = colliderHalfExtents ? Array.from(colliderHalfExtents) : [1, 1, 1]; 
         // <<<
         
         // Initialize THREE.Vector3 position *before* calling createMesh
@@ -38,13 +38,13 @@ class Entity {
         // Add to scene
         if (window.scene) {
             window.scene.add(this.mesh);
-            // Ensure a selection collider is created for this entity
-            if (typeof window.addSelectionColliderFromEntity === 'function') {
-                window.addSelectionColliderFromEntity(this, this.mesh);
-                // console.log(`[Entity ${this.id}] Selection collider added during scene addition.`);
-            } else {
-                console.warn(`[Entity ${this.id}] window.addSelectionColliderFromEntity function not available during scene addition.`);
-            }
+            // --- Force collider creation for ALL entities (players, NPCs, structures, etc.) ---
+            this.createEntityCollider(); // Create initial collider
+            
+            // Schedule another collider creation attempt after a delay
+            setTimeout(() => {
+                this.createEntityCollider(true); // true = retry attempt
+            }, 1000); // Longer delay to ensure model is loaded
         } else {
             console.warn(`[Entity ${this.id}] window.scene not available during constructor.`);
         }
@@ -61,6 +61,10 @@ class Entity {
             group.userData.entity = this;
             if (!THREE.GLTFLoader) {
                 console.warn(`[Entity ${this.id}] THREE.GLTFLoader not available; using placeholder group for ${modelPath}`);
+                // Add collider immediately to placeholder
+                if (typeof window.addSelectionColliderFromEntity === 'function') {
+                    window.addSelectionColliderFromEntity(this, group);
+                }
             } else {
                 // console.log(`[Entity ${this.id}] Loading model: ${modelPath}`);
                 const loader = new THREE.GLTFLoader();
@@ -76,25 +80,21 @@ class Entity {
                         // Compute and store bounding box collider
                         const bbox = new THREE.Box3().setFromObject(group);
                         this.boundingBox = bbox;
-                        // console.log(`[Entity ${this.id}] Bounding box computed: min${bbox.min.toArray()}, max${bbox.max.toArray()}`);
-
-                        // <<< Call helper to add the selection collider AFTER model is loaded >>>
-                        // <<< Use window. prefix for check and call >>>
-                        if (typeof window.addSelectionColliderFromEntity === 'function') { 
-                            // <<< Log before calling the helper >>>
-                            console.log(`[Entity ${this.id}] BEFORE calling addSelectionCollider. Entity Data: type=${this.colliderType}, radius=${this.colliderRadius}, extents=${JSON.stringify(this.colliderHalfExtents)}. Parent Group:`, group);
-                            if (!group || typeof group.add !== 'function') {
-                                console.error(`[Entity ${this.id}] Invalid parent group passed to addSelectionCollider!`);
-                            }
-                            // <<<
-                            // <<< Pass entity and the group >>>
-                            window.addSelectionColliderFromEntity(this, group); 
-                        } else {
-                            // <<< Log explicit error >>>
-                            console.error(`[Entity ${this.id}] window.addSelectionColliderFromEntity function NOT FOUND!`); 
+                        
+                        // Auto-compute collider dimensions if not provided
+                        if (!this.colliderHalfExtents || this.colliderHalfExtents[0] <= 0) {
+                            const size = new THREE.Vector3();
+                            bbox.getSize(size);
+                            this.colliderHalfExtents = [size.x/2, size.y/2, size.z/2];
+                            console.log(`[Entity ${this.id}] Computed collider dimensions from model: ${JSON.stringify(this.colliderHalfExtents)}`);
                         }
-                        // <<<
-
+                        
+                        // Add collider after model is loaded
+                        this.createEntityCollider();
+                        
+                        // Mark model as loaded for later reference
+                        this.modelLoaded = true;
+                        
                         // Apply portal shaders for city_dome_150
                         if (this.modelId === 'city_dome_150') {
                             const fileLoader = new THREE.FileLoader();
@@ -159,23 +159,68 @@ class Entity {
             const bbox = new THREE.Box3().setFromObject(group);
             this.boundingBox = bbox;
 
-            // <<< Use window. prefix for check and call >>>
-            if (typeof window.addSelectionColliderFromEntity === 'function') { 
-                 // <<< Log before calling the helper (placeholder) >>>
-                 console.log(`[Entity ${this.id}] BEFORE calling addSelectionCollider (placeholder). Entity Data: type=${this.colliderType}, radius=${this.colliderRadius}, extents=${JSON.stringify(this.colliderHalfExtents)}. Parent Group:`, group);
-                 if (!group || typeof group.add !== 'function') {
-                     console.error(`[Entity ${this.id}] Invalid parent group passed to addSelectionCollider (placeholder)!`);
-                 }
-                 // <<<
-                 // <<< Pass entity and the group >>>
-                 window.addSelectionColliderFromEntity(this, group);
-            } else {
-                 // <<< Log explicit error >>>
-                 console.error(`[Entity ${this.id}] window.addSelectionColliderFromEntity function NOT FOUND for placeholder!`); 
-            }
-            // <<<
+            // Set model as loaded since we're using a placeholder
+            this.modelLoaded = true;
             
             return group; // <<< Return the group
+        }
+    }
+    
+    // New helper method to standardize collider creation with better logging
+    createEntityCollider(isRetry = false) {
+        const retryMsg = isRetry ? " (RETRY)" : "";
+        try {
+            console.log(`[Entity ${this.id}] Creating collider${retryMsg} for ${this.type || 'entity'} - Type: ${this.colliderType}`);
+            
+            if (typeof window.addSelectionColliderFromEntity !== 'function') {
+                console.error(`[Entity ${this.id}] window.addSelectionColliderFromEntity function NOT FOUND!${retryMsg}`);
+                return;
+            }
+            
+            // Ensure we have valid collider data
+            if (!this.colliderType) this.colliderType = 'box';
+            if (this.colliderType === 'box' && (!this.colliderHalfExtents || this.colliderHalfExtents[0] <= 0)) {
+                this.colliderHalfExtents = [1, 1, 1];
+            }
+            if (this.colliderType === 'sphere' && (!this.colliderRadius || this.colliderRadius <= 0)) {
+                this.colliderRadius = 1;
+            }
+            
+            // Check if a collider already exists
+            let existingCollider = false;
+            this.mesh.traverse(child => {
+                if (child.userData && child.userData.isCollider) {
+                    existingCollider = true;
+                }
+            });
+            
+            if (existingCollider) {
+                console.log(`[Entity ${this.id}] Collider already exists, skipping creation${retryMsg}`);
+                return;
+            }
+            
+            // Create the collider
+            window.addSelectionColliderFromEntity(this, this.mesh);
+            
+            // Add special flag for identity via tryAddCollider
+            this._colliderAdded = true;
+            
+            // Verify collider was added
+            setTimeout(() => {
+                let colliderFound = false;
+                this.mesh.traverse(child => {
+                    if (child.userData && child.userData.isCollider) {
+                        colliderFound = true;
+                        console.log(`[Entity ${this.id}] Collider created successfully${retryMsg} - ID: ${child.uuid}`);
+                    }
+                });
+                
+                if (!colliderFound) {
+                    console.warn(`[Entity ${this.id}] Collider creation may have failed${retryMsg} - no collider found in hierarchy`);
+                }
+            }, 100);
+        } catch (error) {
+            console.error(`[Entity ${this.id}] Error creating collider${retryMsg}:`, error);
         }
     }
 
