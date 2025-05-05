@@ -58,19 +58,15 @@ create_electric_grid_dome(100)  # Generates a 100-radius dome
 - **Collider/Visual Sync:**
   - Always ensure the exported mesh and the collider definition in `structures.js` use the same radius and center.
 - **Performance:**
-  - Large domes with high segment counts or complex shaders may be GPU-intensive. If performance is an issue, lower segment counts or optimize the mesh/material.
 
----
+this.state.structures.set(structure.id, structure);
+this._createStructureBody(structure);
+```
 
-## Next Steps / TODO
-- **Refactor sphere city wall creation:**
-  - Explore more advanced electrical/effects, possibly with animated or procedural geometry/textures.
-  - Consider in-game shader animation for real-time flicker or energy movement.
-  - Maintain parametric (radius-based) workflow so size can be adjusted on the fly, with colliders and effects always in sync.
-- **Shader Integration Pipeline:**
-  - Extended server `StructureDefinition` to include `vertexShaderPath`/`fragmentShaderPath` and sync to clients.
-  - Updated `network-core.js` (`loadAndAddStaticEntity`) to pass shader paths into `Entity` constructor for static structures.
-  - Enhanced `BuildingModeManager.createStructureInWorld` to inject shader paths for dynamically placed structures.
+## Key Principles
+- **No collider/physics logic in schema/model files.**
+- **Collider setup is always immediately after state addition.**
+- **Consistent, modular, and maintainable for all entity types.**
   - Enhanced `Entity.createMesh()` to load GLSL files and apply a `ShaderMaterial` (with animated `time` uniform).
 - **Pipeline Next Steps:**
   - Generalize shader application for all models purely via `structures.js`; remove model-specific hacks.

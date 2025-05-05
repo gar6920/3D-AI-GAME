@@ -610,14 +610,20 @@ class BaseRoom extends Room {
     onJoin(client, options) {
         console.log(`Client joined: ${client.sessionId}`);
         
-        // Create a new player instance
+        // Load player definitions from modular file (like npcs/structures)
+        const playerDefs = require('../implementations/default/player');
+        // For now, use 'player1' as the template (can be extended for multiple types/skins)
+        const basePlayerDef = playerDefs.player1 || {};
+
+        // Create a new player instance and apply modular definition
         const player = new Player();
-        
+        Object.assign(player, basePlayerDef);
+
         // Allocate starting credits (dynamic value may change later)
         const startingCredits = 5;
         player.credits = startingCredits;
         this.state.cityCredits -= startingCredits;
-        
+
         // Spawn player just outside the city building
         const city = this.state.structures.get('city_building_center');
         if (city) {
@@ -634,17 +640,22 @@ class BaseRoom extends Room {
             player.y = 1;
             player.z = mapSize;
         }
-        
-        // Set session ID as player ID
+
+        // Set session ID as player ID (overrides any default)
         player.id = client.sessionId;
-        
+
         // Allow subclasses to modify player setup
         this.setupPlayer(player, client, options);
-        
+
         // Add player to the game state
         this.state.players.set(client.sessionId, player);
+
+        // --- NEW: Create collider and physics body for player (analogous to NPCs/structures) ---
+        if (typeof this._createEntityBody === 'function') {
+            this._createEntityBody(player);
+        }
     }
-    
+
     /**
      * Player setup - to be implemented by subclasses
      * @param {Player} player The player object

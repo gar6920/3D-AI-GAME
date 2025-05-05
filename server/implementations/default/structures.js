@@ -28,9 +28,7 @@ const structureDefinitions = [
     rotationY: 0,
     scale: 1,
     buildable: false,
-    collision: {
-      sphere: { radius: 150 }
-    },
+    colliderType: "mesh",
     isStatic: true
   },
   {

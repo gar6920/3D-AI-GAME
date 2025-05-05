@@ -296,57 +296,12 @@ class BaseGameRoom extends BaseRoom {
         this.physicsWorld = new Ammo.btDiscreteDynamicsWorld(dispatcher, broadphase, solver, config);
         this.physicsWorld.setGravity(new Ammo.btVector3(0, -9.8, 0));
         this._rigidBodies = new Map();
-        // --- Auto-collider: Scan all models and cache collider data ---
+        // --- Collider utility ---
+        const { createColliderForEntity } = require('./colliderFactory');
         const io = new NodeIO();
-        const fs = require('fs');
-        const modelsDir = path.resolve(process.cwd(), 'client', 'assets', 'models');
         const colliderCache = {};
-        // Find all .glb files in the models directory
-        const modelFiles = fs.readdirSync(modelsDir).filter(f => f.endsWith('.glb'));
-        for (const modelFile of modelFiles) {
-            try {
-                const filePath = path.join(modelsDir, modelFile);
-                const document = await io.read(filePath);
-                const root = document.getRoot();
-                let minX = Infinity, minY = Infinity, minZ = Infinity;
-                let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-                root.listMeshes().forEach(mesh => {
-                    mesh.listPrimitives().forEach(prim => {
-                        const pos = prim.getAttribute('POSITION').getArray();
-                        for (let i = 0; i < pos.length; i += 3) {
-                            const x = pos[i], y = pos[i+1], z = pos[i+2];
-                            if (x < minX) minX = x; if (y < minY) minY = y; if (z < minZ) minZ = z;
-                            if (x > maxX) maxX = x; if (y > maxY) maxY = y; if (z > maxZ) maxZ = z;
-                        }
-                    });
-                });
-                colliderCache[modelFile] = { minX, minY, minZ, maxX, maxY, maxZ };
-                console.log(`[BaseGameRoom] Cached auto-collider for model ${modelFile}`);
-            } catch (e) {
-                console.warn(`[BaseGameRoom] Auto-collider failed for model ${modelFile}: ${e.message}`);
-            }
-        }
-        // Assign cached collider data to each structure definition
-        for (const def of this._staticStructDefs) {
-            if (!def.modelPath) continue;
-            const modelFile = def.modelPath.split('/').pop();
-            const cached = colliderCache[modelFile];
-            if (!cached) {
-                console.warn(`[BaseGameRoom] No collider cached for ${def.id} (${modelFile})`);
-                continue;
-            }
-            const { minX, minY, minZ, maxX, maxY, maxZ } = cached;
-            const sizeX = (maxX - minX) * def.scale;
-            const sizeY = (maxY - minY) * def.scale;
-            const sizeZ = (maxZ - minZ) * def.scale;
-            def.collision = def.collision || {};
-            def.collision.halfExtents = { x: sizeX/2, y: sizeY/2, z: sizeZ/2 };
-            def.position = def.position || {};
-            def.position.x = (def.position.x || 0) + ((minX + maxX)/2) * def.scale;
-            def.position.y = (def.position.y || 0) + ((minY + maxY)/2) * def.scale;
-            def.position.z = (def.position.z || 0) + ((minZ + maxZ)/2) * def.scale;
-            console.log(`[BaseGameRoom] Auto-collider for ${def.id} (model: ${modelFile}): halfExtents(${def.collision.halfExtents.x},${def.collision.halfExtents.y},${def.collision.halfExtents.z})`);
-        }
+        // Structures will call createColliderForEntity below
+
         // create a static ground plane at y=0
         const groundShape = new Ammo.btStaticPlaneShape(new Ammo.btVector3(0,1,0), 0);
         const groundTransform = new Ammo.btTransform();
@@ -360,43 +315,23 @@ class BaseGameRoom extends BaseRoom {
         this._rigidBodies.set('ground', groundBody);
         // create static structure bodies
         for (const def of this._staticStructDefs) {
-            if (def.id === 'city_dome_150') {
-                // triangle-mesh collider for dome
-                try {
-                    const filename = def.modelPath.split('/').pop();
-                    const filePath = path.join(process.cwd(), 'client', 'assets', 'models', filename);
-                    const document = await io.read(filePath);
-                    const triMesh = new Ammo.btTriangleMesh();
-                    document.getRoot().listMeshes().forEach(mesh => {
-                        mesh.listPrimitives().forEach(prim => {
-                            const pos = prim.getAttribute('POSITION').getArray();
-                            const idx = prim.getIndices().getArray();
-                            for (let i = 0; i < idx.length; i += 3) {
-                                const a = idx[i] * 3, b = idx[i+1] * 3, c = idx[i+2] * 3;
-                                triMesh.addTriangle(
-                                    new Ammo.btVector3(pos[a], pos[a+1], pos[a+2]),
-                                    new Ammo.btVector3(pos[b], pos[b+1], pos[b+2]),
-                                    new Ammo.btVector3(pos[c], pos[c+1], pos[c+2]),
-                                    true
-                                );
-                            }
-                        });
-                    });
-                    const shape = new Ammo.btBvhTriangleMeshShape(triMesh, true, true);
-                    const transform = new Ammo.btTransform(); transform.setIdentity();
-                    transform.setOrigin(new Ammo.btVector3(def.position.x, def.position.y, def.position.z));
+            createColliderForEntity(def, Ammo, io, colliderCache)
+                .then(shape => {
+                    const transform = new Ammo.btTransform();
+                    transform.setIdentity();
+                    const px = def.position?.x ?? def.x ?? 0;
+                    const py = def.position?.y ?? def.y ?? 0;
+                    const pz = def.position?.z ?? def.z ?? 0;
+                    transform.setOrigin(new Ammo.btVector3(px, py, pz));
                     const motion = new Ammo.btDefaultMotionState(transform);
                     const info = new Ammo.btRigidBodyConstructionInfo(0, motion, shape, new Ammo.btVector3(0,0,0));
                     const body = new Ammo.btRigidBody(info);
                     this.physicsWorld.addRigidBody(body);
                     this._rigidBodies.set(def.id, body);
-                } catch (e) {
-                    console.error(`[BaseGameRoom] Dome mesh collider failed: ${e}`);
-                    this._createStructureBody(def);
-                }
-                continue;
-            }
-            this._createStructureBody(def);
+                })
+                .catch(e => {
+                    console.error(`[BaseGameRoom] Collider creation failed for ${def.id}: ${e}`);
+                });
         }
         // create dynamic NPC bodies
         for (const id of this.spawnedNPCs) {
@@ -462,89 +397,47 @@ class BaseGameRoom extends BaseRoom {
         transform.setOrigin(new Ammo.btVector3(px, py, pz));
         const motion = new Ammo.btDefaultMotionState(transform);
         const info = new Ammo.btRigidBodyConstructionInfo(0, motion, shape, new Ammo.btVector3(0,0,0));
+
         const body = new Ammo.btRigidBody(info);
         this.physicsWorld.addRigidBody(body);
         this._rigidBodies.set(def.id, body);
     }
 
-    // sphere collider for NPC/entity
-    _createEntityBody(entity) {
-        if (entity._isCityArchitect) {
-            // Skip physics for City Architect to avoid collider blockage
-            return;
-        }
+    async _createEntityBody(entity) {
         const Ammo = this.Ammo;
-        const shape = new Ammo.btSphereShape(entity.scale);
-        const transform = new Ammo.btTransform(); transform.setIdentity();
-        transform.setOrigin(new Ammo.btVector3(entity.x, entity.y, entity.z));
-        // Determine mass: static blocks and sharks get mass=0 (no gravity), others dynamic
-        const mass = (entity.entityType === 'entity' || (entity.behavior && entity.behavior.name === 'sharkBehavior')) ? 0 : 1;
-        const inertia = new Ammo.btVector3(0,0,0);
-        if (mass > 0) {
-            shape.calculateLocalInertia(mass, inertia);
-        }
-        const motion = new Ammo.btDefaultMotionState(transform);
-        const info = new Ammo.btRigidBodyConstructionInfo(mass, motion, shape, inertia);
-        const body = new Ammo.btRigidBody(info);
-        // remove dynamic friction and lock rotation
-        body.setFriction(0);
-        body.setRollingFriction(0);
-        body.setAngularFactor(new Ammo.btVector3(0,0,0));
-        // disable deactivation so it never sleeps
-        body.setActivationState(4);
-        this.physicsWorld.addRigidBody(body);
-        this._rigidBodies.set(entity.id, body);
-
-        // Populate collider details for clients
-        entity.colliderType = "sphere";
-        entity.colliderRadius = entity.scale;
-        if (entity.colliderHalfExtents && entity.colliderHalfExtents.length) {
-            entity.colliderHalfExtents.splice(0, entity.colliderHalfExtents.length);
-        }
-    }
-
-    // sphere collider for players
-    _createPlayerBody(player) {
-        const Ammo = this.Ammo;
-        const shape = new Ammo.btSphereShape(player.scale || 1);
-        const transform = new Ammo.btTransform(); transform.setIdentity();
-        transform.setOrigin(new Ammo.btVector3(player.x, player.y, player.z));
-        const inertia = new Ammo.btVector3(0,0,0);
-        shape.calculateLocalInertia(1, inertia);
-        const motion = new Ammo.btDefaultMotionState(transform);
-        const info = new Ammo.btRigidBodyConstructionInfo(1, motion, shape, inertia);
-        const body = new Ammo.btRigidBody(info);
-        // remove dynamic friction and lock rotation
-        body.setFriction(0);
-        body.setRollingFriction(0);
-        body.setAngularFactor(new Ammo.btVector3(0,0,0));
-        // disable deactivation so it never sleeps
-        body.setActivationState(4);
-        this.physicsWorld.addRigidBody(body);
-        this._rigidBodies.set(player.id, body);
-
-        // Collider info for clients
-        player.colliderType = "sphere";
-        player.colliderRadius = player.scale || 1;
-        if (player.colliderHalfExtents && player.colliderHalfExtents.length) {
-            player.colliderHalfExtents.splice(0, player.colliderHalfExtents.length);
-        }
-    }
-
-    // add player physics body on join
-    onJoin(client, options) {
-        super.onJoin(client, options);
-        const player = this.state.players.get(client.sessionId);
-        if (player && this.physicsWorld) this._createPlayerBody(player);
-    }
-
-    // remove physics body on leave
-    onLeave(client) {
-        super.onLeave(client);
-        const body = this._rigidBodies.get(client.sessionId);
-        if (body) {
-            this.physicsWorld.removeRigidBody(body);
-            this._rigidBodies.delete(client.sessionId);
+        const { createColliderForEntity } = require('./colliderFactory');
+        const io = new (require('@gltf-transform/core').NodeIO)();
+        const colliderCache = this._colliderCache || (this._colliderCache = {});
+        // Default to sphere collider for NPCs if not set
+        if (!entity.colliderType) entity.colliderType = 'sphere';
+        try {
+            const shape = await createColliderForEntity(entity, Ammo, io, colliderCache);
+            const transform = new Ammo.btTransform(); transform.setIdentity();
+            transform.setOrigin(new Ammo.btVector3(entity.x, entity.y, entity.z));
+            // Determine mass: static blocks and sharks get mass=0 (no gravity), others dynamic
+            const isStatic = entity.entityType === 'static' || entity.entityType === 'structure' || entity.isStatic;
+            const mass = isStatic ? 0 : 1;
+            const inertia = new Ammo.btVector3(0,0,0);
+            if (mass > 0) shape.calculateLocalInertia(mass, inertia);
+            const motion = new Ammo.btDefaultMotionState(transform);
+            const info = new Ammo.btRigidBodyConstructionInfo(mass, motion, shape, inertia);
+            const body = new Ammo.btRigidBody(info);
+            // remove dynamic friction and lock rotation
+            body.setFriction(0);
+            body.setRollingFriction(0);
+            body.setAngularFactor(new Ammo.btVector3(0,0,0));
+            // disable deactivation so it never sleeps
+            body.setActivationState(4);
+            this.physicsWorld.addRigidBody(body);
+            this._rigidBodies.set(entity.id, body);
+            // Populate collider details for clients
+            entity.colliderType = entity.colliderType || 'sphere';
+            entity.colliderRadius = entity.scale;
+            if (entity.colliderHalfExtents && entity.colliderHalfExtents.length) {
+                entity.colliderHalfExtents.splice(0, entity.colliderHalfExtents.length);
+            }
+        } catch (e) {
+            console.error(`[BaseGameRoom] Collider creation failed for entity ${entity.id}: ${e}`);
         }
     }
 
