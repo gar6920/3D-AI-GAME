@@ -16,11 +16,46 @@ async function createColliderForEntity(entity, Ammo, io, colliderCache = {}) {
   if (!entity.colliderType) throw new Error('colliderType must be specified');
   switch (entity.colliderType) {
     case 'sphere': {
-      const radius = entity.colliderRadius || entity.scale || 1;
+      let radius = entity.colliderRadius;
+      if ((!radius || radius <= 0) && entity.modelPath && io) {
+        // Compute radius from mesh bounding box
+        const modelFile = entity.modelPath.split('/').pop();
+        let bounds = colliderCache[modelFile + ':sphereBounds'];
+        if (!bounds) {
+          const path = require('path');
+          const document = await io.read(path.join(process.cwd(), 'client', 'assets', 'models', modelFile));
+          let min = [Infinity, Infinity, Infinity];
+          let max = [-Infinity, -Infinity, -Infinity];
+          document.getRoot().listMeshes().forEach(mesh => {
+            mesh.listPrimitives().forEach(prim => {
+              const pos = prim.getAttribute('POSITION').getArray();
+              for (let i = 0; i < pos.length; i += 3) {
+                min[0] = Math.min(min[0], pos[i]);
+                min[1] = Math.min(min[1], pos[i+1]);
+                min[2] = Math.min(min[2], pos[i+2]);
+                max[0] = Math.max(max[0], pos[i]);
+                max[1] = Math.max(max[1], pos[i+1]);
+                max[2] = Math.max(max[2], pos[i+2]);
+              }
+            });
+          });
+          bounds = { min, max };
+          colliderCache[modelFile + ':sphereBounds'] = bounds;
+        }
+        const dx = bounds.max[0] - bounds.min[0];
+        const dy = bounds.max[1] - bounds.min[1];
+        const dz = bounds.max[2] - bounds.min[2];
+        radius = 0.5 * Math.max(dx, dy, dz);
+      }
+      if (!radius || radius <= 0) {
+        radius = entity.scale || 1;
+      }
+      entity.colliderRadius = radius;
       return new Ammo.btSphereShape(radius);
     }
     case 'box': {
       let hx, hy, hz;
+      // Compute half extents using the same logic, but always write back to entity.colliderHalfExtents
       if (entity.colliderHalfExtents && entity.colliderHalfExtents.length === 3) {
         [hx, hy, hz] = entity.colliderHalfExtents;
       } else if (entity.collision && entity.collision.halfExtents) {
@@ -61,7 +96,15 @@ async function createColliderForEntity(entity, Ammo, io, colliderCache = {}) {
       } else {
         hx = hy = hz = 0.5;
       }
-      return new Ammo.btBoxShape(new Ammo.btVector3(hx, hy, hz));
+      // Always write the computed half extents back to entity.colliderHalfExtents (Colyseus ArraySchema compatible)
+      if (entity.colliderHalfExtents && typeof entity.colliderHalfExtents.length === 'number') {
+        entity.colliderHalfExtents.length = 0;
+        entity.colliderHalfExtents.push(hx, hy, hz);
+      }
+      // Also attach the computed half extents to the shape for further use if needed
+      const shape = new Ammo.btBoxShape(new Ammo.btVector3(hx, hy, hz));
+      shape._computedHalfExtents = [hx, hy, hz]; // For server-side access if needed
+      return shape;
     }
     case 'mesh': {
       if (!io) throw new Error('io (NodeIO) required for mesh colliders');

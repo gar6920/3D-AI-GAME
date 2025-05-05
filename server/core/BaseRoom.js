@@ -226,6 +226,14 @@ class BaseRoom extends Room {
         
         // Call implementation-specific update
         this.implementationUpdate(deltaTime);
+
+        // --- DEBUG: Log collider data for all structures right before state is sent ---
+        if (this.state && this.state.structures && typeof this.state.structures.forEach === 'function') {
+            console.log('[SERVER COLLIDER DEBUG] Structures collider data:');
+            this.state.structures.forEach((structure, id) => {
+                console.log(`  [${id}] colliderType: ${structure.colliderType}, colliderRadius: ${structure.colliderRadius}, colliderHalfExtents: ${structure.colliderHalfExtents ? JSON.stringify(Array.from(structure.colliderHalfExtents)) : '[]'}`);
+            });
+        }
     }
     
     /**

@@ -15,8 +15,7 @@ const structureDefinitions = [
     rotationY: 0,
     scale: 1,
     buildable: false,
-    colliderType: "box",
-    
+    colliderType: "sphere",
     health: 1000,
     maxHealth: 1000
   },
@@ -30,8 +29,7 @@ const structureDefinitions = [
     rotationY: 0,
     scale: 1,
     buildable: false,
-    colliderType: "box",
-    colliderHalfExtents: [1, 1, 1]
+    colliderType: "mesh"
   },
   {
     id: "hover_cube",

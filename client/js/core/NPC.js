@@ -228,6 +228,13 @@ class NPC extends Entity {
             this.boundingBox = bbox;
             // console.log(`[NPC ${this.id}] Bounding box computed: min${bbox.min.toArray()}, max${bbox.max.toArray()}`);
 
+            // <<< ADDED: Check for existing collider before creating one >>>
+            // Do NOT create a collider here - network-core.js will handle it
+            // Instead, just set modelLoaded flag to allow collider creation
+            this.modelLoaded = true;
+            console.log(`[NPC ${this.id}] Model loaded and ready for collider creation.`);
+            // <<< END ADDED >>>
+
             // --- ADDED: Log current state scale --- 
             // console.log(`NPC ${this.id}: Checking this.state.scale before applying initial scale:`, this.state ? this.state.scale : 'this.state is null/undefined');
             // --- END ADDED ---

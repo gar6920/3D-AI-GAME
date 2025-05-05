@@ -18,7 +18,7 @@ class Entity {
         this.colliderType = colliderType || 'box'; // Default to box if not specified
         this.colliderRadius = colliderRadius || 1;
         // Note: Colyseus ArraySchema needs conversion if used directly
-        this.colliderHalfExtents = colliderHalfExtents ? Array.from(colliderHalfExtents) : [1, 1, 1]; 
+        this.colliderHalfExtents = colliderHalfExtents ? Array.from(colliderHalfExtents) : null; 
         // <<<
         
         // Initialize THREE.Vector3 position *before* calling createMesh
@@ -38,13 +38,14 @@ class Entity {
         // Add to scene
         if (window.scene) {
             window.scene.add(this.mesh);
-            // --- Force collider creation for ALL entities (players, NPCs, structures, etc.) ---
-            this.createEntityCollider(); // Create initial collider
+            // --- Collider creation is now primarily handled by network-core.js calling tryAddCollider ---
+            // --- Remove direct calls from here to avoid conflicts/redundancy ---
+            // this.createEntityCollider(); // REMOVED
             
-            // Schedule another collider creation attempt after a delay
-            setTimeout(() => {
-                this.createEntityCollider(true); // true = retry attempt
-            }, 1000); // Longer delay to ensure model is loaded
+            // // Schedule another collider creation attempt after a delay // REMOVED
+            // setTimeout(() => { // REMOVED
+            //     this.createEntityCollider(true); // true = retry attempt // REMOVED
+            // }, 1000); // Longer delay to ensure model is loaded // REMOVED
         } else {
             console.warn(`[Entity ${this.id}] window.scene not available during constructor.`);
         }
@@ -81,16 +82,16 @@ class Entity {
                         const bbox = new THREE.Box3().setFromObject(group);
                         this.boundingBox = bbox;
                         
-                        // Auto-compute collider dimensions if not provided
-                        if (!this.colliderHalfExtents || this.colliderHalfExtents[0] <= 0) {
-                            const size = new THREE.Vector3();
-                            bbox.getSize(size);
-                            this.colliderHalfExtents = [size.x/2, size.y/2, size.z/2];
-                            console.log(`[Entity ${this.id}] Computed collider dimensions from model: ${JSON.stringify(this.colliderHalfExtents)}`);
-                        }
+                        // // Auto-compute collider dimensions if not provided // REMOVED THIS BLOCK
+                        // if (!this.colliderHalfExtents || this.colliderHalfExtents[0] <= 0) { // REMOVED
+                        //     const size = new THREE.Vector3(); // REMOVED
+                        //     bbox.getSize(size); // REMOVED
+                        //     this.colliderHalfExtents = [size.x/2, size.y/2, size.z/2]; // REMOVED
+                        //     console.log(`[Entity ${this.id}] Computed collider dimensions from model: ${JSON.stringify(this.colliderHalfExtents)}`); // REMOVED
+                        // } // REMOVED
                         
-                        // Add collider after model is loaded
-                        this.createEntityCollider();
+                        // // Add collider after model is loaded // REMOVED (Handled by network-core)
+                        // this.createEntityCollider(); // REMOVED
                         
                         // Mark model as loaded for later reference
                         this.modelLoaded = true;
@@ -167,23 +168,28 @@ class Entity {
     }
     
     // New helper method to standardize collider creation with better logging
+    // Note: This is less critical now as network-core.js drives creation via tryAddCollider
     createEntityCollider(isRetry = false) {
         const retryMsg = isRetry ? " (RETRY)" : "";
         try {
-            console.log(`[Entity ${this.id}] Creating collider${retryMsg} for ${this.type || 'entity'} - Type: ${this.colliderType}`);
+            // <<< Log intent, but don't set defaults here >>>
+            // console.log(`[Entity ${this.id}] createEntityCollider called${retryMsg}. Type from instance: ${this.colliderType}`);
             
             if (typeof window.addSelectionColliderFromEntity !== 'function') {
                 console.error(`[Entity ${this.id}] window.addSelectionColliderFromEntity function NOT FOUND!${retryMsg}`);
                 return;
             }
             
-            // Ensure we have valid collider data
-            if (!this.colliderType) this.colliderType = 'box';
-            if (this.colliderType === 'box' && (!this.colliderHalfExtents || this.colliderHalfExtents[0] <= 0)) {
-                this.colliderHalfExtents = [1, 1, 1];
+            // <<< Validation is good, but avoid setting defaults that might override server data >>>
+            // <<< Log warnings if data seems invalid/missing when this is called (though unlikely now) >>>
+            if (!this.colliderType) {
+                 console.warn(`[Entity ${this.id}] Missing colliderType when createEntityCollider called${retryMsg}`);
+            }
+            if (this.colliderType === 'box' && (!this.colliderHalfExtents || this.colliderHalfExtents.length !== 3 || this.colliderHalfExtents.some(dim => dim <= 0))) {
+                 console.warn(`[Entity ${this.id}] Invalid colliderHalfExtents when createEntityCollider called${retryMsg}:`, this.colliderHalfExtents);
             }
             if (this.colliderType === 'sphere' && (!this.colliderRadius || this.colliderRadius <= 0)) {
-                this.colliderRadius = 1;
+                 console.warn(`[Entity ${this.id}] Invalid colliderRadius when createEntityCollider called${retryMsg}:`, this.colliderRadius);
             }
             
             // Check if a collider already exists
@@ -199,13 +205,13 @@ class Entity {
                 return;
             }
             
-            // Create the collider
-            window.addSelectionColliderFromEntity(this, this.mesh);
+            // Create the collider - This part is now mostly redundant as tryAddCollider is primary
+            // window.addSelectionColliderFromEntity(this, this.mesh); // REMOVED - Handled by tryAddCollider
             
             // Add special flag for identity via tryAddCollider
-            this._colliderAdded = true;
+            // this._colliderAdded = true; // REMOVED - Set within tryAddCollider
             
-            // Verify collider was added
+            // Verify collider was added (This verification logic is useful, could be moved or adapted)
             setTimeout(() => {
                 let colliderFound = false;
                 this.mesh.traverse(child => {

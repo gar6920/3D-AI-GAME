@@ -121,7 +121,11 @@ class BaseGameRoom extends BaseRoom {
             if (def.maxHealth !== undefined) s.maxHealth = def.maxHealth;
             s.colliderType = def.colliderType || "";
             s.colliderRadius = def.colliderRadius || 0;
-            s.colliderHalfExtents = Array.isArray(def.colliderHalfExtents) ? [...def.colliderHalfExtents] : (def.colliderHalfExtents ? [...def.colliderHalfExtents] : []);
+            // Properly populate the ArraySchema for colliderHalfExtents
+if (def.colliderHalfExtents && s.colliderHalfExtents) {
+    s.colliderHalfExtents.length = 0;
+    def.colliderHalfExtents.forEach(v => s.colliderHalfExtents.push(v));
+}
             if (!s.colliderType) {
                 console.warn(`[BaseGameRoom] WARNING: Structure ${s.id} is missing colliderType! colliderType=${s.colliderType}`);
             }
@@ -252,7 +256,11 @@ class BaseGameRoom extends BaseRoom {
         // Copy collider data from definition to instance
         s.colliderType = def.colliderType || "";
         s.colliderRadius = def.colliderRadius || 0;
-        s.colliderHalfExtents = Array.isArray(def.colliderHalfExtents) ? [...def.colliderHalfExtents] : (def.colliderHalfExtents ? [...def.colliderHalfExtents] : []);
+        // Properly populate the ArraySchema for colliderHalfExtents
+if (def.colliderHalfExtents && s.colliderHalfExtents) {
+    s.colliderHalfExtents.length = 0;
+    def.colliderHalfExtents.forEach(v => s.colliderHalfExtents.push(v));
+}
         if (!s.colliderType) {
             console.warn(`[BaseGameRoom] WARNING: Placed structure ${s.id} is missing colliderType! colliderType=${s.colliderType}`);
         }
@@ -315,33 +323,42 @@ class BaseGameRoom extends BaseRoom {
         groundBody.setFriction(0);
         this.physicsWorld.addRigidBody(groundBody);
         this._rigidBodies.set('ground', groundBody);
-        // create structure bodies for all structure definitions
-        for (const def of this._structureDefs) {
-            createColliderForEntity(def, Ammo, io, colliderCache)
-                .then(shape => {
-                    const transform = new Ammo.btTransform();
-                    transform.setIdentity();
-                    const px = def.position?.x ?? def.x ?? 0;
-                    const py = def.position?.y ?? def.y ?? 0;
-                    const pz = def.position?.z ?? def.z ?? 0;
-                    transform.setOrigin(new Ammo.btVector3(px, py, pz));
-                    const motion = new Ammo.btDefaultMotionState(transform);
-                    const info = new Ammo.btRigidBodyConstructionInfo(0, motion, shape, new Ammo.btVector3(0,0,0));
-                    const body = new Ammo.btRigidBody(info);
-                    this.physicsWorld.addRigidBody(body);
-                    this._rigidBodies.set(def.id, body);
-                })
-                .catch(e => {
-                    console.error(`[BaseGameRoom] Collider creation failed for ${def.id}: ${e}`);
-                });
-        }
+        // create structure bodies for all structure definitions (best practice: await each collider, update def.colliderHalfExtents)
+        await Promise.all(this._structureDefs.map(async (def) => {
+            try {
+                const shape = await createColliderForEntity(def, Ammo, io, colliderCache);
+                // Defensive: if colliderHalfExtents was not set, copy from shape if available
+                if (
+                    def.colliderType === 'box' &&
+                    (!def.colliderHalfExtents || def.colliderHalfExtents.length !== 3) &&
+                    shape && shape._computedHalfExtents
+                ) {
+                    def.colliderHalfExtents = [...shape._computedHalfExtents];
+                }
+                // Create and register the rigid body as before
+                const transform = new Ammo.btTransform();
+                transform.setIdentity();
+                const px = def.position?.x ?? def.x ?? 0;
+                const py = def.position?.y ?? def.y ?? 0;
+                const pz = def.position?.z ?? def.z ?? 0;
+                transform.setOrigin(new Ammo.btVector3(px, py, pz));
+                const motion = new Ammo.btDefaultMotionState(transform);
+                const info = new Ammo.btRigidBodyConstructionInfo(0, motion, shape, new Ammo.btVector3(0,0,0));
+                const body = new Ammo.btRigidBody(info);
+                this.physicsWorld.addRigidBody(body);
+                this._rigidBodies.set(def.id, body);
+            } catch (e) {
+                console.error(`[BaseGameRoom] Collider creation failed for ${def.id}: ${e}`);
+            }
+        }));
         // create dynamic NPC bodies
         for (const id of this.spawnedNPCs) {
             const e = this.state.entities.get(id);
             this._createEntityBody(e);
         }
         // create bodies for existing players
-        this.state.players.forEach(p => this._createPlayerBody(p));
+        // TODO: Implement _createPlayerBody if/when player physics is needed
+        // this.state.players.forEach(p => this._createPlayerBody(p));
 
         // --- PATCH: Copy collider data from definitions to structure instances after colliders are generated ---
         for (const [id, s] of this.state.structures.entries()) {
@@ -349,7 +366,11 @@ class BaseGameRoom extends BaseRoom {
             if (!def) continue;
             s.colliderType = def.colliderType || "";
             s.colliderRadius = def.colliderRadius || 0;
-            s.colliderHalfExtents = Array.isArray(def.colliderHalfExtents) ? [...def.colliderHalfExtents] : (def.colliderHalfExtents ? [...def.colliderHalfExtents] : []);
+            // Properly populate the ArraySchema for colliderHalfExtents
+if (def.colliderHalfExtents && s.colliderHalfExtents) {
+    s.colliderHalfExtents.length = 0;
+    def.colliderHalfExtents.forEach(v => s.colliderHalfExtents.push(v));
+}
             if (!s.colliderType) {
                 console.warn(`[BaseGameRoom] WARNING: Structure ${s.id} is still missing colliderType after patch! colliderType=${s.colliderType}`);
             }
@@ -432,10 +453,14 @@ class BaseGameRoom extends BaseRoom {
             this._rigidBodies.set(entity.id, body);
             // Populate collider details for clients
             entity.colliderType = entity.colliderType || 'sphere';
-            entity.colliderRadius = entity.scale;
-            if (entity.colliderHalfExtents && entity.colliderHalfExtents.length) {
-                entity.colliderHalfExtents.splice(0, entity.colliderHalfExtents.length);
+            // Only set colliderRadius for spheres
+            if (entity.colliderType === 'sphere') {
+                entity.colliderRadius = entity.scale;
             }
+            // Do NOT clear colliderHalfExtents here; preserve for client debug mesh
+            // if (entity.colliderHalfExtents && entity.colliderHalfExtents.length) {
+            //     entity.colliderHalfExtents.splice(0, entity.colliderHalfExtents.length);
+            // }
         } catch (e) {
             console.error(`[BaseGameRoom] Collider creation failed for entity ${entity.id}: ${e}`);
         }

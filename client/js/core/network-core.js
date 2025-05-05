@@ -346,45 +346,105 @@ function tryAddCollider(entityFromServer, clientInstance) {
         return; // Exit if no client instance, collider already added, model not loaded, or no mesh group
     }
     
-    // Use data from the server entity object
+    // <<< Extract collider data DIRECTLY from server object >>>
     const colliderData = {
-        colliderType: entityFromServer.colliderType,
-        colliderRadius: entityFromServer.colliderRadius,
-        colliderHalfExtents: entityFromServer.colliderHalfExtents ? Array.from(entityFromServer.colliderHalfExtents) : undefined
+        type: entityFromServer.colliderType,
+        radius: entityFromServer.colliderRadius,
+        // Ensure halfExtents is an array or undefined
+        halfExtents: entityFromServer.colliderHalfExtents ? Array.from(entityFromServer.colliderHalfExtents) : undefined
     };
     
-    console.log(`[TryAddCollider ${entityFromServer.id}] Attempting to add collider. Data:`, colliderData, `Client Instance:`, clientInstance);
+    // <<< Basic validation of extracted data >>>
+    if (!colliderData.type) {
+        console.warn(`[TryAddCollider ${entityFromServer.id}] Missing colliderType in server data. Skipping collider creation.`);
+        return;
+    }
+    if (colliderData.type === 'box' && (!colliderData.halfExtents || colliderData.halfExtents.length !== 3)) {
+        console.warn(`[TryAddCollider ${entityFromServer.id}] Invalid or missing halfExtents for box type in server data. Skipping collider creation. Data:`, colliderData);
+        return;
+    }
+    if (colliderData.type === 'sphere' && (colliderData.radius === undefined || colliderData.radius === null)) {
+        console.warn(`[TryAddCollider ${entityFromServer.id}] Invalid or missing radius for sphere type in server data. Skipping collider creation. Data:`, colliderData);
+        return;
+    }
+    
+    console.log(`[TryAddCollider ${entityFromServer.id}] Attempting to add collider. Server Data:`, colliderData, `Client Instance:`, clientInstance.id);
     
     if (typeof window.addSelectionColliderFromEntity === 'function') {
-        // Pass the clientInstance for context, but the SERVER data for collider props
-        // We need to temporarily add the server data to the client instance for the helper
-        const originalData = {
-            colliderType: clientInstance.colliderType,
-            colliderRadius: clientInstance.colliderRadius,
-            colliderHalfExtents: clientInstance.colliderHalfExtents
-        };
-        
-        clientInstance.colliderType = colliderData.colliderType;
-        clientInstance.colliderRadius = colliderData.colliderRadius;
-        clientInstance.colliderHalfExtents = colliderData.colliderHalfExtents;
-        
+        // <<< Pass server data, client instance, and parent mesh >>>
         try {
-            window.addSelectionColliderFromEntity(clientInstance, clientInstance.mesh); 
-            clientInstance._colliderAdded = true; // Set flag after successful addition
+            window.addSelectionColliderFromEntity(colliderData, clientInstance, clientInstance.mesh);
+            // <<< Set flag on CLIENT instance >>>
+            clientInstance._colliderAdded = true; 
             console.log(`[TryAddCollider ${entityFromServer.id}] Collider added successfully.`);
         } catch (error) {
              console.error(`[TryAddCollider ${entityFromServer.id}] Error calling addSelectionColliderFromEntity:`, error);
-        } finally {
-             // Restore original data on client instance (if any)
-             clientInstance.colliderType = originalData.colliderType;
-             clientInstance.colliderRadius = originalData.colliderRadius;
-             clientInstance.colliderHalfExtents = originalData.colliderHalfExtents;
-        }
+        } 
     } else {
         console.error(`[TryAddCollider ${entityFromServer.id}] window.addSelectionColliderFromEntity function NOT FOUND!`);
     }
 }
 // <<< END HELPER >>>
+
+// <<< NEW HELPER FUNCTION to clean up orphaned colliders >>>
+function cleanupOrphanedColliders() {
+    if (!window.scene) return;
+    
+    console.log('[CleanupColliders] Checking for orphaned colliders in scene...');
+    let orphanedCount = 0;
+    
+    // Find all collider meshes in the scene that don't have a parent with userData.entity
+    const orphanedColliders = [];
+    window.scene.traverse(obj => {
+        if (obj.userData && obj.userData.isCollider === true) {
+            // Check if this collider is properly attached to an entity mesh
+            let isAttachedToEntity = false;
+            
+            // Start with parent and work up through hierarchy
+            let parent = obj.parent;
+            while (parent) {
+                // A valid parent will have userData.entity
+                if (parent.userData && parent.userData.entity) {
+                    isAttachedToEntity = true;
+                    break;
+                }
+                parent = parent.parent;
+            }
+            
+            // If not attached to a proper entity, mark for removal
+            if (!isAttachedToEntity) {
+                orphanedColliders.push(obj);
+            }
+        }
+    });
+    
+    // Remove orphaned colliders
+    if (orphanedColliders.length > 0) {
+        console.log(`[CleanupColliders] Found ${orphanedColliders.length} orphaned colliders to remove`);
+        orphanedColliders.forEach(collider => {
+            if (collider.parent) {
+                collider.parent.remove(collider);
+                console.log(`[CleanupColliders] Removed orphaned collider (UUID: ${collider.uuid})`);
+                orphanedCount++;
+                
+                // Clean up resources
+                if (collider.geometry) collider.geometry.dispose();
+                if (collider.material) {
+                    if (Array.isArray(collider.material)) {
+                        collider.material.forEach(mat => mat.dispose());
+                    } else {
+                        collider.material.dispose();
+                    }
+                }
+            }
+        });
+    } else {
+        console.log('[CleanupColliders] No orphaned colliders found');
+    }
+    
+    return orphanedCount;
+}
+// <<< END NEW HELPER >>>
 
 // Setup message handlers
 function setupMessageHandlers() {
@@ -737,6 +797,10 @@ function setupRoomPlayerListeners(room) {
     if (room.state.players) {
         console.log('[setupRoomPlayerListeners] Current player count:', room.state.players.size);
         
+        // <<< ADDED: Clean up orphaned colliders before processing players >>>
+        cleanupOrphanedColliders();
+        // <<< END ADDED >>>
+        
         // Process existing players
         console.log('[setupRoomPlayerListeners] Processing existing players');
         room.state.players.forEach((player, sessionId) => {
@@ -942,13 +1006,17 @@ async function setupRoomListeners(room) {
             // console.log(`Attempting to create visual for NPC: ${entityId}`);
             if (typeof window.createNpcVisual === 'function') {
                 window.createNpcVisual(entity, entityId);
-                // <<< TRY ADD COLLIDER for new NPC >>>
-                const npcInstance = NPC.npcs.get(entityId);
-                if (npcInstance) {
-                    // Delay slightly for model loading
-                    setTimeout(() => tryAddCollider(entity, npcInstance), 500);
-                }
-                // <<<
+                
+                // <<< SIMPLIFIED: Generic collider handling for all entities >>>
+                // Wait a short time to ensure the entity model is loaded before adding collider
+                setTimeout(() => {
+                    const npcInstance = NPC.npcs.get(entityId);
+                    if (npcInstance && npcInstance.mesh && !npcInstance._colliderAdded) {
+                        tryAddCollider(entity, npcInstance);
+                        console.log(`[NPC ${entityId}] Added collider after model load`);
+                    }
+                }, 500);
+                // <<< END SIMPLIFIED >>>
             } else {
                 console.warn(`window.createNpcVisual function not found for NPC ${entityId}`);
             }
@@ -1017,13 +1085,17 @@ async function setupRoomListeners(room) {
             // console.log(`Attempting to create visual for NPC: ${entityId}`);
             if (typeof window.createNpcVisual === 'function') {
                 window.createNpcVisual(entity, entityId);
-                // <<< TRY ADD COLLIDER for new NPC >>>
-                const npcInstance = NPC.npcs.get(entityId);
-                if (npcInstance) {
-                    // Delay slightly for model loading
-                    setTimeout(() => tryAddCollider(entity, npcInstance), 500);
-                }
-                // <<<
+                
+                // <<< SIMPLIFIED: Generic collider handling for all entities >>>
+                // Wait a short time to ensure the entity model is loaded before adding collider
+                setTimeout(() => {
+                    const npcInstance = NPC.npcs.get(entityId);
+                    if (npcInstance && npcInstance.mesh && !npcInstance._colliderAdded) {
+                        tryAddCollider(entity, npcInstance);
+                        console.log(`[NPC ${entityId}] Added collider after model load`);
+                    }
+                }, 500);
+                // <<< END SIMPLIFIED >>>
             } else {
                 console.warn(`window.createNpcVisual function not found for NPC ${entityId}`);
             }

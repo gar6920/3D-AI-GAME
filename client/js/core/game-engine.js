@@ -1316,6 +1316,19 @@ function animate(currentTime) {
     }
     // --- End Input Processing ---
 
+    // <<< ADDED: Generic collider maintenance >>>
+    // Run collider cleanup every ~5 seconds (without entity-specific handling)
+    if (!window._lastColliderCleanupTime || (currentTime - window._lastColliderCleanupTime > 5000)) {
+        window._lastColliderCleanupTime = currentTime;
+        cleanupOrphanedColliders();
+    }
+    // <<< END ADDED >>>
+    
+    // --- Update all systems with delta time ---
+    if (window.scene && window.entities) {
+        // Add any additional systems you want to update here
+    }
+
     // Handle different camera modes
     if (window.isFreeCameraMode) {
         // Update free camera movement
@@ -2564,46 +2577,95 @@ window.updateColliderVisibility = function() {
     console.log(`[UpdateVisibility] Collider counts - Players: ${playerColliders}, NPCs: ${npcColliders}, Structures: ${structureColliders}, Other: ${otherColliders}`);
 };
 
-// <<< ADD THIS: Function to toggle collider visibility >>>
-// Make sure we register a keyboard listener for toggling colliders if not already done
+// Function to toggle collider visibility
+window.toggleColliderVisibility = function() {
+    // Toggle the global flag
+    window.showSelectionColliders = !window.showSelectionColliders;
+    console.log(`Toggling all collider visibility to: ${window.showSelectionColliders}`);
+    
+    // Update all colliders using the standard function
+    window.updateColliderVisibility();
+};
+
+// <<< ADD THIS: Advanced cleanup for orphaned colliders >>>
+// Cleans up colliders that aren't properly attached to their entities or 
+// colliders for entities that have moved away from their starting position
+function cleanupOrphanedColliders() {
+    if (!window.scene) return;
+    
+    let orphanedCount = 0;
+    
+    // Array to collect colliders to remove
+    const orphanedColliders = [];
+    
+    // Find all collider meshes in the scene
+    window.scene.traverse(obj => {
+        if (obj.userData && obj.userData.isCollider === true) {
+            // Check if this collider is properly attached to an entity mesh
+            let isAttachedToEntity = false;
+            const entity = obj.userData.entity;
+            
+            if (entity && entity.mesh) {
+                // Check if the collider is properly attached to the entity mesh
+                let parent = obj.parent;
+                while (parent) {
+                    if (parent === entity.mesh) {
+                        isAttachedToEntity = true;
+                        break;
+                    }
+                    parent = parent.parent;
+                }
+                
+                // If not attached to entity hierarchy, mark for removal
+                if (!isAttachedToEntity) {
+                    orphanedColliders.push(obj);
+                }
+            } else {
+                // No valid entity reference, mark for removal
+                orphanedColliders.push(obj);
+            }
+        }
+    });
+    
+    // Remove all identified orphaned colliders
+    if (orphanedColliders.length > 0) {
+        console.log(`[CleanupColliders] Found ${orphanedColliders.length} orphaned colliders to remove`);
+        orphanedColliders.forEach(collider => {
+            if (collider.parent) {
+                collider.parent.remove(collider);
+                orphanedCount++;
+                
+                // Dispose resources
+                if (collider.geometry) collider.geometry.dispose();
+                if (collider.material) {
+                    if (Array.isArray(collider.material)) {
+                        collider.material.forEach(m => m.dispose());
+                    } else {
+                        collider.material.dispose();
+                    }
+                }
+            }
+        });
+        
+        console.log(`[CleanupColliders] Removed ${orphanedCount} orphaned colliders`);
+    }
+    
+    return orphanedCount;
+}
+// <<< END ADDED >>>
+
+// Register keyboard listener for toggling colliders if not already done
 if (!window._colliderToggleListenerAdded) {
     window._colliderToggleListenerAdded = true;
     
-    window.toggleColliderVisibility = function() {
-        // Toggle the global flag
-        window.showSelectionColliders = !window.showSelectionColliders;
-        console.log(`[ColliderToggle] Toggling collider visibility to: ${window.showSelectionColliders}`);
-        
-        // Force structure collider update - this helps ensure all entity types are handled
-        if (window.visuals && window.visuals.staticEntities) {
-            console.log(`[ColliderToggle] Checking ${Object.keys(window.visuals.staticEntities).length} structure entities`);
-            
-            // Loop through all static entities and force collider refresh
-            Object.values(window.visuals.staticEntities).forEach(entity => {
-                if (entity && entity.mesh) {
-                    // Try to find collider within this entity's mesh hierarchy
-                    entity.mesh.traverse(child => {
-                        if (child.userData && child.userData.isCollider) {
-                            child.visible = window.showSelectionColliders;
-                            console.log(`[ColliderToggle] Explicitly set structure ${entity.id} collider to ${child.visible}`);
-                        }
-                    });
-                }
-            });
-        }
-        
-        // Update all colliders using the standard function
-        window.updateColliderVisibility();
-    };
-    
-    // Explicitly register with inputManager if available, or add a direct key listener
+    // Register with inputManager if available, or add a direct key listener
     if (window.inputManager && typeof window.inputManager.on === 'function') {
         window.inputManager.on('keydown', (event) => {
             if (event.code === 'KeyH') {
                 window.toggleColliderVisibility();
             }
         });
-        console.log("[ColliderToggle] Registered 'H' key handler with InputManager");
+        console.log("Registered 'H' key handler for toggling colliders");
     } else {
         // Fallback to direct document listener
         document.addEventListener('keydown', (event) => {
@@ -2611,95 +2673,6 @@ if (!window._colliderToggleListenerAdded) {
                 window.toggleColliderVisibility();
             }
         });
-        console.log("[ColliderToggle] Added direct 'H' key listener (InputManager not available)");
+        console.log("Added direct 'H' key listener for toggling colliders");
     }
 }
-// <<< END ADDED CODE >>>
-
-// <<< ADD THIS: Debug function specifically for structure colliders >>>
-if (!window._structureColliderDebugAdded) {
-    window._structureColliderDebugAdded = true;
-    
-    // Function to highlight structure colliders with bright colors and larger size
-    window.debugStructureColliders = function() {
-        console.log("[StructureColliderDebug] Starting structure collider debug mode");
-        
-        // Force all colliders to be visible first
-        window.showSelectionColliders = true;
-        window.updateColliderVisibility();
-        
-        // Find all structure entities
-        let structureCount = 0;
-        let colliderCount = 0;
-        
-        if (window.visuals && window.visuals.staticEntities) {
-            console.log(`[StructureColliderDebug] Found ${Object.keys(window.visuals.staticEntities).length} structure entities to check`);
-            
-            // Loop through each structure entity
-            Object.values(window.visuals.staticEntities).forEach(entity => {
-                if (!entity || !entity.mesh) return;
-                structureCount++;
-                
-                // First, check if there's already a collider
-                let existingCollider = null;
-                entity.mesh.traverse(child => {
-                    if (child.userData && child.userData.isCollider) {
-                        existingCollider = child;
-                        colliderCount++;
-                    }
-                });
-                
-                if (existingCollider) {
-                    // Make existing collider super visible
-                    existingCollider.material.color.set(0xff00ff); // Bright magenta
-                    existingCollider.material.wireframe = true;
-                    existingCollider.material.opacity = 1.0;
-                    existingCollider.material.transparent = true;
-                    existingCollider.material.depthTest = false;
-                    existingCollider.renderOrder = 9999;
-                    existingCollider.visible = true;
-                    
-                    // Make it slightly larger
-                    existingCollider.scale.set(1.05, 1.05, 1.05);
-                    
-                    console.log(`[StructureColliderDebug] Enhanced existing collider for entity: ${entity.id}`);
-                } else {
-                    // If no collider exists, create a special debug one
-                    console.log(`[StructureColliderDebug] No collider found for entity: ${entity.id}, creating debug collider`);
-                    
-                    // Force create a new debug collider by calling addSelectionColliderFromEntity
-                    // First, ensure needed properties exist
-                    if (!entity.colliderType) entity.colliderType = 'box';
-                    if (!entity.colliderHalfExtents) entity.colliderHalfExtents = [1, 1, 1];
-                    
-                    // Try to add a new debug collider
-                    if (typeof window.addSelectionColliderFromEntity === 'function') {
-                        window.addSelectionColliderFromEntity(entity, entity.mesh);
-                        console.log(`[StructureColliderDebug] Attempted to create debug collider for: ${entity.id}`);
-                    }
-                }
-            });
-        }
-        
-        console.log(`[StructureColliderDebug] Processed ${structureCount} structures, found ${colliderCount} existing colliders`);
-    };
-    
-    // Register J key to trigger structure collider debug mode
-    if (window.inputManager && typeof window.inputManager.on === 'function') {
-        window.inputManager.on('keydown', (event) => {
-            if (event.code === 'KeyJ') {
-                window.debugStructureColliders();
-            }
-        });
-        console.log("[StructureColliderDebug] Registered 'J' key handler with InputManager");
-    } else {
-        // Fallback to direct document listener
-        document.addEventListener('keydown', (event) => {
-            if (event.code === 'KeyJ') {
-                window.debugStructureColliders();
-            }
-        });
-        console.log("[StructureColliderDebug] Added direct 'J' key listener (InputManager not available)");
-    }
-}
-// <<< END ADDED CODE >>>
