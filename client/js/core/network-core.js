@@ -341,9 +341,15 @@ async function initNetworking() {
 
 // <<< HELPER FUNCTION to add collider >>>
 function tryAddCollider(entityFromServer, clientInstance) {
+    const entityId = entityFromServer?.id || 'unknown';
+    const modelId = clientInstance?.modelId || 'unknown'; 
+    // <<< Determine actual entity type based on clientInstance >>>
+    const actualEntityType = clientInstance?.type || 
+                           (clientInstance?._isPlayer ? 'player' : 'entity'); // Default to entity if unknown
+    const isStructureOfInterest = actualEntityType === 'entity' && modelId !== 'hover_cube'; 
+
     if (!clientInstance || clientInstance._colliderAdded || !clientInstance.modelLoaded || !clientInstance.mesh) {
-        // console.log(`[TryAddCollider ${entityFromServer.id}] Skipping: Instance: ${!!clientInstance}, Added: ${clientInstance?._colliderAdded}, Loaded: ${clientInstance?.modelLoaded}, Mesh: ${!!clientInstance?.mesh}`);
-        return; // Exit if no client instance, collider already added, model not loaded, or no mesh group
+        return; 
     }
     
     // <<< Extract collider data DIRECTLY from server object >>>
@@ -354,34 +360,33 @@ function tryAddCollider(entityFromServer, clientInstance) {
         halfExtents: entityFromServer.colliderHalfExtents ? Array.from(entityFromServer.colliderHalfExtents) : undefined
     };
     
-    // <<< Basic validation of extracted data >>>
+    // <<< Conditional validation logs >>>
     if (!colliderData.type) {
-        console.warn(`[TryAddCollider ${entityFromServer.id}] Missing colliderType in server data. Skipping collider creation.`);
+        if (isStructureOfInterest) console.warn(`[ColliderDebug] [TryAddCollider ${entityId}] Missing colliderType in server data. Skipping collider creation.`);
         return;
     }
     if (colliderData.type === 'box' && (!colliderData.halfExtents || colliderData.halfExtents.length !== 3)) {
-        console.warn(`[TryAddCollider ${entityFromServer.id}] Invalid or missing halfExtents for box type in server data. Skipping collider creation. Data:`, colliderData);
+         if (isStructureOfInterest) console.warn(`[ColliderDebug] [TryAddCollider ${entityId}] Invalid or missing halfExtents for box type... Skipping.`);
         return;
     }
     if (colliderData.type === 'sphere' && (colliderData.radius === undefined || colliderData.radius === null)) {
-        console.warn(`[TryAddCollider ${entityFromServer.id}] Invalid or missing radius for sphere type in server data. Skipping collider creation. Data:`, colliderData);
+         if (isStructureOfInterest) console.warn(`[ColliderDebug] [TryAddCollider ${entityId}] Invalid or missing radius for sphere type... Skipping.`);
         return;
     }
     
-    console.log(`[TryAddCollider ${entityFromServer.id}] Attempting to add collider. Server Data:`, colliderData, `Client Instance:`, clientInstance.id);
+    if (isStructureOfInterest) console.log(`[ColliderDebug] [TryAddCollider ${entityId}] Attempting to add collider. Server Data:`, colliderData, `Client Instance:`, clientInstance.id);
     
     if (typeof window.addSelectionColliderFromEntity === 'function') {
-        // <<< Pass server data, client instance, and parent mesh >>>
         try {
+            // Pass the clientInstance which already has the correct type info
             window.addSelectionColliderFromEntity(colliderData, clientInstance, clientInstance.mesh);
-            // <<< Set flag on CLIENT instance >>>
             clientInstance._colliderAdded = true; 
-            console.log(`[TryAddCollider ${entityFromServer.id}] Collider added successfully.`);
+            if (isStructureOfInterest) console.log(`[ColliderDebug] [TryAddCollider ${entityId}] Collider added successfully.`);
         } catch (error) {
-             console.error(`[TryAddCollider ${entityFromServer.id}] Error calling addSelectionColliderFromEntity:`, error);
+             console.error(`[ColliderDebug] [TryAddCollider ${entityId}] Error calling addSelectionColliderFromEntity:`, error);
         } 
     } else {
-        console.error(`[TryAddCollider ${entityFromServer.id}] window.addSelectionColliderFromEntity function NOT FOUND!`);
+        console.error(`[ColliderDebug] [TryAddCollider ${entityId}] window.addSelectionColliderFromEntity function NOT FOUND!`);
     }
 }
 // <<< END HELPER >>>
@@ -973,6 +978,27 @@ async function setupRoomListeners(room) {
         return;
     }
     
+    // --- ADD LOG TO INSPECT STATE --- 
+    console.log('[ColliderDebug] INSPECTING room.state.entities:');
+    try {
+        const entityDataForLog = {};
+        if (room.state.entities && typeof room.state.entities.forEach === 'function') {
+             room.state.entities.forEach((entity, entityId) => {
+                entityDataForLog[entityId] = {
+                     entityType: entity.entityType,
+                     modelId: entity.modelId,
+                     // Add any other relevant fields for debugging
+                 };
+            });
+             console.log('[ColliderDebug] Current entities in room.state.entities:', JSON.stringify(entityDataForLog, null, 2));
+         } else {
+            console.warn('[ColliderDebug] room.state.entities is missing or not iterable.');
+         }
+    } catch (e) {
+        console.error('[ColliderDebug] Error inspecting room.state.entities:', e);
+    }
+     // --- END INSPECTION LOG ---
+
     // Ensure visuals namespaces exist
     window.visuals = window.visuals || {};
     window.visuals.players = window.visuals.players || {};
@@ -982,248 +1008,160 @@ async function setupRoomListeners(room) {
     console.log(`[NetworkCore Setup] Initial entities count: ${room.state.entities.size}`);
     console.log('[NetworkCore Setup] About to loop through initial entities...');
     
-    // Initial entities check
-    room.state.entities.forEach((entity, entityId) => {
-        // console.log(`[NetworkCore Setup Initial Entity] Received entityId: ${entityId}, entityType: ${entity.entityType}`);
-        
-        if (entity.entityType === 'player' && entityId !== room.sessionId) {
-            // Handle existing players (visuals might be created by GameEngine on join)
-            console.log(`[NetworkCore] Handling initial non-local player: ${entityId}`);
-        } else if (entity.entityType === 'operator') {
-            if (typeof window.createOperatorVisual === 'function') {
-                window.createOperatorVisual(entity, entityId);
+    // --- Process Initial Entities (NPCs, hover_cubes, etc.) ---
+    console.log("[ColliderDebug] Processing initial room.state.entities...");
+    if (room.state.entities && typeof room.state.entities.forEach === 'function') {
+        room.state.entities.forEach((entity, entityId) => {
+            const entityType = entity.entityType;
+            const modelId = entity.modelId;
+            // Only log processing step for non-cubes
+            if (modelId !== 'hover_cube') {
+                console.log(`[ColliderDebug] [Initial Entities Check] Processing entity: ${entityId}, Type: ${entityType}, ModelID: ${modelId}`);
             }
-        } else if (entity.entityType === 'staticValueEntity') {
-            if (typeof window.createStaticEntityVisual === 'function') {
-                window.createStaticEntityVisual(entity, entityId);
-            }
-        } else if (entity.entityType === 'tree') {
-            if (window.entityHandlers?.tree?.create) {
-                window.entityHandlers.tree.create(entity, entityId);
-            }
-        } else if (entity.entityType === 'npc') {
-            // Handle NPC entities
-            // console.log(`Attempting to create visual for NPC: ${entityId}`);
-            if (typeof window.createNpcVisual === 'function') {
-                window.createNpcVisual(entity, entityId);
-                
-                // <<< SIMPLIFIED: Generic collider handling for all entities >>>
-                // Wait a short time to ensure the entity model is loaded before adding collider
-                setTimeout(() => {
-                    const npcInstance = NPC.npcs.get(entityId);
-                    if (npcInstance && npcInstance.mesh && !npcInstance._colliderAdded) {
-                        tryAddCollider(entity, npcInstance);
-                        console.log(`[NPC ${entityId}] Added collider after model load`);
-                    }
-                }, 500);
-                // <<< END SIMPLIFIED >>>
-            } else {
-                console.warn(`window.createNpcVisual function not found for NPC ${entityId}`);
-            }
-            // --- ADD ONCHANGE HANDLER FOR NPCs (LERP LOGIC) ---
-            if (typeof entity.onChange === 'function') {
-                entity.onChange = (changes) => {
-                    const npcInstance = window.NPC?.npcs?.get(entityId);
-                    if (npcInstance && npcInstance.mesh) {
-                        // Lerp position for smooth movement
-                        const lerpFactor = 0.3;
-                        npcInstance.mesh.position.x = THREE.MathUtils.lerp(
-                            npcInstance.mesh.position.x, entity.x, lerpFactor
-                        );
-                        npcInstance.mesh.position.y = THREE.MathUtils.lerp(
-                            npcInstance.mesh.position.y, entity.y, lerpFactor
-                        );
-                        npcInstance.mesh.position.z = THREE.MathUtils.lerp(
-                            npcInstance.mesh.position.z, entity.z, lerpFactor
-                        );
-                        npcInstance.mesh.rotation.y = entity.rotationY;
-                        // Optionally update animation/state
-                        if (entity.state !== undefined && npcInstance.state !== entity.state) {
-                            npcInstance.playAnimation(entity.state);
-                        }
-                    }
-                };
-            }
-        } else if (entity.entityType === 'entity') {
-            console.log(`[setupRoomListeners initialLoop] ENTERED 'entity' block for: ${entityId}`);
-            if (!window.visuals.staticEntities[entityId]) {
-                console.log(`[setupRoomListeners initialLoop] Visual DOES NOT exist for ${entityId}. Attempting loadAndAddStaticEntity...`);
-                loadAndAddStaticEntity(entity, entityId);
-                console.log(`[setupRoomListeners initialLoop] AFTER calling loadAndAddStaticEntity for ${entityId}.`);
-            } else {
-                console.warn(`[setupRoomListeners initialLoop] Visual ALREADY EXISTS for entity ${entityId}. Skipping load.`);
-            }
-            console.log(`[setupRoomListeners initialLoop] EXITED 'entity' block for: ${entityId}`);
-        }
-    });
-    
-    room.state.entities.onAdd = (entity, entityId) => {
-        console.log(`[NetworkCore onAdd] Received entityId: ${entityId}, entityType: ${entity.entityType}`);
-        console.log(`[NetworkCore onAdd ${entityId}] Collider Data: type=${entity.colliderType}, radius=${entity.colliderRadius}, extents=${entity.colliderHalfExtents?.toArray()}`);
-        console.log(`[NetworkCore] Entity added: ID=${entityId}, entityType=${entity.entityType}`);
 
-        // Skip adding visual for the local player, handled by GameEngine
-        if (entity.entityType === 'player' && entityId === room.sessionId) {
-            return;
-        }
+            // <<< Keep existing logic for non-structure entity types >>>
+            if (entityType === 'player' && entityId !== room.sessionId) {
+                 console.log(`[NetworkCore] Handling initial non-local player: ${entityId}`);
+            } else if (entityType === 'npc') {
+                 if (typeof window.createNpcVisual === 'function') {
+                     window.createNpcVisual(entity, entityId);
+                     setTimeout(() => {
+                         const npcInstance = NPC.npcs.get(entityId);
+                         if (npcInstance && npcInstance.mesh && !npcInstance._colliderAdded) {
+                             tryAddCollider(entity, npcInstance);
+                         }
+                     }, 500);
+                 } else {
+                     console.warn(`window.createNpcVisual function not found for NPC ${entityId}`);
+                 }
+             } else if (entityType === 'entity' && modelId === 'hover_cube') {
+                 // Explicitly handle hover_cubes separately if needed, or rely on generic entity block
+                 console.log(`[ColliderDebug] [Initial Entities Check] Matched type 'entity' (hover_cube) for ${entityId}. Preparing to call loadAndAddStaticEntity.`);
+                 if (!window.visuals.staticEntities[entityId]) {
+                    loadAndAddStaticEntity(entity, entityId);
+                 }
+            } // Add other non-structure types like 'operator', 'tree' if necessary
 
-        // Handle different entity types
-        if (entity.entityType === 'operator') {
-            if (typeof window.createOperatorVisual === 'function') {
-                window.createOperatorVisual(entity, entityId);
-            }
-        } else if (entity.entityType === 'staticValueEntity') {
-            if (typeof window.createStaticEntityVisual === 'function') {
-                window.createStaticEntityVisual(entity, entityId);
-            }
-        } else if (entity.entityType === 'tree') {
-            if (window.entityHandlers?.tree?.create) {
-                window.entityHandlers.tree.create(entity, entityId);
-            }
-        } else if (entity.entityType === 'npc') {
-            // Handle NPC entities
-            // console.log(`Attempting to create visual for NPC: ${entityId}`);
-            if (typeof window.createNpcVisual === 'function') {
-                window.createNpcVisual(entity, entityId);
-                
-                // <<< SIMPLIFIED: Generic collider handling for all entities >>>
-                // Wait a short time to ensure the entity model is loaded before adding collider
-                setTimeout(() => {
-                    const npcInstance = NPC.npcs.get(entityId);
-                    if (npcInstance && npcInstance.mesh && !npcInstance._colliderAdded) {
-                        tryAddCollider(entity, npcInstance);
-                        console.log(`[NPC ${entityId}] Added collider after model load`);
-                    }
-                }, 500);
-                // <<< END SIMPLIFIED >>>
-            } else {
-                console.warn(`window.createNpcVisual function not found for NPC ${entityId}`);
-            }
-            // --- ADD ONCHANGE HANDLER FOR NPCs (LERP LOGIC) ---
-            if (typeof entity.onChange === 'function') {
-                entity.onChange = (changes) => {
-                    const npcInstance = window.NPC?.npcs?.get(entityId);
-                    if (npcInstance && npcInstance.mesh) {
-                        // Lerp position for smooth movement
-                        const lerpFactor = 0.3;
-                        npcInstance.mesh.position.x = THREE.MathUtils.lerp(
-                            npcInstance.mesh.position.x, entity.x, lerpFactor
-                        );
-                        npcInstance.mesh.position.y = THREE.MathUtils.lerp(
-                            npcInstance.mesh.position.y, entity.y, lerpFactor
-                        );
-                        npcInstance.mesh.position.z = THREE.MathUtils.lerp(
-                            npcInstance.mesh.position.z, entity.z, lerpFactor
-                        );
-                        npcInstance.mesh.rotation.y = entity.rotationY;
-                        // Optionally update animation/state
-                        if (entity.state !== undefined && npcInstance.state !== entity.state) {
-                            npcInstance.playAnimation(entity.state);
-                        }
-                    }
-                };
-            }
-        } else if (entity.entityType === 'entity') {
-            console.log(`[NetworkCore onAdd] Creating visual for generic entity: ${entityId}`);
-            // Directly call the refined loading function
-            loadAndAddStaticEntity(entity, entityId);
-        } else {
-            console.log(`[NetworkCore onAdd] Unknown entity type: ${entity.entityType}`);
-        }
-    };
-    
-    // Listen for entity changes (for existing NPCs)
-    if (typeof room.state.entities.onChange === 'function') {
-        room.state.entities.onChange = (entity, entityId) => {
-            if (Math.random() < 0.01) {
-                console.log(`[NetworkCore onChange ${entityId}] Collider Data: type=${entity.colliderType}, radius=${entity.colliderRadius}, extents=${entity.colliderHalfExtents?.toArray()}`);
-            }
-            if (entity.entityType === 'npc') {
-                const npcInstance = window.NPC?.npcs?.get(entityId);
-                if (npcInstance && npcInstance.mesh) {
-                    const lerpFactor = 0.3;
-                    npcInstance.mesh.position.x = THREE.MathUtils.lerp(
-                        npcInstance.mesh.position.x, entity.x, lerpFactor
-                    );
-                    npcInstance.mesh.position.y = THREE.MathUtils.lerp(
-                        npcInstance.mesh.position.y, entity.y, lerpFactor
-                    );
-                    console.log(`[NPC ${entityId}] network-core.js lerp: mesh y now ${npcInstance.mesh.position.y}, entity.y=${entity.y}`);
-                    npcInstance.mesh.position.z = THREE.MathUtils.lerp(
-                        npcInstance.mesh.position.z, entity.z, lerpFactor
-                    );
-                    npcInstance.mesh.rotation.y = entity.rotationY;
-                    if (entity.state !== undefined && npcInstance.state !== entity.state) {
-                        npcInstance.playAnimation(entity.state);
-                    }
-                }
-            } else if (entity.entityType === 'entity') {
-                const mesh = window.visuals.staticEntities[entityId];
-                if (mesh) {
-                    // Directly update mesh properties
-                    mesh.position.set(entity.x ?? mesh.position.x, entity.y ?? mesh.position.y, entity.z ?? mesh.position.z);
-                    mesh.rotation.y = entity.rotationY ?? mesh.rotation.y;
-                    const scale = entity.scale ?? 1;
-                    mesh.scale.set(scale, scale, scale);
-                } else {
-                    console.warn(`[NetworkCore onChange] Visual for entity ${entityId} not found.`);
-                }
-            }
-        };
+        });
+    } else {
+         console.warn('[ColliderDebug] room.state.entities not found or not iterable during initial processing.');
     }
-    
-    // Listen for entity removed events
-    if (typeof room.state.entities.onRemove === 'function') {
+
+    // --- Process Initial Structures --- 
+    console.log("[ColliderDebug] Processing initial room.state.structures...");
+    if (room.state.structures && typeof room.state.structures.forEach === 'function') {
+        room.state.structures.forEach((structure, structureId) => {
+            // Assuming structures have modelId and entityType='entity' or similar
+            const modelId = structure.modelId;
+            console.log(`[ColliderDebug] [Initial Structures Check] Processing structure: ${structureId}, ModelID: ${modelId}`);
+            // Call loadAndAddStaticEntity for structures
+            if (!window.visuals.staticEntities[structureId]) {
+                 console.log(`[ColliderDebug] [Initial Structures Check] Matched structure ${structureId}. Preparing to call loadAndAddStaticEntity.`);
+                 // Pass the structure data (which should conform to what Entity expects)
+                 // Ensure the entityType is correctly passed if not explicitly on the structure object
+                 const entityData = { ...structure, entityType: 'entity' }; // Assuming structure is type 'entity'
+                 loadAndAddStaticEntity(entityData, structureId);
+            } else {
+                 console.warn(`[ColliderDebug] [Initial Structures Check] Visual ALREADY EXISTS for structure ${structureId}. Skipping load.`);
+            }
+        });
+    } else {
+        console.warn('[ColliderDebug] room.state.structures not found or not iterable during initial processing.');
+    }
+
+    // --- Setup Listeners --- 
+
+    // Listener for room.state.entities (NPCs, hover_cubes, etc.)
+    if (room.state.entities && typeof room.state.entities.onAdd === 'function') {
+        room.state.entities.onAdd = (entity, entityId) => {
+            const entityType = entity.entityType;
+            const modelId = entity.modelId;
+             if (modelId !== 'hover_cube') {
+                 console.log(`[ColliderDebug] [entities.onAdd] Processing: ${entityId}, Type: ${entityType}, ModelID: ${modelId}`);
+             }
+            if (entityType === 'player' && entityId === room.sessionId) return;
+
+             if (entityType === 'npc') {
+                 // ... (same NPC creation logic as above) ...
+                 if (typeof window.createNpcVisual === 'function') {
+                     window.createNpcVisual(entity, entityId);
+                     setTimeout(() => {
+                         const npcInstance = NPC.npcs.get(entityId);
+                         if (npcInstance && npcInstance.mesh && !npcInstance._colliderAdded) {
+                             tryAddCollider(entity, npcInstance);
+                         }
+                     }, 500);
+                 } else {
+                     console.warn(`window.createNpcVisual function not found for NPC ${entityId}`);
+                 }
+             } else if (entityType === 'entity' && modelId === 'hover_cube') {
+                 if (modelId !== 'hover_cube') { // Avoid redundant logging for cubes
+                    console.log(`[ColliderDebug] [entities.onAdd] Matched type 'entity' (hover_cube) for ${entityId}. Preparing call.`);
+                 }
+                 loadAndAddStaticEntity(entity, entityId);
+             } // Add other non-structure types
+        };
+        // Add onChange/onRemove for entities if needed
         room.state.entities.onRemove = (entity, entityId) => {
-            console.log(`Entity removed: ${entityId}, entityType: ${entity.entityType}`);
-            
-            // Handle different entity types for removal
-            if (entity.entityType === 'operator') {
-                if (typeof window.removeOperatorVisual === 'function') {
-                    window.removeOperatorVisual(entityId);
-                }
-            } else if (entity.entityType === 'staticValueEntity') {
-                if (typeof window.removeStaticEntityVisual === 'function') {
-                    window.removeStaticEntityVisual(entityId);
-                }
-            } else if (entity.entityType === 'tree') {
-                if (window.entityHandlers?.tree?.remove) {
-                    window.entityHandlers.tree.remove(entityId);
-                }
-            } else if (entity.entityType === 'npc') {
-                // Handle NPC entity removal
-                // console.log(`Attempting to remove visual for NPC: ${entityId}`);
-                if (typeof window.removeNpcVisual === 'function') {
-                    window.removeNpcVisual(entityId);
-                } else {
-                    console.warn(`window.removeNpcVisual function not found for NPC ${entityId}`);
-                }
-            } else if (entity.entityType === 'entity') {
-                const mesh = window.visuals.staticEntities[entityId];
-                if (mesh) {
-                    console.log(`[NetworkCore onRemove] Removing visual for entity: ${entityId}`);
-                    if (mesh.parent) {
-                        mesh.parent.remove(mesh);
-                    }
-                    // Dispose geometry/material
-                    mesh.traverse(child => {
-                        if (child.isMesh) {
-                            child.geometry.dispose();
-                            if (child.material.isMaterial) {
-                                child.material.dispose();
-                            } else if (Array.isArray(child.material)) {
-                                child.material.forEach(material => material.dispose());
-                            }
-                        }
-                    });
-                    delete window.visuals.staticEntities[entityId];
-                } else {
-                    console.warn(`[NetworkCore onRemove] Visual for entity ${entityId} not found.`);
-                }
-            }
+             // ... (add removal logic for NPCs, hover_cubes if necessary) ...
+             console.log(`[ColliderDebug] Entity removed from entities collection: ${entityId}, Type: ${entity.entityType}`);
+             if (entity.entityType === 'npc') {
+                if (typeof window.removeNpcVisual === 'function') window.removeNpcVisual(entityId);
+             } else if (window.visuals.staticEntities[entityId]) {
+                 const mesh = window.visuals.staticEntities[entityId].mesh; // Get mesh from stored instance
+                 if (mesh && mesh.parent) mesh.parent.remove(mesh);
+                 // Dispose geometry/material if needed
+                 delete window.visuals.staticEntities[entityId];
+             }
         };
+    } else {
+         console.warn('[ColliderDebug] room.state.entities does not support onAdd listener.');
     }
-    
+
+    // Listener for room.state.structures 
+    if (room.state.structures && typeof room.state.structures.onAdd === 'function') {
+         console.log("[ColliderDebug] Setting up listener for room.state.structures.onAdd");
+        room.state.structures.onAdd = (structure, structureId) => {
+            const modelId = structure.modelId;
+            console.log(`[ColliderDebug] [structures.onAdd] Processing structure: ${structureId}, ModelID: ${modelId}`);
+             if (!window.visuals.staticEntities[structureId]) {
+                 console.log(`[ColliderDebug] [structures.onAdd] Matched structure ${structureId}. Preparing call.`);
+                  const entityData = { ...structure, entityType: 'entity' }; // Assume structure is type 'entity'
+                 loadAndAddStaticEntity(entityData, structureId);
+             } else {
+                  console.warn(`[ColliderDebug] [structures.onAdd] Visual ALREADY EXISTS for structure ${structureId}. Skipping load.`);
+             }
+        };
+         // Add onChange/onRemove for structures if needed
+         room.state.structures.onRemove = (structure, structureId) => {
+             console.log(`[ColliderDebug] Structure removed from structures collection: ${structureId}`);
+              if (window.visuals.staticEntities[structureId]) {
+                 const mesh = window.visuals.staticEntities[structureId].mesh; // Get mesh from stored instance
+                 if (mesh && mesh.parent) mesh.parent.remove(mesh);
+                 // Dispose geometry/material if needed
+                 delete window.visuals.staticEntities[structureId];
+             }
+         };
+         room.state.structures.onChange = (structure, structureId) => {
+             const modelId = structure.modelId;
+             // Minimal log for structure changes to avoid spam
+             if (Math.random() < 0.05) { // Log only 5% of changes
+                 console.log(`[ColliderDebug] [structures.onChange] Structure changed: ${structureId}, ModelID: ${modelId}`);
+             }
+             // Update visual properties if needed (position, rotation, scale)
+             const instance = window.visuals.staticEntities[structureId];
+             if (instance && instance.mesh) {
+                 instance.mesh.position.set(structure.x, structure.y, structure.z);
+                 instance.mesh.rotation.y = structure.rotationY;
+                 if (structure.scale) instance.mesh.scale.setScalar(structure.scale);
+                 // Update other relevant properties from the structure state
+             }
+         };
+
+    } else {
+        console.warn('[ColliderDebug] room.state.structures not found or does not support onAdd listener.');
+    }
+
     // --- Initialize Structure Listeners --- 
     if (window.buildingModeManager && typeof window.buildingModeManager.initializeStructureListeners === 'function') {
         // console.log("[setupRoomListeners] Initializing structure listeners via BuildingModeManager...");
@@ -1307,29 +1245,77 @@ window.setupRoomListeners = setupRoomListeners;
 window.cleanupNetworking = cleanupNetworking;
 
 // --- Helper Function for Static Entity Loading ---
-function loadAndAddStaticEntity(entity, entityId) {
-    console.log(`[loadAndAddStaticEntity ENTRY] Using EntityFactory for entityId: ${entityId}, entityType: ${entity.entityType}`);
+async function loadAndAddStaticEntity(entity, entityId) {
+    const modelId = entity?.modelId || 'unknown'; // Get modelId for logging
+    const isStructureOfInterest = modelId !== 'hover_cube'; // Log details for non-cubes
+
+    if (isStructureOfInterest) console.log(`[ColliderDebug] [loadAndAddStaticEntity ENTRY] Using EntityFactory for entityId: ${entityId}, modelId: ${modelId}`);
     if (!window.entityFactory || !window.scene) {
-        console.error(`[loadAndAddStaticEntity] EntityFactory or Scene not available for ${entityId}.`);
+        console.error(`[ColliderDebug] [loadAndAddStaticEntity] EntityFactory or Scene not available for ${entityId}.`);
         return;
     }
-    // Ensure id is set
     const params = { ...entity, id: entityId };
-    const entityInstance = window.entityFactory.createEntity('entity', params);
-    if (entityInstance && entityInstance.mesh) {
-        window.scene.add(entityInstance.mesh);
-        // Store the full entity instance, not just the mesh, for collider access and toggling
-        window.visuals.staticEntities[entityId] = entityInstance;
-        console.log(`[loadAndAddStaticEntity] ${entityId} added to scene and visuals using EntityFactory. [Full entity instance stored]`);
+    let entityInstance = null; 
 
-        // <<< ADD THIS: Explicitly add collider with delay for structure entities >>>
-        setTimeout(() => {
-            tryAddCollider(entity, entityInstance);
-            console.log(`[loadAndAddStaticEntity] Delayed collider creation attempted for ${entityId}`);
-        }, 500);
-        // <<< END ADDED CODE >>>
-    } else {
-        console.error(`[loadAndAddStaticEntity] Failed to create or add mesh for ${entityId}.`);
+    try {
+        entityInstance = window.entityFactory.createEntity('entity', params);
+        entityInstance.modelId = modelId; // Ensure modelId is on the instance for tryAddCollider
+
+        if (entityInstance && entityInstance.readyPromise instanceof Promise) { 
+             if (isStructureOfInterest) console.log(`[ColliderDebug] [loadAndAddStaticEntity] Waiting for readyPromise for ${entityId}...`);
+             await entityInstance.readyPromise; 
+             if (isStructureOfInterest) console.log(`[ColliderDebug] [loadAndAddStaticEntity] Entity ${entityId} readyPromise resolved.`);
+
+             window.visuals.staticEntities[entityId] = entityInstance;
+             if (isStructureOfInterest) console.log(`[ColliderDebug] [loadAndAddStaticEntity] ${entityId} added to visuals.`);
+
+             tryAddCollider(entity, entityInstance);
+             // No log here, tryAddCollider logs success conditionally
+
+        } else if (entityInstance && entityInstance.mesh) {
+             // Log fallback warning only for non-cubes
+             if (isStructureOfInterest) console.warn(`[ColliderDebug] [loadAndAddStaticEntity] Entity ${entityId} created, but no valid readyPromise found. Using fallback setTimeout.`);
+             if (!entityInstance.mesh.parent) {
+                 if (isStructureOfInterest) console.warn(`[ColliderDebug] [loadAndAddStaticEntity] Mesh for ${entityId} has no parent, adding to scene.`);
+                 window.scene.add(entityInstance.mesh);
+             }
+            window.visuals.staticEntities[entityId] = entityInstance;
+            // Log fallback addition only for non-cubes
+            if (isStructureOfInterest) console.log(`[ColliderDebug] [loadAndAddStaticEntity] ${entityId} added to scene/visuals (fallback).`);
+            // Log unreliable timeout warning only for non-cubes
+            if (isStructureOfInterest) console.warn(`[ColliderDebug] [loadAndAddStaticEntity] Using potentially unreliable setTimeout for collider on ${entityId}. Consider implementing readyPromise properly.`);
+            setTimeout(() => {
+                tryAddCollider(entity, entityInstance);
+            }, 1000); 
+        } else {
+            // Always log creation failure
+            console.error(`[ColliderDebug] [loadAndAddStaticEntity] Failed to create entity instance or mesh for ${entityId}.`);
+        }
+    } catch (error) {
+         // Always log errors
+        console.error(`[ColliderDebug] [loadAndAddStaticEntity] Error during entity creation or collider addition for ${entityId}:`, error);
+        // Optional: Clean up partially created entity visual if an error occurred
+        if (entityInstance && entityInstance.mesh && entityInstance.mesh.parent) {
+            console.log(`[ColliderDebug] [loadAndAddStaticEntity] Cleaning up mesh for ${entityId} due to error.`);
+            entityInstance.mesh.parent.remove(entityInstance.mesh);
+            // Consider disposing geometry/material here as well
+             entityInstance.mesh.traverse(child => {
+                 if (child.isMesh) {
+                     child.geometry?.dispose();
+                     if (child.material) {
+                         if (Array.isArray(child.material)) {
+                             child.material.forEach(m => m.dispose());
+                         } else {
+                             child.material.dispose();
+                         }
+                     }
+                 }
+             });
+        }
+        // Remove from visuals if it was added before the error
+        if (window.visuals?.staticEntities?.[entityId]) {
+             delete window.visuals.staticEntities[entityId];
+        }
     }
 }
 

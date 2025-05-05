@@ -54,116 +54,127 @@ class Entity {
     // Create the visual representation (mesh) for this entity
     // For generic entities, try to load a GLB model if modelId is present
     createMesh() {
+        // --- Add readyPromise logic --- 
+        let resolvePromise, rejectPromise;
+        this.readyPromise = new Promise((resolve, reject) => {
+            resolvePromise = resolve;
+            rejectPromise = reject;
+        });
+        // --- End readyPromise logic ---
+
         // If modelId is provided, attempt to load the GLB model
         if (this.modelId) {
             // Create a group container for the model
             const modelPath = `assets/models/${this.modelId}.glb`;
             const group = new THREE.Group();
-            group.userData.entity = this;
+            group.userData.entity = this; // Link group back to entity early
+
             if (!THREE.GLTFLoader) {
                 console.warn(`[Entity ${this.id}] THREE.GLTFLoader not available; using placeholder group for ${modelPath}`);
-                // Add collider immediately to placeholder
-                if (typeof window.addSelectionColliderFromEntity === 'function') {
-                    window.addSelectionColliderFromEntity(this, group);
-                }
+                 // Resolve promise immediately for placeholder
+                 resolvePromise(); 
             } else {
                 // console.log(`[Entity ${this.id}] Loading model: ${modelPath}`);
                 const loader = new THREE.GLTFLoader();
                 loader.load(
                     modelPath,
                     (gltf) => {
-                        const loadedModel = gltf.scene;
-                        if (this.scale) loadedModel.scale.setScalar(this.scale);
-                        loadedModel.position.set(0, 0, 0);
-                        loadedModel.rotation.set(0, 0, 0);
-                        loadedModel.userData.entity = this;
-                        group.add(loadedModel);
-                        // Compute and store bounding box collider
-                        const bbox = new THREE.Box3().setFromObject(group);
-                        this.boundingBox = bbox;
-                        
-                        // // Auto-compute collider dimensions if not provided // REMOVED THIS BLOCK
-                        // if (!this.colliderHalfExtents || this.colliderHalfExtents[0] <= 0) { // REMOVED
-                        //     const size = new THREE.Vector3(); // REMOVED
-                        //     bbox.getSize(size); // REMOVED
-                        //     this.colliderHalfExtents = [size.x/2, size.y/2, size.z/2]; // REMOVED
-                        //     console.log(`[Entity ${this.id}] Computed collider dimensions from model: ${JSON.stringify(this.colliderHalfExtents)}`); // REMOVED
-                        // } // REMOVED
-                        
-                        // // Add collider after model is loaded // REMOVED (Handled by network-core)
-                        // this.createEntityCollider(); // REMOVED
-                        
-                        // Mark model as loaded for later reference
-                        this.modelLoaded = true;
-                        
-                        // Apply portal shaders for city_dome_150
-                        if (this.modelId === 'city_dome_150') {
-                            const fileLoader = new THREE.FileLoader();
-                            // Load shaders via Promise.all
-                            Promise.all([
-                                fileLoader.loadAsync('/assets/models/portal_vertex.glsl'),
-                                fileLoader.loadAsync('/assets/models/portal_fragment.glsl')
-                            ])
-                            .then(([vertexShader, fragmentShader]) => {
-                                console.log(`[Entity ${this.id}] Portal shaders loaded`);
-                                const portalMaterial = new THREE.ShaderMaterial({
-                                    uniforms: {
-                                        time: { value: 0 },
-                                        seeds: { value: Array.from({ length: 15 }, () => new THREE.Vector2(Math.random(), Math.random())) }
-                                    },
-                                    vertexShader,
-                                    fragmentShader,
-                                    transparent: true,
-                                    depthWrite: false,
-                                    side: THREE.DoubleSide
-                                });
-                                loadedModel.traverse(child => {
-                                    if (child.isMesh) child.material = portalMaterial;
-                                });
-                                // Animate time uniform each frame
-                                window.registerAnimationCallback(delta => {
-                                    portalMaterial.uniforms.time.value += delta;
-                                });
-                            })
-                            .catch(error => console.error(`[Entity ${this.id}] FAILED loading portal shaders:`, error));
-                        }
+                        // --- Inside onLoad callback --- 
+                        try {
+                            const loadedModel = gltf.scene;
+                            if (this.scale) loadedModel.scale.setScalar(this.scale);
+                            loadedModel.position.set(0, 0, 0);
+                            loadedModel.rotation.set(0, 0, 0);
+                            // Ensure the loaded model itself also references the entity
+                            loadedModel.userData.entity = this; 
+                            group.add(loadedModel);
+                            
+                            // Compute and store bounding box collider
+                            const bbox = new THREE.Box3().setFromObject(group); // Use group for bbox
+                            this.boundingBox = bbox;
+                            
+                            this.modelLoaded = true;
+                            
+                            // Apply portal shaders for city_dome_150
+                            if (this.modelId === 'city_dome_150') {
+                                const fileLoader = new THREE.FileLoader();
+                                // Load shaders via Promise.all
+                                Promise.all([
+                                    fileLoader.loadAsync('/assets/models/portal_vertex.glsl'),
+                                    fileLoader.loadAsync('/assets/models/portal_fragment.glsl')
+                                ])
+                                .then(([vertexShader, fragmentShader]) => {
+                                    console.log(`[Entity ${this.id}] Portal shaders loaded`);
+                                    const portalMaterial = new THREE.ShaderMaterial({
+                                        uniforms: {
+                                            time: { value: 0 },
+                                            seeds: { value: Array.from({ length: 15 }, () => new THREE.Vector2(Math.random(), Math.random())) }
+                                        },
+                                        vertexShader,
+                                        fragmentShader,
+                                        transparent: true,
+                                        depthWrite: false,
+                                        side: THREE.DoubleSide
+                                    });
+                                    loadedModel.traverse(child => {
+                                        if (child.isMesh) child.material = portalMaterial;
+                                    });
+                                    // Animate time uniform each frame
+                                    window.registerAnimationCallback(delta => {
+                                        portalMaterial.uniforms.time.value += delta;
+                                    });
+                                })
+                                .catch(error => console.error(`[Entity ${this.id}] FAILED loading portal shaders:`, error));
+                            }
 
-                        // Tag every mesh so raycaster can pick up selectable entity
-                        loadedModel.traverse(child => {
-                            if (child.isMesh) child.userData.entity = this;
-                        });
+                            // Tag every mesh so raycaster can pick up selectable entity
+                            loadedModel.traverse(child => {
+                                if (child.isMesh) child.userData.entity = this;
+                            });
+
+                            // Resolve the promise AFTER model is loaded and processed
+                            console.log(`[Entity ${this.id}] Model loaded, resolving readyPromise.`);
+                            resolvePromise(); 
+                        } catch (loadError) {
+                            console.error(`[Entity ${this.id}] Error processing loaded model ${modelPath}:`, loadError);
+                            rejectPromise(loadError); // Reject promise on processing error
+                        }
+                        // --- End onLoad logic ---
                     },
-                    undefined,
+                    undefined, // onProgress callback (optional)
                     (error) => {
+                        // --- Inside onError callback --- 
                         console.error(`[Entity ${this.id}] FAILED loading model ${modelPath}:`, error);
+                        // Reject the promise on loading error
+                        rejectPromise(error); 
+                        // --- End onError logic ---
                     }
                 );
             }
-            return group;
+            return group; // Return the group immediately
         } else {
-            // If no modelId, create a simple box as a placeholder
+            // --- Placeholder Box Case --- 
             console.warn(`[Entity ${this.id}] No modelId provided, using box placeholder.`);
             const geometry = new THREE.BoxGeometry(1, 1, 1);
             const material = new THREE.MeshStandardMaterial({ color: this.color || 0x00ff00 });
             const mesh = new THREE.Mesh(geometry, material);
-            // Position/rotation is handled by constructor for this.mesh
-            // mesh.position.copy(this.position);
-            // mesh.rotation.y = this.rotationY;
             mesh.userData.entity = this;
 
-            // <<< Add collider for placeholder mesh as well >>>
-            const group = new THREE.Group(); // Use a group even for placeholder for consistency
+            const group = new THREE.Group(); 
             group.add(mesh);
             group.userData.entity = this;
             
-            // Compute and store bounding box collider
             const bbox = new THREE.Box3().setFromObject(group);
             this.boundingBox = bbox;
 
-            // Set model as loaded since we're using a placeholder
             this.modelLoaded = true;
             
-            return group; // <<< Return the group
+            // Resolve promise immediately for placeholder
+            console.log(`[Entity ${this.id}] Placeholder created, resolving readyPromise.`);
+            resolvePromise(); 
+            
+            return group; 
+            // --- End Placeholder Case ---
         }
     }
     

@@ -2541,7 +2541,8 @@ function getEntityFromIntersect(intersectObj) {
 // Function to update the visibility of all selection colliders
 window.updateColliderVisibility = function() {
     const visibility = window.showSelectionColliders;
-    console.log(`Setting collider visibility to: ${visibility}`);
+    // Remove tag - this log is useful general info
+    console.log(`Setting collider visibility to: ${visibility}`); 
     
     // Add counters to track different types of colliders
     let playerColliders = 0;
@@ -2566,7 +2567,10 @@ window.updateColliderVisibility = function() {
                 npcColliders++;
             } else if (entityType === 'entity') {
                 structureColliders++;
-                console.log(`[UpdateVisibility] Structure collider for entity: ${entityId}, UUID: ${obj.uuid}, Type: ${entityType}, Now visible: ${obj.visible}`);
+                // Keep this detailed log for structures, but only if it's NOT a hover_cube
+                if (obj.userData.entity?.modelId !== 'hover_cube') {
+                     console.log(`[ColliderDebug] [UpdateVisibility] Structure collider for entity: ${entityId}, UUID: ${obj.uuid}, Type: ${entityType}, Now visible: ${obj.visible}`);
+                }
             } else {
                 otherColliders++;
             }
@@ -2581,6 +2585,7 @@ window.updateColliderVisibility = function() {
 window.toggleColliderVisibility = function() {
     // Toggle the global flag
     window.showSelectionColliders = !window.showSelectionColliders;
+     // Remove tag - this log is useful general info
     console.log(`Toggling all collider visibility to: ${window.showSelectionColliders}`);
     
     // Update all colliders using the standard function

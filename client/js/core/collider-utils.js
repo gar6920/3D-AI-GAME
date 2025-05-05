@@ -4,28 +4,33 @@
 (function(){
     function addSelectionColliderFromEntity(colliderData, clientEntity, parentMesh){
         const entityId = clientEntity?.id || 'unknown';
-        console.log(`[ColliderUtils ${entityId}] addSelectionColliderFromEntity called. Data:`, colliderData, `Parent: ${parentMesh?.uuid}`);
+        const modelId = clientEntity?.modelId || 'unknown'; // Get modelId for conditional logging
+        const actualEntityType = clientEntity.type || 
+                               (clientEntity._isPlayer ? 'player' : 'entity'); 
+        const isStructureOfInterest = actualEntityType === 'entity' && modelId !== 'hover_cube';
+
+        if (isStructureOfInterest) console.log(`[ColliderDebug] [ColliderUtils ${entityId}] addSelectionColliderFromEntity called. Data:`, colliderData, `Parent: ${parentMesh?.uuid}`);
         
         if(!colliderData || !clientEntity || !parentMesh) {
-            console.error(`[ColliderUtils ${entityId}] Missing colliderData, clientEntity, or parentMesh!`);
+            console.error(`[ColliderDebug] [ColliderUtils ${entityId}] Missing colliderData, clientEntity, or parentMesh!`);
             return;
         }
         if (!colliderData.type) {
-            console.warn(`[ColliderUtils ${entityId}] No collider type provided in colliderData.`);
+            if (isStructureOfInterest) console.warn(`[ColliderDebug] [ColliderUtils ${entityId}] No collider type provided in colliderData.`);
             return;
         }
         
         const type = colliderData.type;
         const radius = colliderData.radius;
         const extents = colliderData.halfExtents;
-        console.log(`[ColliderUtils ${entityId}] Using server data - Type: ${type}, Radius: ${radius}, Extents: ${JSON.stringify(extents)}`);
+        if (isStructureOfInterest) console.log(`[ColliderDebug] [ColliderUtils ${entityId}] Using server data - Type: ${type}, Radius: ${radius}, Extents: ${JSON.stringify(extents)}`);
         
         let mesh;
         try {
             if(type === 'sphere'){
-                const effectiveRadius = radius || 1;
+                let effectiveRadius = radius || 1;
                  if (effectiveRadius <= 0) { 
-                     console.warn(`[ColliderUtils ${entityId}] Invalid radius from server: ${radius}. Using fallback 1.`);
+                     if (isStructureOfInterest) console.warn(`[ColliderDebug] [ColliderUtils ${entityId}] Invalid radius from server: ${radius}. Using fallback 1.`);
                      effectiveRadius = 1;
                  }
                 mesh = new THREE.Mesh(
@@ -38,11 +43,11 @@
                         opacity: 0.8
                     })
                 );
-                console.log(`[ColliderUtils ${entityId}] Created SPHERE geometry with effective radius: ${effectiveRadius}`);
+                if (isStructureOfInterest) console.log(`[ColliderDebug] [ColliderUtils ${entityId}] Created SPHERE geometry with effective radius: ${effectiveRadius}`);
             } else if(type === 'box'){
                 let he = extents;
                 if (!he || he.length !== 3 || he.some(dim => dim <= 0)) { 
-                     console.warn(`[ColliderUtils ${entityId}] Invalid halfExtents from server: ${JSON.stringify(extents)}. Using fallback [1,1,1].`);
+                     if (isStructureOfInterest) console.warn(`[ColliderDebug] [ColliderUtils ${entityId}] Invalid halfExtents from server: ${JSON.stringify(extents)}. Using fallback [1,1,1].`);
                      he = [1, 1, 1]; 
                 }
                 mesh = new THREE.Mesh(
@@ -55,15 +60,15 @@
                         opacity: 0.8
                     })
                 );
-                 console.log(`[ColliderUtils ${entityId}] Created BOX geometry with effective halfExtents: ${JSON.stringify(he)}`);
+                 if (isStructureOfInterest) console.log(`[ColliderDebug] [ColliderUtils ${entityId}] Created BOX geometry with effective halfExtents: ${JSON.stringify(he)}`);
             }
         } catch (error) {
-            console.error(`[ColliderUtils ${entityId}] Error creating geometry:`, error);
+            console.error(`[ColliderDebug] [ColliderUtils ${entityId}] Error creating geometry:`, error);
             return;
         }
         
         if(!mesh) {
-            console.warn(`[ColliderUtils ${entityId}] Mesh creation failed for type: ${type}`);
+            if (isStructureOfInterest) console.warn(`[ColliderDebug] [ColliderUtils ${entityId}] Mesh creation failed for type: ${type}`);
             return;
         }
         
@@ -71,23 +76,22 @@
         mesh.userData.entity = clientEntity;
         mesh.visible = window.showSelectionColliders !== undefined ? window.showSelectionColliders : false;
         
-        const entityType = clientEntity.type || clientEntity.entityType || (clientEntity._isPlayer ? 'player' : 'unknown');
-        mesh.userData.entityType = entityType;
+        mesh.userData.entityType = actualEntityType;
         
-        console.log(`[ColliderUtils ${entityId}] Mesh created successfully (UUID: ${mesh.uuid}). Setting userData and adding to parent (UUID: ${parentMesh.uuid}). Initial visibility: ${mesh.visible}`);
+        if (isStructureOfInterest) console.log(`[ColliderDebug] [ColliderUtils ${entityId}] Mesh created successfully (UUID: ${mesh.uuid}). Setting userData (type: ${actualEntityType}) and adding to parent (UUID: ${parentMesh.uuid}). Initial visibility: ${mesh.visible}`);
         
         mesh.renderOrder = 999;
         
         try {
             parentMesh.add(mesh);
-            console.log(`[ColliderUtils ${entityId}] Successfully added collider mesh to parent.`);
+            if (isStructureOfInterest) console.log(`[ColliderDebug] [ColliderUtils ${entityId}] Successfully added collider mesh to parent.`);
             
-            if (entityType === 'entity') {
+            if (actualEntityType === 'entity') {
                 mesh.position.set(0, 0, 0);
-                console.log(`[ColliderUtils ${entityId}] Structure collider - resetting position to parent origin.`);
+                if (isStructureOfInterest) console.log(`[ColliderDebug] [ColliderUtils ${entityId}] Structure collider - resetting position to parent origin.`);
             }
         } catch (error) {
-            console.error(`[ColliderUtils ${entityId}] Error adding mesh to parent:`, error);
+            console.error(`[ColliderDebug] [ColliderUtils ${entityId}] Error adding mesh to parent:`, error);
         }
     }
     if(typeof window !== 'undefined'){
