@@ -26,6 +26,36 @@ async function createColliderForEntity(entity, Ammo, io, colliderCache = {}) {
       } else if (entity.collision && entity.collision.halfExtents) {
         const he = entity.collision.halfExtents;
         hx = he.x; hy = he.y; hz = he.z;
+      } else if (entity.modelPath && io) {
+        // Attempt to auto-detect bounds from model file
+        const modelFile = entity.modelPath.split('/').pop();
+        let bounds = colliderCache[modelFile + ':boxBounds'];
+        if (!bounds) {
+          const path = require('path');
+          const document = await io.read(path.join(process.cwd(), 'client', 'assets', 'models', modelFile));
+          let min = [Infinity, Infinity, Infinity];
+          let max = [-Infinity, -Infinity, -Infinity];
+          document.getRoot().listMeshes().forEach(mesh => {
+            mesh.listPrimitives().forEach(prim => {
+              const pos = prim.getAttribute('POSITION').getArray();
+              for (let i = 0; i < pos.length; i += 3) {
+                min[0] = Math.min(min[0], pos[i]);
+                min[1] = Math.min(min[1], pos[i+1]);
+                min[2] = Math.min(min[2], pos[i+2]);
+                max[0] = Math.max(max[0], pos[i]);
+                max[1] = Math.max(max[1], pos[i+1]);
+                max[2] = Math.max(max[2], pos[i+2]);
+              }
+            });
+          });
+          hx = (max[0] - min[0]) / 2;
+          hy = (max[1] - min[1]) / 2;
+          hz = (max[2] - min[2]) / 2;
+          bounds = [hx, hy, hz];
+          colliderCache[modelFile + ':boxBounds'] = bounds;
+        } else {
+          [hx, hy, hz] = bounds;
+        }
       } else if (entity.scale) {
         hx = hy = hz = entity.scale / 2;
       } else {

@@ -144,7 +144,7 @@ function basicEnemyBehavior(entity, deltaTime, roomState) {
         if (entity._attackCooldown <= 0) {
             target.health -= entity.attackDamage;
             entity._attackCooldown = 1;
-            console.log(`[Enemy ${entity.id}] Attacked city center. Remaining HP: ${target.health}`);
+
         }
         return { state: 'Attack' };
     }

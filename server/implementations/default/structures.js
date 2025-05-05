@@ -15,10 +15,12 @@ const structureDefinitions = [
     rotationY: 0,
     scale: 1,
     buildable: false,
+    colliderType: "box",
+    isStatic: true,
     health: 1000,
     maxHealth: 1000
   },
-  // Removed inner dome (city_dome_100) definition
+  
   {
     id: "city_dome_150",
     structureType: "decor",

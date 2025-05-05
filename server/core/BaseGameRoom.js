@@ -30,12 +30,12 @@ class BaseGameRoom extends BaseRoom {
         this._initOptions = options; // Save init options for game reset
         // Use a single, shared structureDefinitions array for all static/buildable structure logic
         const { structureDefinitions } = require('../implementations/default/structures');
-        this._staticStructDefs = structureDefinitions;
+        this._structureDefs = structureDefinitions;
         // Try to require npcDefinitions from the implementation if not already present
         let npcDefs;
         try {
             npcDefs = require('../implementations/default/npcs').npcDefinitions;
-            console.log(`[BaseGameRoom] Loaded npcDefinitions: ${npcDefs.map(n => n.id).join(', ')}`);
+            console.log(`[BaseGameRoom] Loaded NPCs: ${npcDefs.map(n => n.id).join(', ')}`);
         } catch (e) {
             console.warn('[BaseGameRoom] Could not load npcDefinitions:', e);
             npcDefs = [];
@@ -105,9 +105,9 @@ class BaseGameRoom extends BaseRoom {
         this.spawnedStructures = [];
 
         // Spawn ONLY static structures (buildable: false)
-        structDefs.forEach(def => {
+        this._structureDefs.forEach(def => {
             if (def.buildable === false) {
-                console.log(`[BaseGameRoom] Spawning static structure: ${def.id}`);
+                console.log(`[BaseGameRoom] Spawning initial structure: ${def.id}`);
                 const s = new Structure();
                 s.id = def.id; // Use definition ID as instance ID for static items
                 s.entityType = 'structure';
@@ -125,8 +125,8 @@ class BaseGameRoom extends BaseRoom {
                 s.colliderType = def.colliderType || "";
                 s.colliderRadius = def.colliderRadius || 0;
                 s.colliderHalfExtents = Array.isArray(def.colliderHalfExtents) ? [...def.colliderHalfExtents] : (def.colliderHalfExtents ? [...def.colliderHalfExtents] : []);
-                if (!s.colliderType || (s.colliderType === "box" && (!s.colliderHalfExtents || !s.colliderHalfExtents.length))) {
-                    console.warn(`[BaseGameRoom] WARNING: Static structure ${s.id} is missing collider data! colliderType=${s.colliderType}, colliderHalfExtents=${JSON.stringify(s.colliderHalfExtents)}`);
+                if (!s.colliderType) {
+                    console.warn(`[BaseGameRoom] WARNING: Static structure ${s.id} is missing colliderType! colliderType=${s.colliderType}`);
                 }
                 this.state.structures.set(s.id, s);
                 this.spawnedStructures.push(s.id);
@@ -174,10 +174,10 @@ class BaseGameRoom extends BaseRoom {
         const gridSize = 1; // Assuming 1x1 cells
         console.log(`[BaseGameRoom] Map size context: ${mapSize}, Grid Size: ${gridSize}`);
 
-        // Place static structures into the initially empty grid
-        console.log(`[BaseGameRoom] Placing ${this._staticStructDefs.length} static structures into sparse grid...`);
+        // Place initial structures into the initially empty grid
+        console.log(`[BaseGameRoom] Placing ${this._structureDefs.filter(def => def.buildable === false).length} initial structures into sparse grid...`);
         let cellsAdded = 0;
-        this._staticStructDefs.forEach(def => {
+        this._structureDefs.forEach(def => {
             // Check: Only place ground-level structure types
             const groundStructureTypes = ["building", "path_tile", "wall", "structure"]; 
             if (!groundStructureTypes.includes(def.structureType)) {
@@ -210,7 +210,7 @@ class BaseGameRoom extends BaseRoom {
                 }
             }
         });
-        console.log(`[BaseGameRoom] Finished placing static structures. ${cellsAdded} grid cells added.`);
+        console.log(`[BaseGameRoom] Finished placing initial structures. ${cellsAdded} grid cells added.`);
         console.log(`[BaseGameRoom] Total grid size now: ${this.cityGrid.schemaMap.size} entries.`);
     }
 
@@ -242,7 +242,13 @@ class BaseGameRoom extends BaseRoom {
      */
     _placeStructure(defId, x, z) {
         const def = this._staticStructDefs.find(d => d.id === defId);
-        if (!def) { console.warn(`No buildable def with id ${defId}`); return; }
+        if (!def) {
+            // Suppress warning for virtual road cells
+            if (defId && defId.endsWith('_path_buildable')) return;
+            if (defId === 'concrete_path_buildable') return;
+            console.warn(`No buildable def with id ${defId}`);
+            return;
+        }
         const s = new Structure();
         s.id = `${def.id}_${Date.now()}`;
         s.entityType = 'structure'; s.definitionId = def.id; s.modelId = def.modelId||def.id;
@@ -251,8 +257,8 @@ class BaseGameRoom extends BaseRoom {
         s.colliderType = def.colliderType || "";
         s.colliderRadius = def.colliderRadius || 0;
         s.colliderHalfExtents = Array.isArray(def.colliderHalfExtents) ? [...def.colliderHalfExtents] : (def.colliderHalfExtents ? [...def.colliderHalfExtents] : []);
-        if (!s.colliderType || (s.colliderType === "box" && (!s.colliderHalfExtents || !s.colliderHalfExtents.length))) {
-            console.warn(`[BaseGameRoom] WARNING: Placed structure ${s.id} is missing collider data! colliderType=${s.colliderType}, colliderHalfExtents=${JSON.stringify(s.colliderHalfExtents)}`);
+        if (!s.colliderType) {
+            console.warn(`[BaseGameRoom] WARNING: Placed structure ${s.id} is missing colliderType! colliderType=${s.colliderType}`);
         }
         this.state.structures.set(s.id, s);
         // Mark each cell in the footprint region
@@ -350,8 +356,8 @@ class BaseGameRoom extends BaseRoom {
             s.colliderType = def.colliderType || "";
             s.colliderRadius = def.colliderRadius || 0;
             s.colliderHalfExtents = Array.isArray(def.colliderHalfExtents) ? [...def.colliderHalfExtents] : (def.colliderHalfExtents ? [...def.colliderHalfExtents] : []);
-            if (!s.colliderType || (s.colliderType === "box" && (!s.colliderHalfExtents || !s.colliderHalfExtents.length))) {
-                console.warn(`[BaseGameRoom] WARNING: Structure ${s.id} is still missing collider data after patch! colliderType=${s.colliderType}, colliderHalfExtents=${JSON.stringify(s.colliderHalfExtents)}`);
+            if (!s.colliderType) {
+                console.warn(`[BaseGameRoom] WARNING: Structure ${s.id} is still missing colliderType after patch! colliderType=${s.colliderType}`);
             }
         }
     }
@@ -630,7 +636,7 @@ class BaseGameRoom extends BaseRoom {
     }
     respawnCityAndEnemies() {
         // Respawn city center
-        const cityDef = this._staticStructDefs.find(def => def.id === 'city_building_center');
+        const cityDef = this._structureDefs.find(def => def.id === 'city_building_center');
         if (cityDef) {
             const s = new Structure();
             s.id = cityDef.id;
