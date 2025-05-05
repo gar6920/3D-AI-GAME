@@ -20,7 +20,7 @@ const GAMEPAD_POLL_RATE = 16; // ~60fps
 function parseCommandLineArgs() {
   const args = process.argv.slice(1);
   let environment = 'production';
-  let serverUrl = environment === 'development' ? 'http://localhost:3000' : 'https://sea-lion-app-4mc79.ondigitalocean.app';
+  let serverUrl = environment === 'development' ? 'http://localhost:8080' : 'https://sea-lion-app-4mc79.ondigitalocean.app';
   
   args.forEach(arg => {
     if (arg.startsWith('--env=')) {
@@ -39,7 +39,7 @@ function parseCommandLineArgs() {
 const config = parseCommandLineArgs();
 
 // Server config
-const SERVER_PORT = 3000;
+const SERVER_PORT = 8080;
 const SERVER_URL = config.serverUrl || `http://localhost:${SERVER_PORT}`;
 
 // Register custom protocol handler - now using 3dgame

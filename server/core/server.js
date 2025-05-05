@@ -8,7 +8,7 @@ const { gameServer, serverConfig } = require('./index');
 
 // Display server info
 console.log('\n===== 3D AI Game Platform =====');
-console.log('Server running on http://localhost:3000');
+console.log('Server running on http://localhost:8080');
 console.log('Implementation: default');
 
 // Handle Ctrl+C to exit

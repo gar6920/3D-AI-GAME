@@ -16,7 +16,7 @@ const structureDefinitions = [
     scale: 1,
     buildable: false,
     colliderType: "box",
-    isStatic: true,
+    
     health: 1000,
     maxHealth: 1000
   },
@@ -30,8 +30,8 @@ const structureDefinitions = [
     rotationY: 0,
     scale: 1,
     buildable: false,
-    colliderType: "mesh",
-    isStatic: true
+    colliderType: "box",
+    colliderHalfExtents: [1, 1, 1]
   },
   {
     id: "hover_cube",
@@ -40,7 +40,9 @@ const structureDefinitions = [
     position: { x: 0, y: 0, z: 0 },
     rotationY: 0,
     scale: 1,
-    buildable: true
+    buildable: true,
+    colliderType: "box",
+    colliderHalfExtents: [1, 1, 1]
   },
   {
     id: "castle",
@@ -52,7 +54,9 @@ const structureDefinitions = [
     scale: 10,
     buildable: true,
     health: 2000,
-    maxHealth: 2000
+    maxHealth: 2000,
+    colliderType: "box",
+    colliderHalfExtents: [5, 5, 5]
   },
   {
     id: "house",
@@ -62,7 +66,9 @@ const structureDefinitions = [
     position: { x: 10, y: 0, z: 10 },
     rotationY: 0,
     scale: 8,
-    buildable: true
+    buildable: true,
+    colliderType: "box",
+    colliderHalfExtents: [4, 4, 4]
   },
   {
     id: "concrete_path_buildable",
@@ -72,7 +78,9 @@ const structureDefinitions = [
     position: { x: 0, y: 0, z: 0 },
     rotationY: 0,
     scale: 1,
-    buildable: true
+    buildable: true,
+    colliderType: "box",
+    colliderHalfExtents: [0.5, 0.1, 0.5]
   }
 ];
 

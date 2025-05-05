@@ -101,36 +101,32 @@ class BaseGameRoom extends BaseRoom {
             console.warn('[BaseGameRoom] Could not load structureDefinitions:', e);
             structDefs = [];
         }
-        this._staticStructDefs = structDefs.filter(def => def.buildable === false); // Store static ones
+        // Removed: No separate static structure logic. All structures are handled via _structureDefs.
         this.spawnedStructures = [];
 
-        // Spawn ONLY static structures (buildable: false)
+        // Spawn all structures from _structureDefs
         this._structureDefs.forEach(def => {
-            if (def.buildable === false) {
-                console.log(`[BaseGameRoom] Spawning initial structure: ${def.id}`);
-                const s = new Structure();
-                s.id = def.id; // Use definition ID as instance ID for static items
-                s.entityType = 'structure';
-                s.definitionId = def.id;
-                s.modelId = def.modelId || (def.modelPath ? def.modelPath.split('/').pop().replace('.glb', '') : def.id);
-                s.x = def.position.x;
-                s.y = def.position.y;
-                s.z = def.position.z;
-                s.rotationY = def.rotationY || 0;
-                s.scale = def.scale || 1;
-                // Ensure health/maxHealth from definition
-                if (def.health !== undefined) s.health = def.health;
-                if (def.maxHealth !== undefined) s.maxHealth = def.maxHealth;
-                // Copy collider data from definition to structure instance
-                s.colliderType = def.colliderType || "";
-                s.colliderRadius = def.colliderRadius || 0;
-                s.colliderHalfExtents = Array.isArray(def.colliderHalfExtents) ? [...def.colliderHalfExtents] : (def.colliderHalfExtents ? [...def.colliderHalfExtents] : []);
-                if (!s.colliderType) {
-                    console.warn(`[BaseGameRoom] WARNING: Static structure ${s.id} is missing colliderType! colliderType=${s.colliderType}`);
-                }
-                this.state.structures.set(s.id, s);
-                this.spawnedStructures.push(s.id);
+            console.log(`[BaseGameRoom] Spawning initial structure: ${def.id}`);
+            const s = new Structure();
+            s.id = def.id;
+            s.entityType = 'structure';
+            s.definitionId = def.id;
+            s.modelId = def.modelId || (def.modelPath ? def.modelPath.split('/').pop().replace('.glb', '') : def.id);
+            s.x = def.position.x;
+            s.y = def.position.y;
+            s.z = def.position.z;
+            s.rotationY = def.rotationY || 0;
+            s.scale = def.scale || 1;
+            if (def.health !== undefined) s.health = def.health;
+            if (def.maxHealth !== undefined) s.maxHealth = def.maxHealth;
+            s.colliderType = def.colliderType || "";
+            s.colliderRadius = def.colliderRadius || 0;
+            s.colliderHalfExtents = Array.isArray(def.colliderHalfExtents) ? [...def.colliderHalfExtents] : (def.colliderHalfExtents ? [...def.colliderHalfExtents] : []);
+            if (!s.colliderType) {
+                console.warn(`[BaseGameRoom] WARNING: Structure ${s.id} is missing colliderType! colliderType=${s.colliderType}`);
             }
+            this.state.structures.set(s.id, s);
+            this.spawnedStructures.push(s.id);
         });
 
         // Sync structure definitions to clients
@@ -241,7 +237,7 @@ class BaseGameRoom extends BaseRoom {
      * Place a new structure at world coords
      */
     _placeStructure(defId, x, z) {
-        const def = this._staticStructDefs.find(d => d.id === defId);
+        const def = this._structureDefs.find(d => d.id === defId);
         if (!def) {
             // Suppress warning for virtual road cells
             if (defId && defId.endsWith('_path_buildable')) return;
@@ -319,8 +315,8 @@ class BaseGameRoom extends BaseRoom {
         groundBody.setFriction(0);
         this.physicsWorld.addRigidBody(groundBody);
         this._rigidBodies.set('ground', groundBody);
-        // create static structure bodies
-        for (const def of this._staticStructDefs) {
+        // create structure bodies for all structure definitions
+        for (const def of this._structureDefs) {
             createColliderForEntity(def, Ammo, io, colliderCache)
                 .then(shape => {
                     const transform = new Ammo.btTransform();
@@ -349,9 +345,7 @@ class BaseGameRoom extends BaseRoom {
 
         // --- PATCH: Copy collider data from definitions to structure instances after colliders are generated ---
         for (const [id, s] of this.state.structures.entries()) {
-            // Try both static and buildable definitions
-            const def = (this._staticStructDefs.find(d => d.id === s.definitionId) ||
-                        (this._staticStructDefs.length < 1 && this._buildableStructDefs && this._buildableStructDefs.find(d => d.id === s.definitionId)));
+            const def = this._structureDefs.find(d => d.id === s.definitionId);
             if (!def) continue;
             s.colliderType = def.colliderType || "";
             s.colliderRadius = def.colliderRadius || 0;

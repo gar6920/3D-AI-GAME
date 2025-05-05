@@ -104,14 +104,14 @@ if "%1"=="reinstall" (
 echo Dependencies are up to date.
 
 REM Kill any existing Node.js process listening on port 3000
-echo Killing any existing Node.js process on port 3000...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr "LISTENING" ^| findstr ":3000"') do (
+echo Killing any existing Node.js process on port 8080...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr "LISTENING" ^| findstr ":8080"') do (
     set PID=%%a
     if defined PID (
-        echo Found process with PID %PID% listening on port 3000. Terminating...
+        echo Found process with PID %PID% listening on port 8080. Terminating...
         taskkill /F /PID %PID% >nul 2>&1
     ) else (
-        echo No process found listening on port 3000.
+        echo No process found listening on port 8080.
     )
 )
 timeout /t 1 /nobreak >nul

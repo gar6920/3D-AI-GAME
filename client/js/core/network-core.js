@@ -2,7 +2,7 @@
 
 // Network configuration
 const environment = window.location.hostname.includes('localhost') ? 'dev' : 'prod';
-const endpoint = environment === 'dev' ? (window.location.port === '8080' ? 'ws://localhost:8080' : 'ws://localhost:3000') : 'wss://sea-lion-app-4mc79.ondigitalocean.app/game';
+const endpoint = environment === 'dev' ? 'ws://localhost:8080' : 'wss://sea-lion-app-4mc79.ondigitalocean.app/game';
 console.log(`Connecting to ${endpoint} in ${environment} mode`);
 let client = null;
 let room = null;
@@ -1246,8 +1246,9 @@ function loadAndAddStaticEntity(entity, entityId) {
     const entityInstance = window.entityFactory.createEntity('entity', params);
     if (entityInstance && entityInstance.mesh) {
         window.scene.add(entityInstance.mesh);
-        window.visuals.staticEntities[entityId] = entityInstance.mesh;
-        console.log(`[loadAndAddStaticEntity] ${entityId} added to scene and visuals using EntityFactory.`);
+        // Store the full entity instance, not just the mesh, for collider access and toggling
+        window.visuals.staticEntities[entityId] = entityInstance;
+        console.log(`[loadAndAddStaticEntity] ${entityId} added to scene and visuals using EntityFactory. [Full entity instance stored]`);
     } else {
         console.error(`[loadAndAddStaticEntity] Failed to create or add mesh for ${entityId}.`);
     }

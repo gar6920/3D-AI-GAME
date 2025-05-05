@@ -12,7 +12,7 @@
     "prod": "cross-env NODE_ENV=production node server/core/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "electron": "electron .",
-    "electron-dev": "concurrently \"npm run start\" \"wait-on http://localhost:3000 && npm run electron\"",
+    "electron-dev": "concurrently \"npm run start\" \"wait-on http://localhost:8080 && npm run electron\"",
     "build": "electron-builder",
     "postinstall": "electron-builder install-app-deps"
   },

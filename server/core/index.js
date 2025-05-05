@@ -74,7 +74,7 @@ class GameServer {
         // Set up CORS headers for all requests
         const allowedOrigins = process.env.ALLOWED_ORIGINS ? 
             process.env.ALLOWED_ORIGINS.split(',') : 
-            ['http://localhost:3000', 'http://localhost:8080'];
+            ['http://localhost:8080'];
 
         this.app.use((req, res, next) => {
             const origin = req.headers.origin;
@@ -300,7 +300,7 @@ start "" "${gamePath}\\launch_game.bat"
      * Start the server
      * @param {number} port Port to listen on
      */
-    start(port = 3000) {
+    start(port = 8080) {
         const host = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
         this.server.listen(port, host, () => {
             console.log(`Environment: ${serverConfig.environment}`);
