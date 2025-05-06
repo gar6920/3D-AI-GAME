@@ -345,6 +345,17 @@ if (def.colliderHalfExtents && s.colliderHalfExtents) {
                 const motion = new Ammo.btDefaultMotionState(transform);
                 const info = new Ammo.btRigidBodyConstructionInfo(0, motion, shape, new Ammo.btVector3(0,0,0));
                 const body = new Ammo.btRigidBody(info);
+                
+                // <<< NEW: Apply local scaling if defined >>>
+                const scale = def.scale;
+                if (scale && scale !== 1) {
+                    const ammoScale = new Ammo.btVector3(scale, scale, scale);
+                    body.getCollisionShape().setLocalScaling(ammoScale);
+                    // Note: For static bodies (mass=0), inertia update isn't typically needed
+                    console.log(`[BaseGameRoom][PhysicsInit] Applied scale ${scale} to static body ${def.id}`);
+                }
+                // <<< END NEW >>>
+
                 this.physicsWorld.addRigidBody(body);
                 this._rigidBodies.set(def.id, body);
             } catch (e) {
@@ -443,6 +454,23 @@ if (def.colliderHalfExtents && s.colliderHalfExtents) {
             const motion = new Ammo.btDefaultMotionState(transform);
             const info = new Ammo.btRigidBodyConstructionInfo(mass, motion, shape, inertia);
             const body = new Ammo.btRigidBody(info);
+            
+            // <<< NEW: Apply local scaling if defined >>>
+            const scale = entity.scale;
+            if (scale && scale !== 1) {
+                const ammoScale = new Ammo.btVector3(scale, scale, scale);
+                body.getCollisionShape().setLocalScaling(ammoScale);
+                // Update inertia for dynamic bodies if mass > 0
+                if (mass > 0) {
+                    const localInertia = new Ammo.btVector3(0, 0, 0);
+                    body.getCollisionShape().calculateLocalInertia(mass, localInertia);
+                    body.setMassProps(mass, localInertia);
+                    body.updateInertiaTensor();
+                }
+                 console.log(`[BaseGameRoom][CreateEntityBody] Applied scale ${scale} to body ${entity.id}`);
+            }
+            // <<< END NEW >>>
+
             // remove dynamic friction and lock rotation
             body.setFriction(0);
             body.setRollingFriction(0);

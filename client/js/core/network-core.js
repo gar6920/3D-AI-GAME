@@ -349,6 +349,14 @@ function tryAddCollider(entityFromServer, clientInstance) {
     const isStructureOfInterest = actualEntityType === 'entity' && modelId !== 'hover_cube'; 
 
     if (!clientInstance || clientInstance._colliderAdded || !clientInstance.modelLoaded || !clientInstance.mesh) {
+        // <<< NEW: Detailed logging for NPCs >>>
+        if (actualEntityType === 'npc') {
+            console.warn(`[ColliderDebug] [TryAddCollider NPC ${entityId}] Skipping collider. Reason: ${!clientInstance ? 'Missing clientInstance' : ''}${clientInstance?._colliderAdded ? ' Collider already added' : ''}${!clientInstance?.modelLoaded ? ' Model not loaded' : ''}${!clientInstance?.mesh ? ' Missing mesh' : ''}`);
+            if (clientInstance) {
+                console.log(`[ColliderDebug] [TryAddCollider NPC ${entityId}] Instance details:`, { id: clientInstance.id, type: clientInstance.type, modelId: clientInstance.modelId, _colliderAdded: clientInstance._colliderAdded, modelLoaded: clientInstance.modelLoaded, meshExists: !!clientInstance.mesh });
+            }
+        }
+        // <<< END NEW >>>
         return; 
     }
     
@@ -379,7 +387,8 @@ function tryAddCollider(entityFromServer, clientInstance) {
     if (typeof window.addSelectionColliderFromEntity === 'function') {
         try {
             // Pass the clientInstance which already has the correct type info
-            window.addSelectionColliderFromEntity(colliderData, clientInstance, clientInstance.mesh);
+            const scale = clientInstance.scale || 1; // Get scale from client instance, default 1
+            window.addSelectionColliderFromEntity(colliderData, clientInstance, clientInstance.mesh, scale);
             clientInstance._colliderAdded = true; 
             if (isStructureOfInterest) console.log(`[ColliderDebug] [TryAddCollider ${entityId}] Collider added successfully.`);
         } catch (error) {
@@ -402,22 +411,35 @@ function cleanupOrphanedColliders() {
     const orphanedColliders = [];
     window.scene.traverse(obj => {
         if (obj.userData && obj.userData.isCollider === true) {
-            // Check if this collider is properly attached to an entity mesh
-            let isAttachedToEntity = false;
-            
-            // Start with parent and work up through hierarchy
-            let parent = obj.parent;
-            while (parent) {
-                // A valid parent will have userData.entity
-                if (parent.userData && parent.userData.entity) {
-                    isAttachedToEntity = true;
-                    break;
+            // <<< CHANGE: Revised orphan check logic >>>
+            const entity = obj.userData.entity; 
+            let isOrphaned = true; // Assume orphaned unless found in active lists
+
+            if (entity && entity.id) {
+                // Check if entity exists in any known active collection
+                const entityId = entity.id;
+                const entityType = entity.type || (entity._isPlayer ? 'player' : 'entity');
+
+                if (entityId === window.playerEntity?.id) {
+                    isOrphaned = false; // Found local player
+                } else if (window.otherPlayers && window.otherPlayers[entityId]) {
+                    isOrphaned = false; // Found remote player
+                } else if (window.NPC?.npcs?.has(entityId)) {
+                    isOrphaned = false; // Found NPC
+                } else if (window.visuals?.staticEntities?.[entityId]) {
+                    // Check initial static entities (might overlap with structures map)
+                    isOrphaned = false; 
+                } else if (window.buildingModeManager?.worldStructuresMap?.has(entityId)){
+                     // Check dynamically added structures
+                     isOrphaned = false;
                 }
-                parent = parent.parent;
+                // Add checks for other entity types if necessary
             }
             
-            // If not attached to a proper entity, mark for removal
-            if (!isAttachedToEntity) {
+            // If the entity wasn\'t found in any active list, mark collider for removal
+            if (isOrphaned) {
+                console.log(`[CleanupColliders] Marking collider (UUID: ${obj.uuid}) as orphaned. Associated entity ID: ${entity?.id || 'N/A'}`);
+            // <<< END CHANGE >>>
                 orphanedColliders.push(obj);
             }
         }
@@ -803,7 +825,7 @@ function setupRoomPlayerListeners(room) {
         console.log('[setupRoomPlayerListeners] Current player count:', room.state.players.size);
         
         // <<< ADDED: Clean up orphaned colliders before processing players >>>
-        cleanupOrphanedColliders();
+        // cleanupOrphanedColliders(); // <<< TEMPORARILY DISABLED >>>
         // <<< END ADDED >>>
         
         // Process existing players
@@ -826,21 +848,42 @@ function setupRoomPlayerListeners(room) {
         }
         
         // <<< TRY ADD COLLIDER for existing players >>>
-        room.state.players.forEach((playerData, sessionId) => {
+        room.state.players.forEach(async (playerData, sessionId) => { // Make async
             if (sessionId === room.sessionId) { // Local player
                 if (window.playerEntity) {
-                    tryAddCollider(playerData, window.playerEntity);
+                    try {
+                         if (window.playerEntity.readyPromise instanceof Promise) {
+                            await window.playerEntity.readyPromise;
+                             console.log(`[ColliderDebug] Local player ${sessionId} readyPromise resolved.`);
+                         } else {
+                            console.warn(`[ColliderDebug] Local player ${sessionId} missing readyPromise, attempting collider add directly.`);
+                         }
+                        tryAddCollider(playerData, window.playerEntity);
+                    } catch (err) {
+                        console.error(`[ColliderDebug] Error adding collider for local player ${sessionId} after readyPromise:`, err);
+                    }
                 }
             } else { // Remote player
-                 if (window.otherPlayers && window.otherPlayers[sessionId]) {
-                    tryAddCollider(playerData, window.otherPlayers[sessionId]);
+                 const remotePlayerInstance = window.otherPlayers && window.otherPlayers[sessionId];
+                 if (remotePlayerInstance) {
+                     try {
+                         if (remotePlayerInstance.readyPromise instanceof Promise) {
+                             await remotePlayerInstance.readyPromise;
+                             console.log(`[ColliderDebug] Remote player ${sessionId} readyPromise resolved.`);
+                         } else {
+                             console.warn(`[ColliderDebug] Remote player ${sessionId} missing readyPromise, attempting collider add directly.`);
+                         }
+                        tryAddCollider(playerData, remotePlayerInstance);
+                     } catch (err) {
+                        console.error(`[ColliderDebug] Error adding collider for remote player ${sessionId} after readyPromise:`, err);
+                     }
                  }
             }
         });
         // <<<
         
         // Listen for player added events
-        room.state.players.onAdd = (player, sessionId) => {
+        room.state.players.onAdd = async (player, sessionId) => { // Make async
             // Skip invalid sessionIds or local player
             if (!sessionId || sessionId === room.sessionId) return;
             
@@ -854,8 +897,17 @@ function setupRoomPlayerListeners(room) {
             
             // <<< TRY ADD COLLIDER for new remote player >>>
             if (remotePlayerInstance) {
-                // Need to wait slightly for model to potentially load
-                setTimeout(() => tryAddCollider(player, remotePlayerInstance), 500); 
+                try {
+                     if (remotePlayerInstance.readyPromise instanceof Promise) {
+                         await remotePlayerInstance.readyPromise;
+                         console.log(`[ColliderDebug] New remote player ${sessionId} readyPromise resolved.`);
+                     } else {
+                        console.warn(`[ColliderDebug] New remote player ${sessionId} missing readyPromise, attempting collider add directly.`);
+                     }
+                    tryAddCollider(player, remotePlayerInstance);
+                } catch (err) {
+                    console.error(`[ColliderDebug] Error adding collider for new remote player ${sessionId} after readyPromise:`, err);
+                }
             }
             // <<<
             
@@ -868,20 +920,39 @@ function setupRoomPlayerListeners(room) {
         };
         
         // <<< TRY ADD COLLIDER for local player on first state change (after playerEntity exists) >>>
-        room.onStateChange.once((state) => {
+        room.onStateChange.once(async (state) => { // Make async
              if (window.playerEntity) {
                 const localPlayerData = state.players.get(room.sessionId);
                 if (localPlayerData) {
-                    // Delay slightly to increase chance model is loaded
-                    setTimeout(() => tryAddCollider(localPlayerData, window.playerEntity), 500);
+                    try {
+                         if (window.playerEntity.readyPromise instanceof Promise) {
+                             await window.playerEntity.readyPromise;
+                             console.log(`[ColliderDebug] Local player ${room.sessionId} (onStateChange) readyPromise resolved.`);
+                         } else {
+                            console.warn(`[ColliderDebug] Local player ${room.sessionId} (onStateChange) missing readyPromise, attempting collider add directly.`);
+                         }
+                        tryAddCollider(localPlayerData, window.playerEntity);
+                    } catch (err) {
+                        console.error(`[ColliderDebug] Error adding collider for local player ${room.sessionId} (onStateChange):`, err);
+                    }
                 }
              }
-             // Also try for existing NPCs
-             state.entities.forEach((entityData, entityId) => {
+             // Also try for existing NPCs (handle potential race condition if NPC added between initial processing and here)
+             state.entities.forEach(async (entityData, entityId) => { // Make async
                  if (entityData.entityType === 'npc') {
                      const npcInstance = NPC.npcs.get(entityId);
-                     if (npcInstance) {
-                         setTimeout(() => tryAddCollider(entityData, npcInstance), 500);
+                     if (npcInstance && !npcInstance._colliderAdded) { // Check if collider wasn't added already
+                         try {
+                             if (npcInstance.readyPromise instanceof Promise) {
+                                 await npcInstance.readyPromise;
+                                 console.log(`[ColliderDebug] NPC ${entityId} (onStateChange) readyPromise resolved.`);
+                             } else {
+                                console.warn(`[ColliderDebug] NPC ${entityId} (onStateChange) missing readyPromise, attempting collider add directly.`);
+                             }
+                             tryAddCollider(entityData, npcInstance);
+                         } catch (err) {
+                             console.error(`[ColliderDebug] Error adding collider for NPC ${entityId} (onStateChange):`, err);
+                         }
                      }
                  }
              });
@@ -1289,7 +1360,7 @@ async function loadAndAddStaticEntity(entity, entityId) {
             }, 1000); 
         } else {
             // Always log creation failure
-            console.error(`[ColliderDebug] [loadAndAddStaticEntity] Failed to create entity instance or mesh for ${entityId}.`);
+            console.error(`[ColliderDebug] [loadAndAddStaticEntity] Failed to create entity instance or mesh for ${entityId}, or readyPromise not found/resolved.`);
         }
     } catch (error) {
          // Always log errors

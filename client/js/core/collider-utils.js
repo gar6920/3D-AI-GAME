@@ -2,7 +2,7 @@
 // Usage: addSelectionColliderFromEntity(colliderData, clientEntity, parentMesh)
 
 (function(){
-    function addSelectionColliderFromEntity(colliderData, clientEntity, parentMesh){
+    function addSelectionColliderFromEntity(colliderData, clientEntity, parentMesh, scale = 1){
         const entityId = clientEntity?.id || 'unknown';
         const modelId = clientEntity?.modelId || 'unknown'; // Get modelId for conditional logging
         const actualEntityType = clientEntity.type || 
@@ -28,13 +28,12 @@
         let mesh;
         try {
             if(type === 'sphere'){
-                let effectiveRadius = radius || 1;
-                 if (effectiveRadius <= 0) { 
-                     if (isStructureOfInterest) console.warn(`[ColliderDebug] [ColliderUtils ${entityId}] Invalid radius from server: ${radius}. Using fallback 1.`);
-                     effectiveRadius = 1;
+                if (typeof radius !== 'number' || radius <= 0) { 
+                     console.error(`[ColliderDebug] [ColliderUtils ${entityId}] Invalid or missing radius from server: ${radius}. Skipping collider creation.`);
+                     return;
                  }
                 mesh = new THREE.Mesh(
-                    new THREE.SphereGeometry(effectiveRadius,16,12), 
+                    new THREE.SphereGeometry(radius, 16, 12), 
                     new THREE.MeshBasicMaterial({
                         color: 0x00ff00, // Green for spheres
                         wireframe: true, 
@@ -43,15 +42,14 @@
                         opacity: 0.8
                     })
                 );
-                if (isStructureOfInterest) console.log(`[ColliderDebug] [ColliderUtils ${entityId}] Created SPHERE geometry with effective radius: ${effectiveRadius}`);
+                if (isStructureOfInterest) console.log(`[ColliderDebug] [ColliderUtils ${entityId}] Created SPHERE geometry with server radius: ${radius}`);
             } else if(type === 'box'){
-                let he = extents;
-                if (!he || he.length !== 3 || he.some(dim => dim <= 0)) { 
-                     if (isStructureOfInterest) console.warn(`[ColliderDebug] [ColliderUtils ${entityId}] Invalid halfExtents from server: ${JSON.stringify(extents)}. Using fallback [1,1,1].`);
-                     he = [1, 1, 1]; 
+                if (!extents || !Array.isArray(extents) || extents.length !== 3 || extents.some(dim => typeof dim !== 'number' || dim <= 0)) { 
+                     console.error(`[ColliderDebug] [ColliderUtils ${entityId}] Invalid or missing halfExtents from server: ${JSON.stringify(extents)}. Skipping collider creation.`);
+                     return;
                 }
                 mesh = new THREE.Mesh(
-                    new THREE.BoxGeometry(he[0]*2, he[1]*2, he[2]*2), 
+                    new THREE.BoxGeometry(extents[0]*2, extents[1]*2, extents[2]*2), 
                     new THREE.MeshBasicMaterial({
                         color: 0x00ffff, // Cyan for boxes
                         wireframe: true, 
@@ -60,7 +58,10 @@
                         opacity: 0.8
                     })
                 );
-                 if (isStructureOfInterest) console.log(`[ColliderDebug] [ColliderUtils ${entityId}] Created BOX geometry with effective halfExtents: ${JSON.stringify(he)}`);
+                if (isStructureOfInterest) console.log(`[ColliderDebug] [ColliderUtils ${entityId}] Created BOX geometry with server halfExtents: ${JSON.stringify(extents)}`);
+            } else {
+                 console.error(`[ColliderDebug] [ColliderUtils ${entityId}] Unknown collider type from server: ${type}. Skipping collider creation.`);
+                 return;
             }
         } catch (error) {
             console.error(`[ColliderDebug] [ColliderUtils ${entityId}] Error creating geometry:`, error);
@@ -86,7 +87,7 @@
             parentMesh.add(mesh);
             if (isStructureOfInterest) console.log(`[ColliderDebug] [ColliderUtils ${entityId}] Successfully added collider mesh to parent.`);
             
-            if (actualEntityType === 'entity') {
+            if (actualEntityType === 'entity') { 
                 mesh.position.set(0, 0, 0);
                 if (isStructureOfInterest) console.log(`[ColliderDebug] [ColliderUtils ${entityId}] Structure collider - resetting position to parent origin.`);
             }

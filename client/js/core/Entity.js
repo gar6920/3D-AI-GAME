@@ -178,69 +178,6 @@ class Entity {
         }
     }
     
-    // New helper method to standardize collider creation with better logging
-    // Note: This is less critical now as network-core.js drives creation via tryAddCollider
-    createEntityCollider(isRetry = false) {
-        const retryMsg = isRetry ? " (RETRY)" : "";
-        try {
-            // <<< Log intent, but don't set defaults here >>>
-            // console.log(`[Entity ${this.id}] createEntityCollider called${retryMsg}. Type from instance: ${this.colliderType}`);
-            
-            if (typeof window.addSelectionColliderFromEntity !== 'function') {
-                console.error(`[Entity ${this.id}] window.addSelectionColliderFromEntity function NOT FOUND!${retryMsg}`);
-                return;
-            }
-            
-            // <<< Validation is good, but avoid setting defaults that might override server data >>>
-            // <<< Log warnings if data seems invalid/missing when this is called (though unlikely now) >>>
-            if (!this.colliderType) {
-                 console.warn(`[Entity ${this.id}] Missing colliderType when createEntityCollider called${retryMsg}`);
-            }
-            if (this.colliderType === 'box' && (!this.colliderHalfExtents || this.colliderHalfExtents.length !== 3 || this.colliderHalfExtents.some(dim => dim <= 0))) {
-                 console.warn(`[Entity ${this.id}] Invalid colliderHalfExtents when createEntityCollider called${retryMsg}:`, this.colliderHalfExtents);
-            }
-            if (this.colliderType === 'sphere' && (!this.colliderRadius || this.colliderRadius <= 0)) {
-                 console.warn(`[Entity ${this.id}] Invalid colliderRadius when createEntityCollider called${retryMsg}:`, this.colliderRadius);
-            }
-            
-            // Check if a collider already exists
-            let existingCollider = false;
-            this.mesh.traverse(child => {
-                if (child.userData && child.userData.isCollider) {
-                    existingCollider = true;
-                }
-            });
-            
-            if (existingCollider) {
-                console.log(`[Entity ${this.id}] Collider already exists, skipping creation${retryMsg}`);
-                return;
-            }
-            
-            // Create the collider - This part is now mostly redundant as tryAddCollider is primary
-            // window.addSelectionColliderFromEntity(this, this.mesh); // REMOVED - Handled by tryAddCollider
-            
-            // Add special flag for identity via tryAddCollider
-            // this._colliderAdded = true; // REMOVED - Set within tryAddCollider
-            
-            // Verify collider was added (This verification logic is useful, could be moved or adapted)
-            setTimeout(() => {
-                let colliderFound = false;
-                this.mesh.traverse(child => {
-                    if (child.userData && child.userData.isCollider) {
-                        colliderFound = true;
-                        console.log(`[Entity ${this.id}] Collider created successfully${retryMsg} - ID: ${child.uuid}`);
-                    }
-                });
-                
-                if (!colliderFound) {
-                    console.warn(`[Entity ${this.id}] Collider creation may have failed${retryMsg} - no collider found in hierarchy`);
-                }
-            }, 100);
-        } catch (error) {
-            console.error(`[Entity ${this.id}] Error creating collider${retryMsg}:`, error);
-        }
-    }
-
     // Update the entity's position and rotation
     updatePosition(pos) {
         if (!pos) {

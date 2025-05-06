@@ -43,20 +43,6 @@ const structureDefinitions = [
     colliderHalfExtents: [1, 1, 1]
   },
   {
-    id: "castle",
-    structureType: "building",
-    modelId: "castle",
-    modelPath: "assets/models/castle.glb",
-    position: { x: 0, y: 0, z: 0 },
-    rotationY: 0,
-    scale: 10,
-    buildable: true,
-    health: 2000,
-    maxHealth: 2000,
-    colliderType: "box",
-    colliderHalfExtents: [5, 5, 5]
-  },
-  {
     id: "house",
     structureType: "building",
     modelId: "house",
@@ -66,7 +52,6 @@ const structureDefinitions = [
     scale: 8,
     buildable: true,
     colliderType: "box",
-    colliderHalfExtents: [4, 4, 4]
   },
   {
     id: "concrete_path_buildable",

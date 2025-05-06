@@ -933,21 +933,35 @@ class BuildingModeManager {
             // We assume a base 'entity' type handles model loading via modelId
             const structureEntity = window.entityFactory.createEntity(entityParams.type, entityParams);
 
-            if (structureEntity && structureEntity.mesh) {
+            if (structureEntity) {
                 // Store the Entity instance (not just the mesh)
                 this.worldStructuresMap.set(key, structureEntity);
                 
                 // The Entity constructor and its loader callback handle initial positioning and scene addition
-                // console.log("[BuildingModeManager] Structure entity created successfully:", key);
+                console.log("[BuildingModeManager] Structure entity created/updated:", key);
                 
+                // Wait for readyPromise and add collider
+                (async () => {
+                    try {
+                        if (structureEntity.readyPromise instanceof Promise) {
+                            await structureEntity.readyPromise;
+                            console.log(`[ColliderDebug] Dynamic structure ${key} readyPromise resolved.`);
+                            // Pass the original server data (structureData) for collider info
+                            if (!structureEntity._colliderAdded) { // Double check flag after promise
+                                window.tryAddCollider(structureData, structureEntity); 
+                            }
+                        } else {
+                            console.warn(`[ColliderDebug] Dynamic structure ${key} missing readyPromise. Cannot add collider reliably.`);
+                        }
+                    } catch (err) {
+                        console.error(`[ColliderDebug] Error waiting for readyPromise or adding collider for dynamic structure ${key}:`, err);
+                    }
+                })();
+
                 return structureEntity;
 
             } else {
-                 console.error("[BuildingModeManager] EntityFactory failed to create structure entity or its mesh:", key, structureEntity);
-                 // Cleanup if partial creation occurred? (Entity constructor should handle this)
-                 if (structureEntity && typeof structureEntity.destroy === 'function') {
-                    structureEntity.destroy();
-                 }
+                 console.error("[BuildingModeManager] EntityFactory failed to return a structure entity instance:", key);
                  return null;
             }
         } catch (error) {
