@@ -26,7 +26,7 @@ class BaseGameRoom extends BaseRoom {
         this.state.cityCredits = 100;
         this.state.enemyCredits = 100;
         // Add logging for initialization
-        console.log('[BaseGameRoom] initializeImplementation called');
+        
         this._initOptions = options; // Save init options for game reset
         // Use a single, shared structureDefinitions array for all static/buildable structure logic
         const { structureDefinitions } = require('../implementations/default/structures');
@@ -35,7 +35,7 @@ class BaseGameRoom extends BaseRoom {
         let npcDefs;
         try {
             npcDefs = require('../implementations/default/npcs').npcDefinitions;
-            console.log(`[BaseGameRoom] Loaded NPCs: ${npcDefs.map(n => n.id).join(', ')}`);
+            
         } catch (e) {
             console.warn('[BaseGameRoom] Could not load npcDefinitions:', e);
             npcDefs = [];
@@ -106,7 +106,7 @@ class BaseGameRoom extends BaseRoom {
 
         // Spawn all structures from _structureDefs
         this._structureDefs.forEach(def => {
-            console.log(`[BaseGameRoom] Spawning initial structure: ${def.id}`);
+            
             const s = new Structure();
             s.id = def.id;
             s.entityType = 'structure';
@@ -167,15 +167,15 @@ if (def.colliderHalfExtents && s.colliderHalfExtents) {
 
     // --- City Grid Initialization Helper ---
     initializeCityGrid() {
-        console.log("[BaseGameRoom] Initializing Sparse City Grid...");
+        
         this.cityGrid.clear(); // Start with an empty LLM grid map
 
         const mapSize = this.state.gameConfig?.mapSize || 100; // Still needed for context if desired
         const gridSize = 1; // Assuming 1x1 cells
-        console.log(`[BaseGameRoom] Map size context: ${mapSize}, Grid Size: ${gridSize}`);
+        
 
         // Place initial structures into the initially empty grid
-        console.log(`[BaseGameRoom] Placing ${this._structureDefs.filter(def => def.buildable === false).length} initial structures into sparse grid...`);
+        
         let cellsAdded = 0;
         this._structureDefs.forEach(def => {
             // Check: Only place ground-level structure types
@@ -210,8 +210,8 @@ if (def.colliderHalfExtents && s.colliderHalfExtents) {
                 }
             }
         });
-        console.log(`[BaseGameRoom] Finished placing initial structures. ${cellsAdded} grid cells added.`);
-        console.log(`[BaseGameRoom] Total grid size now: ${this.cityGrid.schemaMap.size} entries.`);
+        
+        
     }
 
     /**
@@ -467,7 +467,7 @@ if (def.colliderHalfExtents && s.colliderHalfExtents) {
                     body.setMassProps(mass, localInertia);
                     body.updateInertiaTensor();
                 }
-                 console.log(`[BaseGameRoom][CreateEntityBody] Applied scale ${scale} to body ${entity.id}`);
+
             }
             // <<< END NEW >>>
 
@@ -503,7 +503,7 @@ if (def.colliderHalfExtents && s.colliderHalfExtents) {
         // Early game-over check: trigger delayed restart when city center is destroyed
         const city = this.state.structures.get('city_building_center');
         if (city && city.health <= 0 && !this._restartDelayTimer) {
-            console.log('[BaseGameRoom] City destroyed, starting 10 second restart delay');
+            
             this._restartDelayTimer = 10.0; // seconds
             // Remove all enemy NPCs immediately
             const toRemove = [];
@@ -522,7 +522,7 @@ if (def.colliderHalfExtents && s.colliderHalfExtents) {
         if (this._restartDelayTimer) {
             this._restartDelayTimer -= deltaTime;
             if (this._restartDelayTimer <= 0) {
-                console.log('[BaseGameRoom] Restart delay finished, respawning city center and enemies');
+                
                 this._restartDelayTimer = null;
                 this.respawnCityAndEnemies();
             }
@@ -531,7 +531,7 @@ if (def.colliderHalfExtents && s.colliderHalfExtents) {
         // Timer-based reset after duration
         this._elapsedTime += deltaTime;
         if (this._elapsedTime >= this._gameDuration) {
-            console.log('[BaseGameRoom] 1 hour elapsed, restarting cycle');
+            
             this._elapsedTime = 0;
             this.resetGame();
             return;
@@ -542,7 +542,7 @@ if (def.colliderHalfExtents && s.colliderHalfExtents) {
         this.state.structures.forEach((structure, id) => {
             // Check if health exists and is zero or less
             if (structure.health !== undefined && structure.health <= 0) {
-                console.log(`[BaseGameRoom] Structure ${id} detected as destroyed (health: ${structure.health})`);
+                
                 destroyedStructureIds.push(id);
 
                 // Clear grid cells occupied by this structure
@@ -561,7 +561,7 @@ if (def.colliderHalfExtents && s.colliderHalfExtents) {
                                 this.clearCityGridCell(worldX, worldZ);
                             }
                         }
-                        console.log(`[BaseGameRoom] Cleared city grid cells for destroyed structure ${id}`);
+                        
                     } catch (gridError) {
                         console.error(`[BaseGameRoom] Error clearing city grid for destroyed structure ${id}:`, gridError);
                     }
@@ -574,7 +574,7 @@ if (def.colliderHalfExtents && s.colliderHalfExtents) {
                     const body = this._rigidBodies.get(id);
                     this.physicsWorld.removeRigidBody(body);
                     this._rigidBodies.delete(id);
-                    console.log(`[BaseGameRoom] Removed physics body for destroyed structure ${id}`);
+                    
                 }
             }
         });
@@ -582,7 +582,7 @@ if (def.colliderHalfExtents && s.colliderHalfExtents) {
         // Remove destroyed structures from state AFTER iteration
         destroyedStructureIds.forEach(id => {
             this.state.structures.delete(id);
-            console.log(`[BaseGameRoom] Removed destroyed structure ${id} from state.`);
+            
         });
         // --- End Structure Health Check ---
 

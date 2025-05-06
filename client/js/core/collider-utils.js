@@ -44,24 +44,46 @@
                 );
                 if (isStructureOfInterest) console.log(`[ColliderDebug] [ColliderUtils ${entityId}] Created SPHERE geometry with server radius: ${radius}`);
             } else if(type === 'box'){
-                if (!extents || !Array.isArray(extents) || extents.length !== 3 || extents.some(dim => typeof dim !== 'number' || dim <= 0)) { 
-                     console.error(`[ColliderDebug] [ColliderUtils ${entityId}] Invalid or missing halfExtents from server: ${JSON.stringify(extents)}. Skipping collider creation.`);
-                     return;
+                // Fix for handling halfExtents from server
+                let validExtents = extents;
+                if (!extents || !Array.isArray(extents) || extents.length !== 3) {
+                    console.warn(`[ColliderDebug] [ColliderUtils ${entityId}] Invalid halfExtents format from server: ${JSON.stringify(extents)}. Attempting to convert or use default.`);
+                    validExtents = [1, 1, 1]; // Default fallback if data is invalid
+                    if (extents && typeof extents === 'object' && !Array.isArray(extents)) {
+                        // Convert object to array if it's an object with numeric properties
+                        validExtents = [extents[0] || 1, extents[1] || 1, extents[2] || 1];
+                    } else if (extents && Array.isArray(extents)) {
+                        // Ensure all elements are numbers greater than 0
+                        validExtents = extents.map(e => typeof e === 'number' && e > 0 ? e : 1);
+                    }
+                }
+                if (validExtents.some(dim => typeof dim !== 'number' || dim <= 0)) {
+                    console.warn(`[ColliderDebug] [ColliderUtils ${entityId}] Some dimensions in halfExtents are invalid: ${JSON.stringify(validExtents)}. Using default values.`);
+                    validExtents = [1, 1, 1];
                 }
                 mesh = new THREE.Mesh(
-                    new THREE.BoxGeometry(extents[0]*2, extents[1]*2, extents[2]*2), 
+                    new THREE.BoxGeometry(validExtents[0]*2, validExtents[1]*2, validExtents[2]*2), 
                     new THREE.MeshBasicMaterial({
-                        color: 0x00ffff, // Cyan for boxes
+                        color: 0xffff00, // Yellow for boxes
                         wireframe: true, 
                         depthTest: false,
                         transparent: true,
                         opacity: 0.8
                     })
                 );
-                if (isStructureOfInterest) console.log(`[ColliderDebug] [ColliderUtils ${entityId}] Created BOX geometry with server halfExtents: ${JSON.stringify(extents)}`);
+                if (isStructureOfInterest) console.log(`[ColliderDebug] [ColliderUtils ${entityId}] Created BOX geometry with server halfExtents: ${JSON.stringify(validExtents)}`);
             } else {
-                 console.error(`[ColliderDebug] [ColliderUtils ${entityId}] Unknown collider type from server: ${type}. Skipping collider creation.`);
-                 return;
+                if (isStructureOfInterest) console.warn(`[ColliderDebug] [ColliderUtils ${entityId}] Unsupported collider type from server: ${type}. Defaulting to sphere.`);
+                mesh = new THREE.Mesh(
+                    new THREE.SphereGeometry(scale, 16, 12), 
+                    new THREE.MeshBasicMaterial({
+                        color: 0x00ffff, // Cyan for fallback
+                        wireframe: true, 
+                        depthTest: false,
+                        transparent: true,
+                        opacity: 0.8
+                    })
+                );
             }
         } catch (error) {
             console.error(`[ColliderDebug] [ColliderUtils ${entityId}] Error creating geometry:`, error);

@@ -223,23 +223,9 @@ class BaseRoom extends Room {
         // --- BEGIN Server-Authoritative NPC Update --- 
         // REMOVED: Generic NPC update logic. This should be handled by implementationUpdate.
         // --- END Server-Authoritative NPC Update ---
-        
         // Call implementation-specific update
         this.implementationUpdate(deltaTime);
-
-        // --- DEBUG: Log collider data for all structures right before state is sent ---
-        if (this.state && this.state.structures && typeof this.state.structures.forEach === 'function') {
-            console.log('[SERVER COLLIDER DEBUG] Structures collider data:');
-            this.state.structures.forEach((structure, id) => {
-                console.log(`  [${id}] colliderType: ${structure.colliderType}, colliderRadius: ${structure.colliderRadius}, colliderHalfExtents: ${structure.colliderHalfExtents ? JSON.stringify(Array.from(structure.colliderHalfExtents)) : '[]'}`);
-            });
-        }
     }
-    
-    /**
-     * Update entity spawning system
-     * @param {number} deltaTime Time since last update
-     */
     updateEntitySpawning(deltaTime) {
         this.spawnTimer += deltaTime;
         if (this.spawnTimer >= this.spawnInterval) {

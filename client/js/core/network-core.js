@@ -348,54 +348,63 @@ function tryAddCollider(entityFromServer, clientInstance) {
                            (clientInstance?._isPlayer ? 'player' : 'entity'); // Default to entity if unknown
     const isStructureOfInterest = actualEntityType === 'entity' && modelId !== 'hover_cube'; 
 
-    if (!clientInstance || clientInstance._colliderAdded || !clientInstance.modelLoaded || !clientInstance.mesh) {
-        // <<< NEW: Detailed logging for NPCs >>>
-        if (actualEntityType === 'npc') {
-            console.warn(`[ColliderDebug] [TryAddCollider NPC ${entityId}] Skipping collider. Reason: ${!clientInstance ? 'Missing clientInstance' : ''}${clientInstance?._colliderAdded ? ' Collider already added' : ''}${!clientInstance?.modelLoaded ? ' Model not loaded' : ''}${!clientInstance?.mesh ? ' Missing mesh' : ''}`);
-            if (clientInstance) {
-                console.log(`[ColliderDebug] [TryAddCollider NPC ${entityId}] Instance details:`, { id: clientInstance.id, type: clientInstance.type, modelId: clientInstance.modelId, _colliderAdded: clientInstance._colliderAdded, modelLoaded: clientInstance.modelLoaded, meshExists: !!clientInstance.mesh });
+    // <<< Check if entity has a collider defined from server >>>
+    if (entityFromServer?.colliderType) {
+        // <<< Log for debugging >>>
+        if (isStructureOfInterest) {
+            console.log(`[ColliderDebug] [TryAddCollider ${entityId}] Server provided colliderType: ${entityFromServer.colliderType}`);
+            if (entityFromServer.colliderType === 'sphere') {
+                console.log(`[ColliderDebug] [TryAddCollider ${entityId}] Sphere collider radius: ${entityFromServer.colliderRadius}`);
+            } else if (entityFromServer.colliderType === 'box') {
+                console.log(`[ColliderDebug] [TryAddCollider ${entityId}] Box collider halfExtents: ${entityFromServer.colliderHalfExtents}`);
             }
         }
-        // <<< END NEW >>>
-        return; 
-    }
-    
-    // <<< Extract collider data DIRECTLY from server object >>>
-    const colliderData = {
-        type: entityFromServer.colliderType,
-        radius: entityFromServer.colliderRadius,
-        // Ensure halfExtents is an array or undefined
-        halfExtents: entityFromServer.colliderHalfExtents ? Array.from(entityFromServer.colliderHalfExtents) : undefined
-    };
-    
-    // <<< Conditional validation logs >>>
-    if (!colliderData.type) {
-        if (isStructureOfInterest) console.warn(`[ColliderDebug] [TryAddCollider ${entityId}] Missing colliderType in server data. Skipping collider creation.`);
-        return;
-    }
-    if (colliderData.type === 'box' && (!colliderData.halfExtents || colliderData.halfExtents.length !== 3)) {
-         if (isStructureOfInterest) console.warn(`[ColliderDebug] [TryAddCollider ${entityId}] Invalid or missing halfExtents for box type... Skipping.`);
-        return;
-    }
-    if (colliderData.type === 'sphere' && (colliderData.radius === undefined || colliderData.radius === null)) {
-         if (isStructureOfInterest) console.warn(`[ColliderDebug] [TryAddCollider ${entityId}] Invalid or missing radius for sphere type... Skipping.`);
-        return;
-    }
-    
-    if (isStructureOfInterest) console.log(`[ColliderDebug] [TryAddCollider ${entityId}] Attempting to add collider. Server Data:`, colliderData, `Client Instance:`, clientInstance.id);
-    
-    if (typeof window.addSelectionColliderFromEntity === 'function') {
-        try {
-            // Pass the clientInstance which already has the correct type info
-            const scale = clientInstance.scale || 1; // Get scale from client instance, default 1
-            window.addSelectionColliderFromEntity(colliderData, clientInstance, clientInstance.mesh, scale);
-            clientInstance._colliderAdded = true; 
-            if (isStructureOfInterest) console.log(`[ColliderDebug] [TryAddCollider ${entityId}] Collider added successfully.`);
-        } catch (error) {
-             console.error(`[ColliderDebug] [TryAddCollider ${entityId}] Error calling addSelectionColliderFromEntity:`, error);
-        } 
+        // <<< Check if clientInstance already has a collider >>>
+        if (clientInstance?._colliderAdded) {
+            if (isStructureOfInterest) console.log(`[ColliderDebug] [TryAddCollider ${entityId}] Collider already added, skipping.`);
+            return; // Skip if already added
+        }
+        // <<< Check if mesh is ready >>>
+        if (!clientInstance?.mesh) {
+            if (isStructureOfInterest) console.log(`[ColliderDebug] [TryAddCollider ${entityId}] Mesh not ready, deferring collider creation.`);
+            // Defer adding collider until mesh is loaded
+            setTimeout(() => {
+                if (clientInstance?.mesh) {
+                    console.log(`[ColliderDebug] [TryAddCollider ${entityId}] Mesh now loaded, retrying collider creation.`);
+                    tryAddCollider(entityFromServer, clientInstance);
+                } else {
+                    console.warn(`[ColliderDebug] [TryAddCollider ${entityId}] Mesh still not ready on retry, giving up.`);
+                }
+            }, 500);
+            return;
+        }
+        // <<< Extract scale from clientInstance >>>
+        const scale = clientInstance.scale || 1; 
+        if (isStructureOfInterest) console.log(`[ColliderDebug] [TryAddCollider ${entityId}] Using scale factor: ${scale} for collider sizing.`);
+        // <<< Prepare collider data >>>
+        const colliderData = {
+            type: entityFromServer.colliderType || 'sphere',
+            radius: entityFromServer.colliderType === 'sphere' ? (entityFromServer.colliderRadius || scale) : 1,
+            halfExtents: entityFromServer.colliderType === 'box' ? entityFromServer.colliderHalfExtents : [scale, scale, scale],
+        };
+        // <<< Ensure the collider is added even for sharks >>>
+        if (modelId.includes('shark')) {
+            console.log(`[ColliderDebug] [TryAddCollider ${entityId}] Specifically handling shark entity to ensure collider is added.`);
+        }
+        if (typeof window.addSelectionColliderFromEntity === 'function') {
+            try {
+                // <<< Call the function to add the collider >>>
+                window.addSelectionColliderFromEntity(colliderData, clientInstance, clientInstance.mesh, scale);
+                clientInstance._colliderAdded = true; 
+                if (isStructureOfInterest) console.log(`[ColliderDebug] [TryAddCollider ${entityId}] Collider added successfully.`);
+            } catch (error) {
+                 console.error(`[ColliderDebug] [TryAddCollider ${entityId}] Error calling addSelectionColliderFromEntity:`, error);
+            } 
+        } else {
+            console.error(`[ColliderDebug] [TryAddCollider ${entityId}] window.addSelectionColliderFromEntity function NOT FOUND!`);
+        }
     } else {
-        console.error(`[ColliderDebug] [TryAddCollider ${entityId}] window.addSelectionColliderFromEntity function NOT FOUND!`);
+        if (isStructureOfInterest) console.log(`[ColliderDebug] [TryAddCollider ${entityId}] No colliderType defined on server entity, skipping.`);
     }
 }
 // <<< END HELPER >>>
