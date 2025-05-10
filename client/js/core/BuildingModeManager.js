@@ -948,6 +948,7 @@ class BuildingModeManager {
                             console.log(`[ColliderDebug] Dynamic structure ${key} readyPromise resolved.`);
                             // Pass the original server data (structureData) for collider info
                             if (!structureEntity._colliderAdded) { // Double check flag after promise
+                                console.log(`[ColliderDebug] About to call tryAddCollider for player-built structure ID: ${structureData.id}. Server data (structureData):`, JSON.parse(JSON.stringify(structureData)));
                                 window.tryAddCollider(structureData, structureEntity); 
                             }
                         } else {

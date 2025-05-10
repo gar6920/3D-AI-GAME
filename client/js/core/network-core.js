@@ -1349,6 +1349,7 @@ async function loadAndAddStaticEntity(entity, entityId) {
              window.visuals.staticEntities[entityId] = entityInstance;
              if (isStructureOfInterest) console.log(`[ColliderDebug] [loadAndAddStaticEntity] ${entityId} added to visuals.`);
 
+             console.log(`[ColliderDebug] About to call tryAddCollider for ID: ${entityId}. Server data (entity):`, JSON.parse(JSON.stringify(entity)));
              tryAddCollider(entity, entityInstance);
              // No log here, tryAddCollider logs success conditionally
 
@@ -1365,6 +1366,7 @@ async function loadAndAddStaticEntity(entity, entityId) {
             // Log unreliable timeout warning only for non-cubes
             if (isStructureOfInterest) console.warn(`[ColliderDebug] [loadAndAddStaticEntity] Using potentially unreliable setTimeout for collider on ${entityId}. Consider implementing readyPromise properly.`);
             setTimeout(() => {
+                console.log(`[ColliderDebug] About to call tryAddCollider for ID: ${entityId}. Server data (entity):`, JSON.parse(JSON.stringify(entity)));
                 tryAddCollider(entity, entityInstance);
             }, 1000); 
         } else {

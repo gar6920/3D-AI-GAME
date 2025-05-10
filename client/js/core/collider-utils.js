@@ -8,6 +8,7 @@
         const actualEntityType = clientEntity.type || 
                                (clientEntity._isPlayer ? 'player' : 'entity'); 
         const isStructureOfInterest = actualEntityType === 'entity' && modelId !== 'hover_cube';
+        const isLocalPlayer = clientEntity?.isLocalPlayer;
 
         if (isStructureOfInterest) console.log(`[ColliderDebug] [ColliderUtils ${entityId}] addSelectionColliderFromEntity called. Data:`, colliderData, `Parent: ${parentMesh?.uuid}`);
         
@@ -29,9 +30,13 @@
         try {
             if(type === 'sphere'){
                 if (typeof radius !== 'number' || radius <= 0) { 
-                     console.error(`[ColliderDebug] [ColliderUtils ${entityId}] Invalid or missing radius from server: ${radius}. Skipping collider creation.`);
-                     return;
-                 }
+                    if (isLocalPlayer) {
+                        console.warn(`[ColliderDebug] [ColliderUtils ${entityId}] Invalid or missing radius for local player from server: ${radius}. Proceeding with default radius for debugging.`);
+                    } else {
+                        console.error(`[ColliderDebug] [ColliderUtils ${entityId}] Invalid or missing radius from server: ${radius}. Skipping collider creation.`);
+                        return;
+                    }
+                }
                 mesh = new THREE.Mesh(
                     new THREE.SphereGeometry(radius, 16, 12), 
                     new THREE.MeshBasicMaterial({
@@ -46,20 +51,32 @@
             } else if(type === 'box'){
                 // Fix for handling halfExtents from server
                 let validExtents = extents;
-                if (!extents || !Array.isArray(extents) || extents.length !== 3) {
-                    console.warn(`[ColliderDebug] [ColliderUtils ${entityId}] Invalid halfExtents format from server: ${JSON.stringify(extents)}. Attempting to convert or use default.`);
-                    validExtents = [1, 1, 1]; // Default fallback if data is invalid
-                    if (extents && typeof extents === 'object' && !Array.isArray(extents)) {
-                        // Convert object to array if it's an object with numeric properties
-                        validExtents = [extents[0] || 1, extents[1] || 1, extents[2] || 1];
-                    } else if (extents && Array.isArray(extents)) {
-                        // Ensure all elements are numbers greater than 0
-                        validExtents = extents.map(e => typeof e === 'number' && e > 0 ? e : 1);
+                // Convert ArraySchema to a plain array for validation and use
+                const plainExtents = extents && typeof extents.toArray === 'function' ? extents.toArray() : (Array.isArray(extents) ? extents : null);
+
+                if (!plainExtents || !Array.isArray(plainExtents) || plainExtents.length !== 3) {
+                    if (isLocalPlayer) {
+                        console.warn(`[ColliderDebug] [ColliderUtils ${entityId}] Invalid or missing halfExtents for local player from server: ${JSON.stringify(extents)}. Proceeding with default dimensions for debugging.`);
+                        // Default to some small box for debugging local player if extents are bad
+                        // validExtents = [0.5, 1, 0.5]; // Example default, adjust as needed
+                    } else {
+                        console.error(`[ColliderDebug] [ColliderUtils ${entityId}] Invalid or missing halfExtents from server: ${JSON.stringify(extents)}. Skipping collider creation.`);
+                        return;
                     }
+                } else {
+                    // If plainExtents are valid, use them
+                    validExtents = plainExtents;
                 }
+
                 if (validExtents.some(dim => typeof dim !== 'number' || dim <= 0)) {
-                    console.warn(`[ColliderDebug] [ColliderUtils ${entityId}] Some dimensions in halfExtents are invalid: ${JSON.stringify(validExtents)}. Using default values.`);
-                    validExtents = [1, 1, 1];
+                    if (isLocalPlayer) {
+                        console.warn(`[ColliderDebug] [ColliderUtils ${entityId}] Some dimensions in halfExtents are invalid for local player: ${JSON.stringify(validExtents)}. Proceeding with default values for debugging.`);
+                        // Potentially set default validExtents again if any dim is bad
+                        // validExtents = [0.5, 1, 0.5]; 
+                    } else {
+                        console.error(`[ColliderDebug] [ColliderUtils ${entityId}] Some dimensions in halfExtents are invalid: ${JSON.stringify(validExtents)}. Skipping collider creation.`);
+                        return;
+                    }
                 }
                 mesh = new THREE.Mesh(
                     new THREE.BoxGeometry(validExtents[0]*2, validExtents[1]*2, validExtents[2]*2), 
