@@ -867,6 +867,7 @@ function setupRoomPlayerListeners(room) {
                          } else {
                             console.warn(`[ColliderDebug] Local player ${sessionId} missing readyPromise, attempting collider add directly.`);
                          }
+                        console.log(`[ColliderDebug] PLAYER (Existing Local) ID: ${sessionId}. About to call tryAddCollider. Server data (playerData):`, JSON.parse(JSON.stringify(playerData)));
                         tryAddCollider(playerData, window.playerEntity);
                     } catch (err) {
                         console.error(`[ColliderDebug] Error adding collider for local player ${sessionId} after readyPromise:`, err);
@@ -882,6 +883,7 @@ function setupRoomPlayerListeners(room) {
                          } else {
                              console.warn(`[ColliderDebug] Remote player ${sessionId} missing readyPromise, attempting collider add directly.`);
                          }
+                        console.log(`[ColliderDebug] PLAYER (Existing Remote) ID: ${sessionId}. About to call tryAddCollider. Server data (playerData):`, JSON.parse(JSON.stringify(playerData)));
                         tryAddCollider(playerData, remotePlayerInstance);
                      } catch (err) {
                         console.error(`[ColliderDebug] Error adding collider for remote player ${sessionId} after readyPromise:`, err);
@@ -913,6 +915,7 @@ function setupRoomPlayerListeners(room) {
                      } else {
                         console.warn(`[ColliderDebug] New remote player ${sessionId} missing readyPromise, attempting collider add directly.`);
                      }
+                    console.log(`[ColliderDebug] PLAYER (onAdd Remote) ID: ${sessionId}. About to call tryAddCollider. Server data (player):`, JSON.parse(JSON.stringify(player)));
                     tryAddCollider(player, remotePlayerInstance);
                 } catch (err) {
                     console.error(`[ColliderDebug] Error adding collider for new remote player ${sessionId} after readyPromise:`, err);
@@ -940,6 +943,7 @@ function setupRoomPlayerListeners(room) {
                          } else {
                             console.warn(`[ColliderDebug] Local player ${room.sessionId} (onStateChange) missing readyPromise, attempting collider add directly.`);
                          }
+                        console.log(`[ColliderDebug] PLAYER (onStateChange Local) ID: ${room.sessionId}. About to call tryAddCollider. Server data (localPlayerData):`, JSON.parse(JSON.stringify(localPlayerData)));
                         tryAddCollider(localPlayerData, window.playerEntity);
                     } catch (err) {
                         console.error(`[ColliderDebug] Error adding collider for local player ${room.sessionId} (onStateChange):`, err);

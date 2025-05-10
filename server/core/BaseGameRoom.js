@@ -480,15 +480,19 @@ if (def.colliderHalfExtents && s.colliderHalfExtents) {
             this.physicsWorld.addRigidBody(body);
             this._rigidBodies.set(entity.id, body);
             // Populate collider details for clients
-            entity.colliderType = entity.colliderType || 'sphere';
-            // Only set colliderRadius for spheres
-            if (entity.colliderType === 'sphere') {
-                entity.colliderRadius = entity.scale;
+            
+            // This line ensures colliderType is set if it wasn't already (e.g. by player1 def)
+            entity.colliderType = entity.colliderType || 'sphere'; 
+
+            // If createColliderForEntity was supposed to calculate the radius,
+            // it would have already updated entity.colliderRadius.
+            // Only set it from scale if it's still zero (meaning it wasn't defined in player1 def AND colliderFactory didn't set it from model).
+            if (entity.colliderType === 'sphere' && entity.colliderRadius === 0) {
+                entity.colliderRadius = entity.scale; 
+                console.warn(`[BaseGameRoom] Player ${entity.id} colliderRadius was 0, falling back to entity.scale: ${entity.scale}`);
             }
-            // Do NOT clear colliderHalfExtents here; preserve for client debug mesh
-            // if (entity.colliderHalfExtents && entity.colliderHalfExtents.length) {
-            //     entity.colliderHalfExtents.splice(0, entity.colliderHalfExtents.length);
-            // }
+            // For box colliders, colliderFactory should have populated entity.colliderHalfExtents.
+            // No need to clear it here as it's an ArraySchema.
         } catch (e) {
             console.error(`[BaseGameRoom] Collider creation failed for entity ${entity.id}: ${e}`);
         }

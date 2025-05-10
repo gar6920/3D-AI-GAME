@@ -24,6 +24,7 @@ type("number")(MoveTarget.prototype, "z");
 class Player extends BaseEntity {
     constructor() {
         super();
+        this.entityType = "player"; // Explicitly set this
         this.type = "player";      // Entity type
         this.name = "";            // Player name
         this.pitch = 0;            // Camera pitch (looking up/down)

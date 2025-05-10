@@ -10,6 +10,14 @@
         const isStructureOfInterest = actualEntityType === 'entity' && modelId !== 'hover_cube';
         const isLocalPlayer = clientEntity?.isLocalPlayer;
 
+        if (actualEntityType === 'player' || clientEntity?._isPlayer || entityId === window.playerEntity?.id) {
+            console.log(`[ColliderDebug] [ColliderUtils PLAYER ${entityId}] addSelectionColliderFromEntity called for PLAYER.`);
+            console.log(`[ColliderDebug] [ColliderUtils PLAYER ${entityId}] clientEntity.type: `, clientEntity.type);
+            console.log(`[ColliderDebug] [ColliderUtils PLAYER ${entityId}] clientEntity._isPlayer: `, clientEntity._isPlayer);
+            console.log(`[ColliderDebug] [ColliderUtils PLAYER ${entityId}] actualEntityType resolved to: `, actualEntityType);
+            console.log(`[ColliderDebug] [ColliderUtils PLAYER ${entityId}] Parent mesh for player collider:`, parentMesh);
+        }
+
         if (isStructureOfInterest) console.log(`[ColliderDebug] [ColliderUtils ${entityId}] addSelectionColliderFromEntity called. Data:`, colliderData, `Parent: ${parentMesh?.uuid}`);
         
         if(!colliderData || !clientEntity || !parentMesh) {
@@ -129,6 +137,9 @@
             if (actualEntityType === 'entity') { 
                 mesh.position.set(0, 0, 0);
                 if (isStructureOfInterest) console.log(`[ColliderDebug] [ColliderUtils ${entityId}] Structure collider - resetting position to parent origin.`);
+            } else if (actualEntityType === 'player') {
+                mesh.position.set(0, colliderData.radius || scale, 0); 
+                console.log(`[ColliderDebug] [ColliderUtils PLAYER ${entityId}] Player collider - setting position to (0, ${colliderData.radius || scale}, 0) relative to parent.`);
             }
         } catch (error) {
             console.error(`[ColliderDebug] [ColliderUtils ${entityId}] Error adding mesh to parent:`, error);
